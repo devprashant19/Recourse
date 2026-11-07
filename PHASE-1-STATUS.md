@@ -327,7 +327,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 18. `feat(claims): implement arbiter verdict verification`
 
-- **Commit:** (this commit)
+- **Commit:** `e054d8f`
 - **Did:** `resolve_claim(claim_id, upheld, award, reasons_hash, verdict_receipt)`: arbiter only
   (role checked against the predecessor); quality claims still `Filed` only; the arbiter may not be
   the engagement's client or agent; upheld needs `0 < award <= amount`, rejected needs `award == 0`.
@@ -347,6 +347,30 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Limitations:** the contract proves the verdict came from an attested model run, not that the
   run's output says `upheld`/`award` — it sees only hashes. That link is checked off-chain
   (`rerun-verdict`, Phase 2) and contestable by appeal (Phase 3). Arbiter bonding and fines are Phase 3.
+
+### 19. `feat(slashing): implement collateral-first claim finalization`
+
+- **Commit:** (this commit)
+- **Did:** `slashing.rs`: `split_award` takes `min(A, B)` from the bond, the rest up to `V` from the
+  vault, never more than `liability_cap` (I5); `slash` releases both locks and the exposure in full,
+  debits bond and vault capital (vault `losses_paid`, LPs lose pro rata via share price), records
+  `failed`, `claims_upheld`, `slashed_total`, and emits `slashed`. `finalize(claim_id)` (anyone):
+  claim `Resolved` and strictly after `appeal_deadline`. Upheld: slash, premium to the vault,
+  escrow released, a `Pending` Direct payout of the award (to the claimant, to the destination
+  fixed at filing), price + stake refunded to the claimant now; engagement `Slashed`, claim
+  `Finalized`. Rejected: stake + price to the agent, job counted `completed` and
+  `claims_rejected`, claim `Rejected`. Either way the agent's `open_claims` drops, so withdrawals
+  work again. `resolve_objective` now settles in the same call. All accounting precedes any transfer;
+  forward-only statuses make it run at most once.
+- **Files:** `src/slashing.rs`, `src/claims.rs`, `src/tests/{slashing,mod}.rs`
+- **Tests added:** 12 (split arithmetic; award within bond lock; award spilling into the vault;
+  capped payout + refunds + totals + event order; stats and higher premium floor; rejection pays
+  the agent; frivolous claim loses its stake (T11); finalize before the appeal window, twice, and
+  with no verdict; stranger slashes a no-delivery claim with no arbiter in existence; withdrawals
+  unblock after settlement).
+- **Ran:** `cargo fmt`, `cargo test` (175 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** appeals (`Appealed` -> council) are Phase 3; `finalize` only takes `Resolved` claims.
 
 ---
 

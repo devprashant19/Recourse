@@ -17,10 +17,10 @@
 
 use near_sdk::json_types::{U128, U64};
 use near_sdk::serde_json::json;
-use near_sdk::{env, near, require};
+use near_sdk::{env, near, require, NearToken, Promise};
 
 use crate::events::Event;
-use crate::math::{add, bps_ceil};
+use crate::math::{add, bps_ceil, sub};
 use crate::storage::{claim_storage_fee, refund, require_len, MAX_SHORT_STR_LEN, MAX_URI_LEN};
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
@@ -169,6 +169,8 @@ impl Recourse {
             "award": verdict.award,
             "by": env::predecessor_account_id(),
         }));
+        // Nothing to appeal: settle in the same call.
+        self.apply_verdict(claim_id);
         verdict
     }
 }
@@ -248,9 +250,115 @@ impl Recourse {
         }));
         verdict
     }
+
+    /// Applies an arbiter's verdict once the appeal window has passed. Anyone
+    /// may call it. Upheld: the agent's bond and then the vault are slashed
+    /// for the award, which becomes a pending payout to the claimant, and the
+    /// claimant gets the escrowed price and the stake back now. Rejected: the
+    /// stake and the price go to the agent and the job counts as completed.
+    pub fn finalize(&mut self, claim_id: ClaimId) {
+        let claim = self.claim_of(claim_id);
+        require!(
+            claim.status == ClaimStatus::Resolved,
+            "claim is not resolved"
+        );
+        let deadline = claim
+            .verdict
+            .as_ref()
+            .map(|v| v.appeal_deadline.0)
+            .unwrap_or(u64::MAX);
+        require!(
+            env::block_timestamp() > deadline,
+            "appeal window still open"
+        );
+        self.apply_verdict(claim_id);
+    }
 }
 
 impl Recourse {
+    /// Settles a resolved claim. All accounting happens before any transfer
+    /// is scheduled; the forward-only status checks make it run at most once.
+    pub(crate) fn apply_verdict(&mut self, claim_id: ClaimId) {
+        let mut claim = self.claim_of(claim_id);
+        let verdict = claim
+            .verdict
+            .clone()
+            .unwrap_or_else(|| env::panic_str("claim has no verdict"));
+        let eid = claim.engagement_id;
+        let mut e = self.engagement_of(eid);
+        let stake = claim.stake.0;
+        self.totals.claim_stakes = U128(sub(self.totals.claim_stakes.0, stake, "total stakes"));
+        let mut bond = self.bond_of(&e.agent);
+        bond.open_claims = bond.open_claims.saturating_sub(1);
+        self.bonds.insert(e.agent.clone(), bond);
+
+        if verdict.upheld {
+            let split = self.slash(eid, &e, verdict.award.0);
+            self.pay_premium_to_vault(&e);
+            self.release_escrow(&e);
+            let paid = split.paid();
+            if paid > 0 {
+                self.payouts.insert(
+                    claim_id,
+                    Payout {
+                        claimant: claim.claimant.clone(),
+                        amount: U128(paid),
+                        mode: PayoutMode::Direct,
+                        destination: claim.destination.clone(),
+                        status: PayoutStatus::Pending,
+                        deposit_address: None,
+                        quote_id: None,
+                        quote_hash: None,
+                        final_status: None,
+                        dest_tx: None,
+                        attempts: 0,
+                    },
+                );
+                self.totals.pending_payouts =
+                    U128(add(self.totals.pending_payouts.0, paid, "pending payouts"));
+            }
+            self.set_engagement_status(eid, &mut e, EngagementStatus::Slashed);
+            self.set_claim_status(claim_id, &mut claim, ClaimStatus::Finalized);
+            let refund_now = add(e.price.0, stake, "claimant refund");
+
+            Event::ClaimFinalized.emit(json!({
+                "claim_id": U64(claim_id),
+                "engagement_id": U64(eid),
+                "upheld": true,
+                "award": U128(paid),
+                "from_bond": U128(split.from_bond),
+                "from_vault": U128(split.from_vault),
+                "price_refunded": e.price,
+                "stake_refunded": claim.stake,
+                "claimant": claim.claimant,
+            }));
+            Promise::new(claim.claimant.clone())
+                .transfer(NearToken::from_yoctonear(refund_now))
+                .detach();
+        } else {
+            self.settle_in_agents_favour(&e);
+            let mut a = self.agent_of(&e.agent);
+            a.stats.claims_rejected += 1;
+            self.agents.insert(e.agent.clone(), a);
+            self.set_engagement_status(eid, &mut e, EngagementStatus::Completed);
+            self.set_claim_status(claim_id, &mut claim, ClaimStatus::Rejected);
+            let to_agent = add(e.price.0, stake, "agent payment");
+
+            Event::ClaimFinalized.emit(json!({
+                "claim_id": U64(claim_id),
+                "engagement_id": U64(eid),
+                "upheld": false,
+                "award": U128(0),
+                "price_to_agent": e.price,
+                "stake_to_agent": claim.stake,
+                "agent": e.agent,
+            }));
+            Promise::new(e.agent.clone())
+                .transfer(NearToken::from_yoctonear(to_agent))
+                .detach();
+        }
+    }
+
     pub(crate) fn claim_of(&self, id: ClaimId) -> Claim {
         self.claims
             .get(&id)

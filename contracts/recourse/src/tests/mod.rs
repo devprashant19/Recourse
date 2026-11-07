@@ -18,6 +18,7 @@ mod lifecycle;
 mod pool;
 mod pricing;
 mod roles;
+mod slashing;
 mod tee;
 mod types;
 mod views;
