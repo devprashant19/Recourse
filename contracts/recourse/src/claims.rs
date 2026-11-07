@@ -1,6 +1,161 @@
-//! claims.rs
+//! Claims against an engagement.
 //!
-//! Built in: Phase 1, appeals in Phase 3
-//! Spec: phases/phase-01-contract-core.md (file, resolve, finalize), phases/phase-03-money-out.md (appeal, council_decide)
+//! * `file_claim` — the client opens a claim, staking a share of it (T11).
+//! * `resolve_objective` — anyone settles a no-delivery claim on-chain.
+//! * `resolve_claim` — the arbiter rules on a quality claim.
+//! * `finalize` — applies the verdict once the appeal window has passed.
 //!
-//! TODO(Phase 1, appeals in Phase 3): file_claim, resolve_objective, resolve_claim, appeal, council_decide, finalize.
+//! Appeals and the council (`appeal`, `council_decide`) arrive in Phase 3.
+//!
+//! The two kinds have separate, non-overlapping filing windows:
+//!   * `Quality`    — after delivery, until `delivered_at + claim_window`;
+//!   * `NoDelivery` — after a missed deadline, until `deadline + claim_window`.
+//!
+//! A no-delivery claim can only be filed once the deadline has passed, and a
+//! receipt can only be submitted up to the deadline, so a filed no-delivery
+//! claim can never be contradicted by a late receipt.
+
+use near_sdk::json_types::{U128, U64};
+use near_sdk::serde_json::json;
+use near_sdk::{env, near, require};
+
+use crate::events::Event;
+use crate::math::{add, bps_ceil};
+use crate::storage::{claim_storage_fee, refund, require_len, MAX_SHORT_STR_LEN, MAX_URI_LEN};
+use crate::types::*;
+use crate::{Recourse, RecourseExt};
+
+#[near]
+impl Recourse {
+    /// Files a claim of `amount` against engagement `id`. Attach the stake
+    /// (`claim_stake_bps` of `amount`, rounded up) plus the claim storage fee;
+    /// any excess is refunded. The stake comes back if the claim is upheld and
+    /// goes to the agent if it is rejected. `destination` is fixed now so no
+    /// one can redirect the payout later (T8).
+    #[payable]
+    pub fn file_claim(
+        &mut self,
+        id: EngagementId,
+        kind: ClaimKind,
+        amount: U128,
+        evidence_hash: Hash,
+        evidence_uri: String,
+        destination: Destination,
+    ) -> ClaimId {
+        let mut e = self.engagement_of(id);
+        let claimant = env::predecessor_account_id();
+        require!(
+            claimant == e.client,
+            "only the engagement's client can claim"
+        );
+        require!(e.claim_id.is_none(), "a claim was already filed");
+        self.require_inside_claim_window(&e, kind);
+        require!(amount.0 > 0, "amount must be positive");
+        require!(
+            amount.0 <= e.liability_cap.0,
+            "amount exceeds liability_cap"
+        );
+        require_len(&evidence_uri, MAX_URI_LEN, "evidence_uri");
+        require_len(
+            &destination.asset_id,
+            MAX_SHORT_STR_LEN,
+            "destination.asset_id",
+        );
+        require_len(
+            &destination.recipient,
+            MAX_SHORT_STR_LEN,
+            "destination.recipient",
+        );
+
+        let stake = bps_ceil(amount.0, self.config.claim_stake_bps);
+        let fee = claim_storage_fee();
+        let required = add(stake, fee, "claim deposit");
+        let attached = env::attached_deposit().as_yoctonear();
+        require!(
+            attached >= required,
+            format!("attach {required} yocto: stake {stake} + storage {fee}")
+        );
+
+        let now = env::block_timestamp();
+        let before = env::storage_usage();
+        let claim_id = self.next_ids.claim;
+        self.next_ids.claim += 1;
+        self.claims.insert(
+            claim_id,
+            Claim {
+                engagement_id: id,
+                claimant: claimant.clone(),
+                kind,
+                amount,
+                stake: U128(stake),
+                evidence_hash,
+                evidence_uri: evidence_uri.clone(),
+                destination: destination.clone(),
+                verdict: None,
+                status: ClaimStatus::Filed,
+                filed_at: U64(now),
+            },
+        );
+        e.claim_id = Some(claim_id);
+        self.set_engagement_status(id, &mut e, EngagementStatus::Claimed);
+
+        // Freeze the agent's exit: no withdrawal while this claim is open, and
+        // a cooldown already running starts again from now (T4).
+        let mut bond = self.bond_of(&e.agent);
+        bond.open_claims += 1;
+        if bond.withdrawal_requested_at.is_some() {
+            bond.withdrawal_requested_at = Some(U64(now));
+        }
+        self.bonds.insert(e.agent.clone(), bond);
+        self.totals.claim_stakes = U128(add(self.totals.claim_stakes.0, stake, "total stakes"));
+        // The fee covers this write; the rest stays prepaid for the verdict
+        // and the payout record.
+        self.charge_storage(before, fee);
+
+        Event::ClaimFiled.emit(json!({
+            "claim_id": U64(claim_id),
+            "engagement_id": U64(id),
+            "claimant": claimant,
+            "agent": e.agent,
+            "kind": kind,
+            "amount": amount,
+            "stake": U128(stake),
+            "evidence_hash": evidence_hash,
+            "evidence_uri": evidence_uri,
+            "destination": destination,
+        }));
+        refund(attached - required);
+        claim_id
+    }
+}
+
+impl Recourse {
+    fn require_inside_claim_window(&self, e: &Engagement, kind: ClaimKind) {
+        let now = env::block_timestamp();
+        let window = self.config.claim_window.0;
+        match kind {
+            ClaimKind::Quality => {
+                require!(
+                    e.status == EngagementStatus::Delivered,
+                    "quality claims need a delivered engagement"
+                );
+                let delivered_at = e.delivered_at.map(|t| t.0).unwrap_or_default();
+                require!(
+                    now <= delivered_at.saturating_add(window),
+                    "claim window has closed"
+                );
+            }
+            ClaimKind::NoDelivery => {
+                require!(
+                    e.status == EngagementStatus::Open && e.receipt.is_none(),
+                    "no-delivery claims need an undelivered engagement"
+                );
+                require!(now > e.deadline.0, "deadline has not passed");
+                require!(
+                    now <= e.deadline.0.saturating_add(window),
+                    "claim window has closed"
+                );
+            }
+        }
+    }
+}

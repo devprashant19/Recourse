@@ -9,6 +9,7 @@
 
 mod agents;
 mod bonds;
+mod claims;
 mod common;
 mod engagements;
 mod events;

@@ -269,7 +269,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 15. `feat(engagements): implement completion and settlement lifecycle`
 
-- **Commit:** (this commit)
+- **Commit:** `ccbec6e`
 - **Did:** `complete(id)` (anyone): `Delivered`, no claim, strictly after `delivered_at +
   claim_window`; releases bond, vault and exposure locks, the premium joins vault capital
   (`premiums_earned`, share price up), escrow released, stats `completed += 1`, `volume += price`,
@@ -287,6 +287,26 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
   wasm release build (ok).
 - **Limitations:** native transfers to a deleted account bounce back to the contract as untracked
   surplus (the accounting has already settled); this cannot make the contract insolvent.
+
+### 16. `feat(claims): implement claim filing and stake validation`
+
+- **Commit:** (this commit)
+- **Did:** `file_claim(id, kind, amount, evidence_hash, evidence_uri, destination)` (payable): client
+  only, one claim per engagement, `0 < amount <= liability_cap`, stake = `ceil(amount * 5%)`
+  (attached with the claim storage fee; excess refunded), evidence URI and both destination fields
+  non-empty and length-capped, destination stored at filing so the payout cannot be redirected
+  (T8). Non-overlapping windows: `Quality` from delivery to `delivered_at + claim_window`;
+  `NoDelivery` only after a missed deadline, to `deadline + claim_window` (a late receipt is
+  impossible, so the claim cannot be contradicted). Engagement moves to `Claimed`; the agent's
+  `open_claims` rises and a running withdrawal cooldown restarts (T4); stake counted in totals.
+- **Files:** `src/claims.rs`, `src/tests/{claims,common,mod}.rs`
+- **Tests added:** 15 (quality and no-delivery filing; excess refunded; quality outside window;
+  no-delivery before deadline / after window / with a receipt present; amount above cap; stake
+  under 5%; stranger; second claim; empty destination; withdrawal blocked while a claim is open
+  (T4); cooldown restarts on filing; prepaid claim fee covers worst-case claim + verdict + payout).
+- **Ran:** `cargo fmt`, `cargo test` (147 passed), `cargo clippy --all-targets -D warnings` (clean
+  after a doc-comment indentation fix), wasm release build (ok).
+- **Limitations:** none.
 
 ---
 

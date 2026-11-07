@@ -242,3 +242,28 @@ pub fn delivered_job(c: &mut Recourse) -> u64 {
     deliver(c, id, DELIVERED_AT);
     id
 }
+
+pub fn destination() -> Destination {
+    Destination {
+        asset_id: "nep141:wrap.near".to_string(),
+        recipient: "client.near".to_string(),
+    }
+}
+
+/// Exact deposit `file_claim` needs for `amount` (5% stake + storage fee).
+pub fn claim_deposit(amount: u128) -> u128 {
+    crate::math::bps_ceil(amount, 500) + crate::storage::claim_storage_fee()
+}
+
+/// The client files a claim of `amount` against `id` at time `now`.
+pub fn file(c: &mut Recourse, id: u64, kind: ClaimKind, amount: u128, now: u64) -> u64 {
+    ctx(&client(), claim_deposit(amount), now);
+    c.file_claim(
+        id,
+        kind,
+        U128(amount),
+        HexBytes([5; 32]),
+        "ipfs://evidence".to_string(),
+        destination(),
+    )
+}
