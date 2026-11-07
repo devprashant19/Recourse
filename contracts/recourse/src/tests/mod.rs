@@ -13,6 +13,7 @@ mod common;
 mod engagements;
 mod events;
 mod init;
+mod lifecycle;
 mod pool;
 mod pricing;
 mod roles;

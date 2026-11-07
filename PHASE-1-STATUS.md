@@ -250,7 +250,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 14. `feat(engagements): implement receipt submission and replay protection`
 
-- **Commit:** (this commit)
+- **Commit:** `ac3395f`
 - **Did:** `submit_receipt(id, model_id, request_hash, response_hash, signature, kind)`: only the
   engagement's agent; engagement must be `Open`; at or before the deadline; the receipt goes
   through `verify_receipt` (on-chain `ecrecover`, signer allow-listed for model and kind); the
@@ -266,6 +266,27 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
   (clean), wasm release build (ok).
 - **Limitations:** "request includes engagement ID" (T3's second half) is enforced off-chain by the
   worker in Phase 2; the contract only sees hashes.
+
+### 15. `feat(engagements): implement completion and settlement lifecycle`
+
+- **Commit:** (this commit)
+- **Did:** `complete(id)` (anyone): `Delivered`, no claim, strictly after `delivered_at +
+  claim_window`; releases bond, vault and exposure locks, the premium joins vault capital
+  (`premiums_earned`, share price up), escrow released, stats `completed += 1`, `volume += price`,
+  then the price is transferred to the agent. `expire(id)` (anyone): `Open`, no claim, strictly
+  after `deadline + claim_window` (so the no-delivery claim window has passed); releases locks,
+  premium to the vault (it carried the risk), price refunded to the client, `failed += 1`. Shared
+  helpers (`release_liability`, `pay_premium_to_vault`, `release_escrow`,
+  `settle_in_agents_favour`) are reused by claim settlement. State and totals change before any
+  transfer is scheduled.
+- **Files:** `src/engagements.rs`, `src/tests/{lifecycle,common,mod}.rs`
+- **Tests added:** 9 (completion pays out, releases every lock and totals; score rises to 3333 bps
+  after one job; completion inside the window, undelivered and twice refused; expiry refunds and
+  releases; expiry inside the window and on delivered work refused; unknown id).
+- **Ran:** `cargo fmt`, `cargo test` (132 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** native transfers to a deleted account bounce back to the contract as untracked
+  surplus (the accounting has already settled); this cannot make the contract insolvent.
 
 ---
 
@@ -296,6 +317,9 @@ Filled in as they are made.
 - **`bind_coverage`** is the Phase 1 way to bind coverage (the spec says to bind it directly in
   `seed.ts`). Only the vault's own underwriter may call it, at or above the agent's premium floor,
   and it cannot displace another vault's live coverage.
+- **`expire(id)`** (anyone, after `deadline + claim_window`, engagement still `Open` and unclaimed)
+  refunds the price to the client and pays the premium to the vault. Without it, a job nobody
+  delivered and nobody claimed would lock the agent's bond, the vault and the escrow forever.
 
 ## Open items
 

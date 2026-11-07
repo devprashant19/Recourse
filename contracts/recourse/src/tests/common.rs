@@ -231,3 +231,14 @@ pub fn deliver(c: &mut Recourse, id: u64, now: u64) -> Receipt {
         r.kind,
     )
 }
+
+pub const CLAIM_WINDOW: u64 = 3 * MINUTE;
+/// Delivery time used by `delivered_job`.
+pub const DELIVERED_AT: u64 = T0 + MINUTE;
+
+/// Opens the standard 2 NEAR job and delivers it at `DELIVERED_AT`.
+pub fn delivered_job(c: &mut Recourse) -> u64 {
+    let id = open_job(c);
+    deliver(c, id, DELIVERED_AT);
+    id
+}

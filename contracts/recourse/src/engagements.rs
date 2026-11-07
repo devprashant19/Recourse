@@ -8,10 +8,10 @@
 
 use near_sdk::json_types::{U128, U64};
 use near_sdk::serde_json::json;
-use near_sdk::{env, near, require, AccountId};
+use near_sdk::{env, near, require, AccountId, NearToken, Promise};
 
 use crate::events::Event;
-use crate::math::add;
+use crate::math::{add, sub};
 use crate::storage::{engagement_storage_fee, refund};
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
@@ -145,6 +145,71 @@ impl Recourse {
         }));
         receipt
     }
+
+    /// Settles a delivered engagement once the claim window has closed with no
+    /// claim: the price goes to the agent, the premium to the vault, and both
+    /// locks are released. Anyone may call it.
+    pub fn complete(&mut self, id: EngagementId) {
+        let mut e = self.engagement_of(id);
+        require!(
+            e.status == EngagementStatus::Delivered,
+            "engagement is not delivered"
+        );
+        require!(e.claim_id.is_none(), "a claim is open");
+        let delivered_at = e.delivered_at.map(|t| t.0).unwrap_or_default();
+        let window_end = delivered_at.saturating_add(self.config.claim_window.0);
+        require!(
+            env::block_timestamp() > window_end,
+            "claim window still open"
+        );
+
+        self.settle_in_agents_favour(&e);
+        self.set_engagement_status(id, &mut e, EngagementStatus::Completed);
+
+        Event::EngagementCompleted.emit(json!({
+            "id": U64(id),
+            "agent": e.agent,
+            "price_to_agent": e.price,
+            "premium_to_vault": e.premium,
+            "vault": e.vault,
+        }));
+        Promise::new(e.agent.clone())
+            .transfer(NearToken::from_yoctonear(e.price.0))
+            .detach();
+    }
+
+    /// Closes an engagement that was never delivered and never claimed, once
+    /// the no-delivery claim window has also passed, so no money stays locked
+    /// forever. The price goes back to the client; the premium goes to the
+    /// vault, which carried the risk for the whole period. Anyone may call it.
+    pub fn expire(&mut self, id: EngagementId) {
+        let mut e = self.engagement_of(id);
+        require!(e.status == EngagementStatus::Open, "engagement is not open");
+        require!(e.claim_id.is_none(), "a claim is open");
+        let window_end = e.deadline.0.saturating_add(self.config.claim_window.0);
+        require!(
+            env::block_timestamp() > window_end,
+            "no-delivery claim window still open"
+        );
+
+        self.release_liability(&e);
+        self.pay_premium_to_vault(&e);
+        self.release_escrow(&e);
+        let mut agent = self.agent_of(&e.agent);
+        agent.stats.failed += 1;
+        self.agents.insert(e.agent.clone(), agent);
+        self.set_engagement_status(id, &mut e, EngagementStatus::Expired);
+
+        Event::EngagementExpired.emit(json!({
+            "id": U64(id),
+            "client": e.client,
+            "price_refunded": e.price,
+            "premium_to_vault": e.premium,
+        }));
+        Promise::new(e.client.clone())
+            .transfer(NearToken::from_yoctonear(e.price.0))
+            .detach();
+    }
 }
 
 impl Recourse {
@@ -192,5 +257,62 @@ impl Recourse {
         );
         e.status = next;
         self.engagements.insert(id, e.clone());
+    }
+
+    pub(crate) fn agent_of(&self, agent: &AccountId) -> Agent {
+        self.agents
+            .get(agent)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("agent not registered"))
+    }
+
+    /// Releases the locks taken by `lock_liability` for one engagement.
+    pub(crate) fn release_liability(&mut self, e: &Engagement) {
+        let mut bond = self.bond_of(&e.agent);
+        bond.locked = U128(sub(bond.locked.0, e.bond_locked.0, "bond locked"));
+        self.bonds.insert(e.agent.clone(), bond);
+
+        let mut v = self.vault_of(&e.vault);
+        v.locked = U128(sub(v.locked.0, e.vault_locked.0, "vault locked"));
+        self.vaults.insert(e.vault.clone(), v);
+
+        let key = (e.vault.clone(), e.agent.clone());
+        let exposure = self.agent_exposure.get(&key).copied().unwrap_or(0);
+        self.agent_exposure
+            .insert(key, sub(exposure, e.vault_locked.0, "agent exposure"));
+    }
+
+    /// The premium leaves escrow and joins the vault's capital, raising its
+    /// share price for every LP.
+    pub(crate) fn pay_premium_to_vault(&mut self, e: &Engagement) {
+        let mut v = self.vault_of(&e.vault);
+        v.capital = U128(add(v.capital.0, e.premium.0, "vault capital"));
+        v.premiums_earned = U128(add(v.premiums_earned.0, e.premium.0, "premiums earned"));
+        self.vaults.insert(e.vault.clone(), v);
+        self.totals.vault_capital = U128(add(
+            self.totals.vault_capital.0,
+            e.premium.0,
+            "total vault capital",
+        ));
+    }
+
+    /// Removes price + premium from the escrow total. The caller pays out the
+    /// price; the premium must already have gone to the vault.
+    pub(crate) fn release_escrow(&mut self, e: &Engagement) {
+        let escrow = add(e.price.0, e.premium.0, "escrow");
+        self.totals.escrow = U128(sub(self.totals.escrow.0, escrow, "total escrow"));
+    }
+
+    /// Everything a settlement in the agent's favour does except paying the
+    /// price out: release locks, premium to the vault, escrow released, the
+    /// job counted as completed. Used by `complete` and by rejected claims.
+    pub(crate) fn settle_in_agents_favour(&mut self, e: &Engagement) {
+        self.release_liability(e);
+        self.pay_premium_to_vault(e);
+        self.release_escrow(e);
+        let mut agent = self.agent_of(&e.agent);
+        agent.stats.completed += 1;
+        agent.stats.volume = U128(add(agent.stats.volume.0, e.price.0, "volume"));
+        self.agents.insert(e.agent.clone(), agent);
     }
 }
