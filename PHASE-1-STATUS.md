@@ -290,7 +290,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 16. `feat(claims): implement claim filing and stake validation`
 
-- **Commit:** (this commit)
+- **Commit:** `2c9cabc`
 - **Did:** `file_claim(id, kind, amount, evidence_hash, evidence_uri, destination)` (payable): client
   only, one claim per engagement, `0 < amount <= liability_cap`, stake = `ceil(amount * 5%)`
   (attached with the claim storage fee; excess refunded), evidence URI and both destination fields
@@ -307,6 +307,23 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Ran:** `cargo fmt`, `cargo test` (147 passed), `cargo clippy --all-targets -D warnings` (clean
   after a doc-comment indentation fix), wasm release build (ok).
 - **Limitations:** none.
+
+### 17. `feat(claims): implement objective no-delivery resolution`
+
+- **Commit:** (this commit)
+- **Did:** `resolve_objective(claim_id)` (anyone): claim must be a `NoDelivery` claim still `Filed`,
+  its engagement must have no receipt and a passed deadline. Records an upheld verdict for the full
+  claimed amount with no arbiter and no verdict receipt; objective verdicts are not appealable
+  (`appeal_deadline = decided_at`). `Filed -> Resolved` via the forward-only check, so a second
+  call is refused. Emits `claim_resolved` with `objective: true`. `claim_of` / `set_claim_status`
+  helpers added.
+- **Files:** `src/claims.rs`, `src/tests/claims.rs`
+- **Tests added:** 5 (stranger upholds with no arbiter; quality claim refused; receipt present
+  refused (defence in depth); unknown claim; repeat refused).
+- **Ran:** `cargo fmt`, `cargo test` (152 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** the slash itself lands with `finalize`; from then on `resolve_objective`
+  settles in the same call.
 
 ---
 

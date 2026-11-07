@@ -259,3 +259,74 @@ fn prepaid_claim_fee_covers_the_largest_claim_verdict_and_payout() {
     );
     assert!(storage_cost(filed + later) <= crate::storage::claim_storage_fee());
 }
+
+// ----- resolve_objective --------------------------------------------------
+
+/// A no-delivery claim of the full cap, filed just after the deadline.
+fn no_delivery_claim(c: &mut crate::Recourse) -> u64 {
+    let id = open_job(c);
+    file(c, id, ClaimKind::NoDelivery, CLAIM, DEADLINE + 1)
+}
+
+#[test]
+fn stranger_upholds_a_no_delivery_claim_without_an_arbiter() {
+    let mut c = ready();
+    let cid = no_delivery_claim(&mut c);
+    ctx(&stranger(), 0, DEADLINE + 2);
+    let v = c.resolve_objective(cid);
+    assert!(v.upheld);
+    assert_eq!(v.award, U128(CLAIM));
+    assert!(v.arbiter.is_none() && v.verdict_receipt.is_none());
+    let ev = events();
+    assert_eq!(ev[0]["event"], "claim_resolved");
+    assert_eq!(ev[0]["data"][0]["objective"], true);
+}
+
+#[test]
+#[should_panic(expected = "not a no-delivery claim")]
+fn objective_resolution_of_a_quality_claim_fails() {
+    let mut c = ready();
+    let id = delivered_job(&mut c);
+    let cid = file(&mut c, id, ClaimKind::Quality, CLAIM, DELIVERED_AT);
+    ctx(&stranger(), 0, DEADLINE + 2);
+    c.resolve_objective(cid);
+}
+
+#[test]
+#[should_panic(expected = "a receipt was delivered")]
+fn objective_resolution_with_a_receipt_present_fails() {
+    let mut c = ready();
+    let cid = no_delivery_claim(&mut c);
+    // Defence in depth: even if a receipt somehow existed, it must block.
+    let eid = c.get_claim(cid).unwrap().engagement_id;
+    let mut e = c.get_engagement(eid).unwrap();
+    e.receipt = Some(Receipt {
+        model_id: "m".into(),
+        request_hash: HexBytes([1; 32]),
+        response_hash: HexBytes([2; 32]),
+        signer: HexBytes([3; 20]),
+        signature_kind: SignatureKind::ProviderTee,
+        submitted_at: T0.into(),
+    });
+    c.engagements.insert(eid, e);
+    ctx(&stranger(), 0, DEADLINE + 2);
+    c.resolve_objective(cid);
+}
+
+#[test]
+#[should_panic(expected = "claim not found")]
+fn objective_resolution_of_an_unknown_claim_fails() {
+    let mut c = ready();
+    ctx(&stranger(), 0, DEADLINE + 2);
+    c.resolve_objective(7);
+}
+
+#[test]
+#[should_panic(expected = "claim is not awaiting a verdict")]
+fn objective_resolution_cannot_repeat() {
+    let mut c = ready();
+    let cid = no_delivery_claim(&mut c);
+    ctx(&stranger(), 0, DEADLINE + 2);
+    c.resolve_objective(cid);
+    c.resolve_objective(cid);
+}

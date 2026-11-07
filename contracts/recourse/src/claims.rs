@@ -127,9 +127,70 @@ impl Recourse {
         refund(attached - required);
         claim_id
     }
+
+    /// Upholds a no-delivery claim with no arbiter: the deadline passed and no
+    /// receipt exists, which the contract can see for itself. Anyone may call
+    /// it. The award is the full claimed amount; objective verdicts are not
+    /// appealable, so the appeal deadline is the moment of decision.
+    pub fn resolve_objective(&mut self, claim_id: ClaimId) -> Verdict {
+        let mut claim = self.claim_of(claim_id);
+        require!(
+            claim.kind == ClaimKind::NoDelivery,
+            "not a no-delivery claim"
+        );
+        require!(
+            claim.status == ClaimStatus::Filed,
+            "claim is not awaiting a verdict"
+        );
+        let e = self.engagement_of(claim.engagement_id);
+        require!(e.receipt.is_none(), "a receipt was delivered");
+        let now = env::block_timestamp();
+        require!(now > e.deadline.0, "deadline has not passed");
+
+        let verdict = Verdict {
+            upheld: true,
+            award: claim.amount,
+            // No reasons document: the reason is on-chain (no receipt by the deadline).
+            reasons_hash: HexBytes([0; 32]),
+            verdict_receipt: None,
+            arbiter: None,
+            decided_at: U64(now),
+            appeal_deadline: U64(now),
+            appealed_by: None,
+        };
+        claim.verdict = Some(verdict.clone());
+        self.set_claim_status(claim_id, &mut claim, ClaimStatus::Resolved);
+
+        Event::ClaimResolved.emit(json!({
+            "claim_id": U64(claim_id),
+            "engagement_id": U64(claim.engagement_id),
+            "objective": true,
+            "upheld": true,
+            "award": verdict.award,
+            "by": env::predecessor_account_id(),
+        }));
+        verdict
+    }
 }
 
 impl Recourse {
+    pub(crate) fn claim_of(&self, id: ClaimId) -> Claim {
+        self.claims
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("claim not found"))
+    }
+
+    /// Moves a claim to `next`, refusing any backwards move (I8).
+    pub(crate) fn set_claim_status(&mut self, id: ClaimId, claim: &mut Claim, next: ClaimStatus) {
+        require!(
+            claim.status.can_move_to(next),
+            format!("claim cannot move from {:?} to {:?}", claim.status, next)
+        );
+        claim.status = next;
+        self.claims.insert(id, claim.clone());
+    }
+
     fn require_inside_claim_window(&self, e: &Engagement, kind: ClaimKind) {
         let now = env::block_timestamp();
         let window = self.config.claim_window.0;
