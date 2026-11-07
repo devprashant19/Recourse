@@ -54,10 +54,9 @@ where the demo actually runs.
 
 These are the real Phase 0 exit criteria, and none of them can be done from here.
 
-- [ ] **Install Rust.** `cargo` and `rustc` are not on this machine, so nothing Rust has been compiled
-      or tested. `rust-toolchain.toml` pins **1.83.0**. Install `rustup`, then `cargo install cargo-near`.
-      **Until this runs, treat `types.rs` and `lib.rs` as unverified** — they are written against the
-      near-sdk 5.29 API but have never seen a compiler.
+- [ ] **Install Rust locally.** `cargo` and `rustc` are still not on this machine, so nothing Rust can
+      be built or tested *here*. CI does build it (see below), but you cannot iterate without a local
+      toolchain. Install `rustup` (it will read `rust-toolchain.toml`), then `cargo install cargo-near`.
 - [ ] **Node and pnpm versions.** The plan pins **Node 20 / pnpm 9**; this machine has **Node 22.15.1 /
       pnpm 10.20.0**. Judge check #1 compares against `.nvmrc`, so either install Node 20 (`nvm install
       20`) or change `.nvmrc`, `engines` and `packageManager` to match what you will actually ship.
@@ -77,8 +76,32 @@ These are the real Phase 0 exit criteria, and none of them can be done from here
 - [ ] **Run Spike B** — `pnpm spike:b`. Keep the printed asset IDs for the README.
 - [ ] **Run Spike C** — `pnpm spike:c`, **on Linux/macOS/WSL2**, not on Windows (see Findings).
       Decide the sandbox tooling by what actually works.
-- [ ] **CI green.** First push was red; `cargo fmt` and the pnpm version conflict are fixed. The
-      remaining unknown is `cargo clippy -D warnings` and `cargo test`, which have never run.
+- [x] ~~CI green~~ — **all four jobs pass** as of commit `25ad04d`. It took five runs; what each one
+      taught us is in the commit history.
+
+## What CI actually verifies today
+
+Be precise about this, because a green tick can mean very little:
+
+| Job | Genuinely proves | Does not prove |
+|---|---|---|
+| Contract | `contracts/recourse` **compiles**, passes `rustfmt` and `clippy -D warnings`, and **builds to wasm32** | Nothing about behaviour — `cargo test` runs **0 tests**. The suite is Phase 1. |
+| TypeScript | `pnpm install --frozen-lockfile`, `tsc --noEmit` across every workspace package, and `eslint` all pass | `pnpm test:services` runs **0 tests** (`--passWithNoTests`). Service tests are Phase 2. |
+| Judge | The command exists and exits 0 | **Nothing.** `scripts/judge.ts` is a stub. It will pass vacuously until Phase 5 fills in the 14 checks — do not read a green Judge job as a signal before then. |
+| Secrets | gitleaks finds nothing in the repo or its full history | — |
+
+So: the contract is **syntactically and type-level sound against the real near-sdk**, which is a
+genuine result — `types.rs` and `lib.rs` are no longer unverified. Everything about what the contract
+*does* is still unwritten.
+
+## Corrections to the plan found while building
+
+- **Rust pin is 1.95.0, not 1.83.0.** `near-sdk = "5.29"` is a caret range, so cargo resolves
+  **near-sdk 5.30.1**, which declares `rust-version 1.95`. 1.83 could not even parse the dependency
+  tree (`near-primitives-core` needs the `edition2024` Cargo feature, stabilised in 1.85). The plan
+  and `phases/` say "near-sdk 5.29" throughout; the resolved version is 5.30.1. Pin exactly if you
+  want 5.29.
+- **`near-workspaces` will not install on Windows** — see Findings above.
 
 ## Exit criteria (from the phase doc)
 
