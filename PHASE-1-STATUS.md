@@ -197,7 +197,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 12. `feat(engagements): implement coverage binding and job creation`
 
-- **Commit:** (this commit)
+- **Commit:** `c6296e7`
 - **Did:** `bind_coverage(agent, limit, premium_bps, expires_at)` (payable): only a vault's own
   underwriter can commit its capital; rate between the agent's premium floor and 100%; a vault
   cannot displace another vault's live coverage. `open_engagement(agent, terms_hash, liability_cap,
@@ -216,6 +216,37 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
   wasm release build (ok).
 - **Limitations:** coverage is bound directly by the underwriter, as the spec says for Phase 1; the
   sealed-bid market replaces this path in Phase 4.
+
+### 13. `feat(tee): implement signer registry and signature verification`
+
+- **Commit:** (this commit)
+- **Did:** `tee.rs`: the contract rebuilds the signed text itself from the submitted hashes
+  (`provider_tee` = `model:req:resp`, `gateway` = `req:resp`, lowercase hex), takes the EIP-191
+  digest with `env::keccak256_array`, normalises `v` (27/28 and 0/1; anything else rejected),
+  recovers with `env::ecrecover` **with the malleability flag on** (high-`s` twins rejected), and
+  derives the address from keccak256 of the public key. A receipt passes only if the recovered
+  address is allow-listed **for that model and that signature kind**. `register_signer` (owner or
+  keeper, after the off-chain attestation check), `remove_signer` (owner only, so a keeper cannot
+  switch off delivery for everyone), zero address refused, no silent overwrite. `check_receipt`
+  view runs the exact `submit_receipt` check without recording anything, for `verify-receipt` and
+  for judges.
+- **Test vectors:** `scripts/receipt-test-vectors.ts` signs both text forms with `ethers` (RFC 6979,
+  deterministic), self-verifies with `ethers.verifyMessage`, and also produces a second signer and
+  the high-`s` twin. Keys are derived from public labels (`keccak256("recourse/test-vector/...")`)
+  so no key material is committed (the repo runs gitleaks).
+- **Files:** `src/tee.rs`, `src/lib.rs`, `src/tests/{tee,common,mod}.rs`,
+  `src/tests/fixtures/receipt_vectors.json`, `scripts/receipt-test-vectors.ts`
+- **Tests added:** 17 (text forms; recovery equals the ethers address; v 27/28 and 0/1 agree;
+  malformed v; high-s rejected; valid receipt passes; one flipped byte in request hash, response
+  hash or signature fails (T1); wrong model; unlisted signer (T2); gateway passes only with a
+  gateway signer; wrong-kind signature; registry: keeper registers / owner removes with events,
+  stranger refused, keeper cannot remove, no re-registration, zero address).
+- **Ran:** `cargo fmt`, `cargo test` (115 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok), `pnpm exec tsc --noEmit` and `eslint` on the generator (clean).
+- **Limitations:** **Spike A is still open** — the vectors prove agreement with standard Ethereum
+  EIP-191, not with a recorded NEAR AI Cloud signature. Signer storage is paid by the contract
+  (owner/keeper-only and bounded by those roles; keepers use function-call keys, which cannot attach
+  deposits).
 
 ---
 

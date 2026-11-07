@@ -183,3 +183,33 @@ pub fn open_job_at(c: &mut Recourse, cap: u128, price: u128, now: u64) -> u64 {
 pub fn open_job(c: &mut Recourse) -> u64 {
     open_job_at(c, 2 * ONE_NEAR, 2 * ONE_NEAR, T0)
 }
+
+/// EIP-191 vectors from `scripts/receipt-test-vectors.ts`.
+pub fn vectors() -> Value {
+    serde_json::from_str(include_str!("fixtures/receipt_vectors.json")).expect("vectors JSON")
+}
+
+pub fn vec_str(key: &str) -> String {
+    vectors()[key].as_str().expect("vector field").to_string()
+}
+
+pub fn tee_address() -> EvmAddress {
+    EvmAddress::from_hex(&vec_str("tee_address")).unwrap()
+}
+
+/// A valid provider_tee receipt from the vectors.
+pub fn good_receipt() -> ReceiptInput {
+    ReceiptInput {
+        model_id: vec_str("model_id"),
+        request_hash: Hash::from_hex(&vec_str("request_hash")).unwrap(),
+        response_hash: Hash::from_hex(&vec_str("response_hash")).unwrap(),
+        signature: Signature65::from_hex(&vec_str("provider_tee_signature")).unwrap(),
+        kind: SignatureKind::ProviderTee,
+    }
+}
+
+/// Allow-lists the vectors' TEE key for `kind` (owner call).
+pub fn allow_tee_signer(c: &mut Recourse, kind: SignatureKind) {
+    ctx(&owner(), 0, T0);
+    c.register_signer(tee_address(), vec_str("model_id"), HexBytes([3; 32]), kind);
+}

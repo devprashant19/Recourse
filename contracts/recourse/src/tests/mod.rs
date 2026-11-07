@@ -16,5 +16,6 @@ mod init;
 mod pool;
 mod pricing;
 mod roles;
+mod tee;
 mod types;
 mod views;

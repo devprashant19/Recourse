@@ -42,6 +42,7 @@ pub mod pricing;
 pub mod roles;
 pub mod slashing;
 pub mod storage;
+pub mod tee;
 pub mod underwriting;
 pub mod views;
 
