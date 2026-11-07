@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c35aa8243276c2c15f8c86c4843c8bdaab8384b218c2cd8f43190fd4688246dd # shrinks to ops = [Wait(1000000000), Wait(1000000000), Wait(1000000000), Wait(1000000000), Wait(1000000000), Wait(1000000000), Wait(1000000000), Wait(1000000000), Wait(1000000000), Wait(1000000000), Wait(1000000000), Accept(8), PostBond(1, 9000000000000000000000000), Complete(51), ResolveObjective(53), Complete(2), Propose(1, 0, 5528), Complete(27), Finalize(40), Finalize(2), ResolveObjective(22), Deliver(9), FileClaim(51, false, 7901), Deliver(54), PostBond(0, 2000000000000000000000000), Accept(59), Wait(267000000000), Wait(346000000000), ResolveObjective(57), PostBond(0, 3000000000000000000000000), SettleTransfer(false), Accept(38), PostBond(1, 6000000000000000000000000), Propose(1, 0, 5627), Deliver(22), Propose(0, 1, 9882), Complete(18), Rule(55, false, 4292), Propose(1, 0, 9331), Withdraw(1), Cancel(23), Rule(27, false, 6464), Expire(58), FileClaim(13, true, 9712), Expire(40), Propose(0, 0, 2879), Finalize(52), Finalize(4), SettleTransfer(true), Redeem(1, 1, 8736)]

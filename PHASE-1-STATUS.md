@@ -440,7 +440,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 22. `test(contract): expand protocol unit and integration coverage`
 
-- **Commit:** (this commit)
+- **Commit:** `ccb5a9d`
 - **Did:** filled the remaining spec section 11 / threat-model gaps:
   `t16_owner_cannot_move_funds` (the owner calls every method it has — pause, unpause, add/remove
   arbiter and keeper, register/remove signer — during live engagements and an open claim; no
@@ -459,6 +459,34 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Limitations:** spec section 11 items that test Phase 3 features — council-only appeals,
   1Click `REFUNDED`, `unattributed` matching, failed `ft_transfer` callbacks — are deferred with
   those features. Integration tests on the compiled wasm are in the sandbox commit.
+
+### 23. `test(contract): verify solvency and state invariants`
+
+- **Commit:** (this commit)
+- **Did:** `tests/invariants/main.rs` (cargo target `invariants`, the location the spec names):
+  `proptest`, **256 runs x 50 steps**, 19 action kinds (wait, bond, withdraw, vault deposit/redeem,
+  propose/accept/cancel, deliver, complete, expire, file claim, objective resolution, arbiter ruling,
+  finalize, stale-claim close, payout, transfer success/failure). Each step takes only actions whose
+  preconditions hold, so any panic fails the run. Every receipt and verdict is a fresh secp256k1
+  signature verified by the contract. After every step it checks **I1** (a model of the NEAR the
+  contract holds — deposits in, transfers out, failed transfers refunded — covers
+  `solvency().liabilities`; running totals equal the records), **I2** (locks fit, and each bond/vault
+  lock equals the sum of its live engagements' locks), **I3**, **I4** (no withdrawal with an open
+  claim), **I5**, **I6** (allowed payout edges, `Success` at most once), **I7** (a deposit's shares
+  are never worth more than the deposit), **I8** (statuses only move along allowed edges).
+  `random_runs_reach_every_settlement_path` (60 x 200 steps, fixed seed) proves the generator reaches
+  all 18 settlement events — it caught the first version of the generator never filing enough claims
+  to time one out, never expiring a job and never confirming a payout; weights were tuned until it did.
+- **Findings while building it:** the unit-test VM carries storage between proptest cases, so each
+  run now starts from empty mocked storage; the harness's own missing `min_bond` precondition was
+  fixed in the harness — the contract was right. No contract bug was found by the property runs.
+- **Files:** `tests/invariants/{main.rs,README.md}`, `tests/proptest-regressions/main.txt`,
+  `contracts/recourse/Cargo.toml` (`[[test]] invariants`, dev-dep `secp256k1 0.27` with
+  `recovery` — already in the tree), `Cargo.lock`
+- **Ran:** `cargo test` — 214 unit passed; invariants 2 passed (256 x 50 property run +
+  path coverage, ~180 s); `cargo clippy --all-targets -D warnings` (clean); `cargo fmt --check`.
+- **Limitations:** runs in the unit-test VM (which does not revert state on panic — hence
+  valid-actions-only); the compiled wasm is exercised by the sandbox scenarios.
 
 ---
 

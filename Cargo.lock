@@ -3056,6 +3056,7 @@ dependencies = [
  "near-workspaces",
  "proptest",
  "schemars 0.8.22",
+ "secp256k1",
  "serde",
  "serde_json",
  "tokio",

@@ -31,3 +31,10 @@ anyhow = "1"
 # Same version near-sdk's unit-testing mock uses; lets tests feed promise
 # results (e.g. a failed transfer) into callbacks via `testing_env!`.
 near-parameters = "0.38"
+# Signs real EIP-191 receipts in the invariant harness (already in the tree).
+secp256k1 = { version = "0.27", features = ["recovery"] }
+
+# The spec places the property harness in the repo-level tests/invariants/.
+[[test]]
+name = "invariants"
+path = "../../tests/invariants/main.rs"
