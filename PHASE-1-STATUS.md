@@ -350,7 +350,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 19. `feat(slashing): implement collateral-first claim finalization`
 
-- **Commit:** (this commit)
+- **Commit:** `9c3d6e7`
 - **Did:** `slashing.rs`: `split_award` takes `min(A, B)` from the bond, the rest up to `V` from the
   vault, never more than `liability_cap` (I5); `slash` releases both locks and the exposure in full,
   debits bond and vault capital (vault `losses_paid`, LPs lose pro rata via share price), records
@@ -371,6 +371,31 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Ran:** `cargo fmt`, `cargo test` (175 passed), `cargo clippy --all-targets -D warnings` (clean),
   wasm release build (ok).
 - **Limitations:** appeals (`Appealed` -> council) are Phase 3; `finalize` only takes `Resolved` claims.
+
+### 20. `feat(payouts): implement secure direct payout execution`
+
+- **Commit:** (this commit)
+- **Did:** `execute_payout(claim_id, deposit_address?, quote_id?, quote_hash?)`: keeper only;
+  Direct mode only, and the Intents-only arguments must be absent, so a keeper cannot inject its
+  own deposit address (T8); amount fixed by the verdict, recipient fixed as the claimant;
+  `Pending -> Sent`, `attempts += 1`, the amount leaves `pending_payouts`, then a native transfer
+  chained to `on_payout_transfer` (`#[private]`, 10 Tgas). The callback reads the transfer outcome
+  on-chain: success -> `Success` (`payout_confirmed`); failure -> back to `Pending` with the amount
+  re-added to `pending_payouts` (the runtime refunds a failed transfer) and `payout_retry`. A
+  callback for a payout not in `Sent` changes nothing. `PayoutStatus::can_move_to` encodes I6.
+- **Files:** `src/payouts.rs`, `Cargo.toml` (dev-dep `near-parameters 0.38`, the version
+  near-sdk's mock already uses, to feed promise results into callbacks), `Cargo.lock`,
+  `src/tests/{payouts,mod}.rs`
+- **Tests added:** 10 (keeper sends to the claimant; success; failure restores `Pending` and the
+  owed total and can be retried; re-send while in flight and after success refused (T9); late
+  duplicate callback cannot double-settle; non-keeper; keeper-chosen deposit address refused (T8);
+  unknown claim; transition table).
+- **Ran:** `cargo fmt`, `cargo test` (185 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** `#[private]` is enforced by the wasm entry point, which unit tests bypass; it is
+  exercised in the sandbox. Deferred with Intents mode (Phase 3, per the spec): `confirm_payout`,
+  1Click `REFUNDED`/`FAILED` statuses, refunds matched from `unattributed`, and `ft_transfer`
+  callbacks — the spec's payout tests for those are Phase 3 tests.
 
 ---
 
@@ -404,6 +429,9 @@ Filled in as they are made.
 - **`expire(id)`** (anyone, after `deadline + claim_window`, engagement still `Open` and unclaimed)
   refunds the price to the client and pays the premium to the vault. Without it, a job nobody
   delivered and nobody claimed would lock the agent's bond, the vault and the escrow forever.
+- **Direct payouts settle from their own transfer callback**, not from a keeper report:
+  `confirm_payout` and `unattributed` matching only make sense for 1Click (Intents) payouts, which the
+  spec defers to Phase 3, so `confirm_payout` is not exposed yet.
 
 ## Open items
 

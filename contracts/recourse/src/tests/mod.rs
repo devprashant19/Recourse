@@ -15,6 +15,7 @@ mod engagements;
 mod events;
 mod init;
 mod lifecycle;
+mod payouts;
 mod pool;
 mod pricing;
 mod roles;

@@ -3051,6 +3051,7 @@ dependencies = [
  "anyhow",
  "hex",
  "near-contract-standards",
+ "near-parameters 0.38.0",
  "near-sdk",
  "near-workspaces",
  "proptest",
