@@ -114,3 +114,6 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+
+// Mark this file as a module so each spike gets its own scope.
+export {};

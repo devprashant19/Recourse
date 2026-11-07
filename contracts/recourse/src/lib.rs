@@ -108,7 +108,10 @@ impl Recourse {
             config.max_vault_exposure_bps > 0 && config.max_vault_exposure_bps <= BPS_DENOM,
             "bad vault exposure config"
         );
-        require!(config.claim_stake_bps <= BPS_DENOM, "bad claim stake config");
+        require!(
+            config.claim_stake_bps <= BPS_DENOM,
+            "bad claim stake config"
+        );
 
         let council = config.council.clone();
 

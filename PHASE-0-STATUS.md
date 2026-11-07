@@ -32,6 +32,24 @@ everything that needs an account, an API key or a network call is blocked on you
 | `THREAT_MODEL.md` with all 16 entries | [`THREAT_MODEL.md`](THREAT_MODEL.md) |
 | `README.md` with Do/See, trust assumptions, the oracle-problem answer | [`README.md`](README.md) |
 
+## Findings so far
+
+**`near-workspaces` does not install on Windows.** `near-workspaces@4` pulls
+`near-sandbox@0.1.5`, whose postinstall downloads a nearcore binary and hard-fails with
+`Unsupported platform: Windows_NT x64`. It publishes **Linux x64 and Darwin arm64 only**.
+
+This is a Spike C answer arriving early, and it reaches further than the spike:
+
+- `pnpm demo` cannot run on bare Windows. Use WSL2, Linux, macOS or Docker (Docker is installed on
+  this machine).
+- CI runs on `ubuntu-latest`, so it is unaffected.
+- **A judge on bare Windows cannot run the headline command.** Either the README says so and points
+  at Docker, or the demo ships as a container. Decide this in Phase 4 when `run-demo.ts` is finished,
+  not on 14 Nov.
+
+`near-workspaces` is therefore deliberately **not** a root dependency. Install it in the environment
+where the demo actually runs.
+
 ## Blocked on you
 
 These are the real Phase 0 exit criteria, and none of them can be done from here.
@@ -44,8 +62,8 @@ These are the real Phase 0 exit criteria, and none of them can be done from here
       pnpm 10.20.0**. Judge check #1 compares against `.nvmrc`, so either install Node 20 (`nvm install
       20`) or change `.nvmrc`, `engines` and `packageManager` to match what you will actually ship.
       Do not leave them disagreeing.
-- [ ] **`pnpm install`.** Not run — no lockfile yet. Dependency versions in `package.json` are
-      plausible pins, not verified ones.
+- [x] ~~`pnpm install`~~ — done. `pnpm-lock.yaml` is committed, resolved with pnpm 9.12.3 so it
+      matches CI. `ethers` and `typescript-eslint` added; `pnpm typecheck` and `pnpm lint` both pass.
 - [ ] **Create the public GitHub repo** and push. Nothing has been pushed anywhere.
 - [ ] **Testnet accounts** from the faucet: `recourse-v1.testnet` *(name to confirm)*, `agent`,
       `client`, three underwriters, `arbiter`, `keeper`.
@@ -57,8 +75,10 @@ These are the real Phase 0 exit criteria, and none of them can be done from here
       `cargo test --manifest-path spikes/spike-a-ecrecover/Cargo.toml -- --nocapture`.
       **Both halves must print the same address.** This is the gate for the whole project.
 - [ ] **Run Spike B** — `pnpm spike:b`. Keep the printed asset IDs for the README.
-- [ ] **Run Spike C** — `pnpm spike:c`. Decide the sandbox tooling by what actually works.
-- [ ] **CI green** on the first push.
+- [ ] **Run Spike C** — `pnpm spike:c`, **on Linux/macOS/WSL2**, not on Windows (see Findings).
+      Decide the sandbox tooling by what actually works.
+- [ ] **CI green.** First push was red; `cargo fmt` and the pnpm version conflict are fixed. The
+      remaining unknown is `cargo clippy -D warnings` and `cargo test`, which have never run.
 
 ## Exit criteria (from the phase doc)
 
