@@ -1,0 +1,13 @@
+# Normalise line endings: LF in the repo, native in the working copy.
+* text=auto eol=lf
+
+# Binaries
+*.png binary
+*.jpg binary
+*.wasm binary
+*.zip binary
+*.docx binary
+
+# Lockfiles and fixtures: keep diffs collapsed in review
+pnpm-lock.yaml linguist-generated=true -diff
+demo/fixtures/** linguist-generated=true

@@ -1,0 +1,18 @@
+# Standalone: deliberately NOT a member of the root Cargo workspace, so a broken
+# spike can never block `cargo test` on the contract.
+[workspace]
+
+[package]
+name = "spike-a-ecrecover"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+near-sdk = "5.29"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+near-sdk = { version = "5.29", features = ["unit-testing"] }

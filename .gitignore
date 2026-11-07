@@ -1,0 +1,43 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+neardev/
+
+# Node
+node_modules/
+.pnpm-store/
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Rust
+target/
+**/target/
+
+# Data and runtime
+.data/
+*.sqlite
+*.sqlite-journal
+.playwright/
+playwright-report/
+test-results/
+
+# Fixtures are COMMITTED on purpose (demo/fixtures) — the sandbox replays real recorded
+# signatures and quotes. Only raw captures that may contain keys are ignored:
+demo/fixtures/**/*.raw.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Local archives — phases.zip duplicates phases/ exactly, so it is not tracked.
+# Drop the line below if you want it downloadable from the repo.
+*.zip

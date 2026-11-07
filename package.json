@@ -1,0 +1,47 @@
+{
+  "name": "recourse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bonded, insured, slashable AI agents on NEAR. Every job leaves a TEE-attested receipt; a failed job is slashed and paid out cross-chain through NEAR Intents.",
+  "license": "MIT",
+  "packageManager": "pnpm@9.12.3",
+  "engines": {
+    "node": ">=20 <21",
+    "pnpm": ">=9 <10"
+  },
+  "scripts": {
+    "build": "pnpm -r build && pnpm build:contract",
+    "build:contract": "cargo near build reproducible-wasm --manifest-path contracts/recourse/Cargo.toml",
+    "demo": "tsx demo/run-demo.ts --mode sandbox",
+    "demo:testnet": "tsx demo/run-demo.ts --mode testnet",
+    "judge": "tsx scripts/judge.ts",
+    "test": "pnpm test:contract && pnpm test:invariants && pnpm test:integration && pnpm test:adversarial && pnpm test:services && pnpm test:e2e",
+    "test:contract": "cargo test --manifest-path contracts/recourse/Cargo.toml",
+    "test:invariants": "cargo test --manifest-path contracts/recourse/Cargo.toml --test invariants",
+    "test:integration": "cargo test --manifest-path contracts/recourse/Cargo.toml --test integration",
+    "test:adversarial": "vitest run tests/adversarial",
+    "test:services": "vitest run packages services",
+    "test:e2e": "playwright test",
+    "dev": "docker compose up --build",
+    "deploy": "tsx scripts/deploy.ts",
+    "seed": "tsx scripts/seed.ts",
+    "record-fixtures": "tsx scripts/record-fixtures.ts",
+    "verify-receipt": "tsx scripts/verify-receipt.ts",
+    "rerun-verdict": "tsx services/arbiter/src/rerun-verdict.ts",
+    "mainnet:run": "tsx demo/mainnet-run/run.ts",
+    "mainnet:verify": "tsx demo/mainnet-run/verify.ts",
+    "spike:a": "tsx spikes/spike-a-ecrecover/recover.ts",
+    "spike:b": "tsx spikes/spike-b-oneclick/quote.ts",
+    "spike:c": "tsx spikes/spike-c-sandbox/hello.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r typecheck",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "@types/node": "20.17.10",
+    "eslint": "9.17.0",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
+  }
+}

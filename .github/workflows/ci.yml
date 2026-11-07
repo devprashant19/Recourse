@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  # CI never touches live services. Everything runs against the sandbox on recorded fixtures.
+  RECOURSE_MODE: sandbox
+
+jobs:
+  contract:
+    name: Contract — build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust from rust-toolchain.toml
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.83.0"
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Unit tests
+        run: cargo test --manifest-path contracts/recourse/Cargo.toml
+
+      - name: Build wasm
+        run: cargo build --manifest-path contracts/recourse/Cargo.toml --target wasm32-unknown-unknown --release
+
+  typescript:
+    name: TypeScript — typecheck, lint, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test:services
+
+  judge:
+    name: Judge script
+    runs-on: ubuntu-latest
+    needs: [contract, typescript]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.83.0"
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The headline check: a fresh clone, no keys, 7/7 PASS and solvency OK.
+      - name: npm run judge
+        run: npm run judge
+
+  secrets:
+    name: No secrets in repo or history
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
