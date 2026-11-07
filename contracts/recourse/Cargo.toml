@@ -3,7 +3,7 @@ name = "recourse"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/REPLACE_ME/recourse"
+repository = "https://github.com/devprashant19/Recourse"
 description = "Bonds, underwriting vaults, TEE-attested receipts, claims and slashing for AI agents on NEAR"
 
 [lib]
@@ -23,11 +23,3 @@ proptest = "1.5"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 near-workspaces = "0.16"
 anyhow = "1"
-
-[profile.release]
-codegen-units = 1
-opt-level = "z"
-lto = true
-debug = false
-panic = "abort"
-overflow-checks = true

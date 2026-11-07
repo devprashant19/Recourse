@@ -18,9 +18,10 @@
 //!   3. `engagements` (incl. on-chain ecrecover + `used_receipts`)
 //!   4. `claims`, `slashing`, `payouts` (Direct mode only)
 //!   5. `pricing`
+//!
 //! Phase 3 adds `ft`, Intents payouts and appeals. Phase 4 adds `underwriting`.
 
-use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
+use near_sdk::borsh::BorshSerialize;
 use near_sdk::store::{IterableMap, LookupMap, LookupSet};
 use near_sdk::{env, near, require, AccountId, BorshStorageKey, PanicOnDefault};
 
