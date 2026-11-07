@@ -9,7 +9,7 @@ use near_sdk::serde_json::json;
 use near_sdk::{env, near, require, AccountId};
 
 use crate::events::Event;
-use crate::storage::{refund, require_len, MAX_URI_LEN};
+use crate::storage::{refund, require_len, storage_cost, BOND_GROWTH_BYTES, MAX_URI_LEN};
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
 
@@ -36,7 +36,13 @@ impl Recourse {
         self.agents.insert(agent_id.clone(), agent.clone());
         // Created now so later bond writes do not grow storage unpaid.
         self.bonds.insert(agent_id.clone(), Bond::default());
-        let unused = self.charge_storage(before, env::attached_deposit().as_yoctonear());
+        let available = env::attached_deposit().as_yoctonear();
+        let reserve = storage_cost(BOND_GROWTH_BYTES);
+        require!(
+            available >= reserve,
+            "attach a storage deposit to cover registration"
+        );
+        let unused = self.charge_storage(before, available - reserve);
 
         Event::AgentRegistered.emit(json!({
             "agent": agent_id,

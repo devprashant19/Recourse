@@ -107,7 +107,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 7. `feat(bonds): implement native NEAR bond deposits`
 
-- **Commit:** (this commit)
+- **Commit:** `f841775`
 - **Did:** `post_bond()` (payable): registered agents only; the whole deposit becomes bond (its
   fixed-size record was paid for at registration); `existing + amount >= min_bond`; zero deposits
   refused; `totals.bonds` kept in step; emits `bond_posted` with the posted amount and new total.
@@ -117,6 +117,24 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Ran:** `cargo fmt`, `cargo test` (44 passed), `cargo clippy --all-targets -D warnings` (clean),
   wasm release build (ok).
 - **Limitations:** native NEAR only; `ft_on_transfer(msg="bond")` is USDC support (Phase 3).
+
+### 8. `feat(bonds): implement secure withdrawal and cooldown`
+
+- **Commit:** (this commit)
+- **Did:** `request_withdrawal(amount)`: positive, `<= amount - locked`, refused while any claim is
+  open; a new request replaces the old one and restarts the cooldown. `withdraw()`: needs a request,
+  the cooldown elapsed, no open claim, and the requested amount still unlocked (locks taken during
+  the cooldown are re-checked); state and totals are updated before the transfer is scheduled.
+  Registration now also prepays the 8 bytes a withdrawal request adds to the bond record, so the
+  request needs no deposit.
+- **Files:** `src/bonds.rs`, `src/agents.rs`, `src/storage.rs`, `src/tests/bonds.rs`
+- **Tests added:** 8 (payout after cooldown with transfer/event/totals; early withdraw, no request,
+  over-unlocked request, locks taken during cooldown, open claim at request and at withdraw all
+  refused; new request restarts cooldown).
+- **Ran:** `cargo fmt`, `cargo test` (52 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** the "claim filed during cooldown restarts it" path is wired in `file_claim` and
+  tested there.
 
 ---
 

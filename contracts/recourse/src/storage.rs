@@ -27,6 +27,11 @@ pub const MAX_MODEL_ID_LEN: usize = 128;
 /// Longest 1Click asset id / recipient / deposit address / quote id / status.
 pub const MAX_SHORT_STR_LEN: usize = 128;
 
+/// Bytes a bond record grows by when a withdrawal is requested
+/// (`withdrawal_requested_at` going from `None` to `Some`). Charged at
+/// registration so the request itself needs no deposit.
+pub const BOND_GROWTH_BYTES: u64 = 8;
+
 /// Prepaid bytes for an engagement, its receipt and its `used_receipts` entry.
 pub const ENGAGEMENT_STORAGE_BYTES: u64 = 1_200;
 /// Prepaid bytes for a claim, its verdict (with the verdict receipt and its
