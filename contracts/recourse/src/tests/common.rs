@@ -213,3 +213,21 @@ pub fn allow_tee_signer(c: &mut Recourse, kind: SignatureKind) {
     ctx(&owner(), 0, T0);
     c.register_signer(tee_address(), vec_str("model_id"), HexBytes([3; 32]), kind);
 }
+
+/// Allow-lists the TEE key and has the agent submit the vector receipt for
+/// engagement `id` at time `now`.
+pub fn deliver(c: &mut Recourse, id: u64, now: u64) -> Receipt {
+    if c.get_signer(tee_address()).is_none() {
+        allow_tee_signer(c, SignatureKind::ProviderTee);
+    }
+    let r = good_receipt();
+    ctx(&agent(), 0, now);
+    c.submit_receipt(
+        id,
+        r.model_id,
+        r.request_hash,
+        r.response_hash,
+        r.signature,
+        r.kind,
+    )
+}

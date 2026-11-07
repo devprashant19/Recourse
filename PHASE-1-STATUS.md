@@ -219,7 +219,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 13. `feat(tee): implement signer registry and signature verification`
 
-- **Commit:** (this commit)
+- **Commit:** `e7093c2`
 - **Did:** `tee.rs`: the contract rebuilds the signed text itself from the submitted hashes
   (`provider_tee` = `model:req:resp`, `gateway` = `req:resp`, lowercase hex), takes the EIP-191
   digest with `env::keccak256_array`, normalises `v` (27/28 and 0/1; anything else rejected),
@@ -247,6 +247,25 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
   EIP-191, not with a recorded NEAR AI Cloud signature. Signer storage is paid by the contract
   (owner/keeper-only and bounded by those roles; keepers use function-call keys, which cannot attach
   deposits).
+
+### 14. `feat(engagements): implement receipt submission and replay protection`
+
+- **Commit:** (this commit)
+- **Did:** `submit_receipt(id, model_id, request_hash, response_hash, signature, kind)`: only the
+  engagement's agent; engagement must be `Open`; at or before the deadline; the receipt goes
+  through `verify_receipt` (on-chain `ecrecover`, signer allow-listed for model and kind); the
+  response hash is inserted into `used_receipts` and a repeat anywhere is refused (T3); records the
+  receipt and `delivered_at`, moves `Open -> Delivered` through the forward-only check, emits
+  `receipt_submitted`.
+- **Files:** `src/engagements.rs`, `src/tests/{engagements,common}.rs`
+- **Tests added:** 8 (delivery recorded with signer and replay mark; at-deadline accepted; after
+  deadline refused; same response hash on a second engagement refused (T3); double submission;
+  non-agent caller; unlisted signer; prepaid engagement fee covers the worst case — first job
+  creating the exposure entry plus a receipt with a 128-byte model id).
+- **Ran:** `cargo fmt --check`, `cargo test` (123 passed), `cargo clippy --all-targets -D warnings`
+  (clean), wasm release build (ok).
+- **Limitations:** "request includes engagement ID" (T3's second half) is enforced off-chain by the
+  worker in Phase 2; the contract only sees hashes.
 
 ---
 

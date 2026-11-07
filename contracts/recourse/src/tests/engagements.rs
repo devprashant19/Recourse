@@ -257,3 +257,143 @@ fn bond_pending_withdrawal_cannot_be_locked() {
     // 1 NEAR - 1 yocto left to lock; this job needs 1 NEAR.
     open_job(&mut c);
 }
+
+// ----- submit_receipt -----------------------------------------------------
+
+#[test]
+fn valid_receipt_marks_the_engagement_delivered() {
+    let mut c = ready();
+    let id = open_job(&mut c);
+    let r = deliver(&mut c, id, T0 + MINUTE);
+    let e = c.get_engagement(id).unwrap();
+    assert_eq!(e.status, EngagementStatus::Delivered);
+    assert_eq!(e.delivered_at, Some(U64(T0 + MINUTE)));
+    assert_eq!(e.receipt, Some(r.clone()));
+    assert_eq!(r.signer, tee_address());
+    assert!(c.is_receipt_used(r.response_hash));
+    assert_eq!(events()[0]["event"], "receipt_submitted");
+}
+
+#[test]
+fn receipt_exactly_at_the_deadline_is_accepted() {
+    let mut c = ready();
+    let id = open_job(&mut c);
+    deliver(&mut c, id, DEADLINE);
+    assert_eq!(
+        c.get_engagement(id).unwrap().status,
+        EngagementStatus::Delivered
+    );
+}
+
+#[test]
+#[should_panic(expected = "deadline has passed")]
+fn receipt_after_deadline_fails() {
+    let mut c = ready();
+    let id = open_job(&mut c);
+    deliver(&mut c, id, DEADLINE + 1);
+}
+
+#[test]
+#[should_panic(expected = "receipt already used")]
+fn duplicate_response_hash_on_a_second_engagement_fails_t03() {
+    let mut c = ready();
+    let first = open_job(&mut c);
+    let second = open_job(&mut c);
+    deliver(&mut c, first, T0 + MINUTE);
+    deliver(&mut c, second, T0 + MINUTE);
+}
+
+#[test]
+#[should_panic(expected = "engagement is not open")]
+fn receipt_cannot_be_submitted_twice() {
+    let mut c = ready();
+    let id = open_job(&mut c);
+    deliver(&mut c, id, T0 + MINUTE);
+    deliver(&mut c, id, T0 + MINUTE);
+}
+
+#[test]
+#[should_panic(expected = "only the engagement's agent")]
+fn only_the_agent_can_submit_a_receipt() {
+    let mut c = ready();
+    let id = open_job(&mut c);
+    allow_tee_signer(&mut c, SignatureKind::ProviderTee);
+    let r = good_receipt();
+    ctx(&client(), 0, T0);
+    c.submit_receipt(
+        id,
+        r.model_id,
+        r.request_hash,
+        r.response_hash,
+        r.signature,
+        r.kind,
+    );
+}
+
+#[test]
+#[should_panic(expected = "signer not allow-listed")]
+fn receipt_from_an_unlisted_signer_fails() {
+    let mut c = ready();
+    let id = open_job(&mut c);
+    let r = good_receipt();
+    ctx(&agent(), 0, T0);
+    c.submit_receipt(
+        id,
+        r.model_id,
+        r.request_hash,
+        r.response_hash,
+        r.signature,
+        r.kind,
+    );
+}
+
+#[test]
+fn prepaid_fee_covers_the_largest_engagement_and_receipt() {
+    use crate::storage::{storage_cost, ENGAGEMENT_STORAGE_BYTES, MAX_MODEL_ID_LEN};
+    let mut c = ready();
+    allow_tee_signer(&mut c, SignatureKind::ProviderTee);
+    // Worst case: first job for this agent (new exposure entry) and a receipt
+    // with the longest model id accepted. Register a signer for that model id
+    // directly so the long receipt verifies.
+    let long_model = "m".repeat(MAX_MODEL_ID_LEN);
+    let mut signer = c.get_signer(tee_address()).unwrap();
+    signer.model_id = long_model.clone();
+    c.signers.insert(tee_address(), signer);
+
+    let deposit = job_deposit(&c, 2 * ONE_NEAR, 2 * ONE_NEAR);
+    ctx(&client(), deposit, T0);
+    let before = near_sdk::env::storage_usage();
+    let id = c.open_engagement(
+        agent(),
+        HexBytes([9; 32]),
+        U128(2 * ONE_NEAR),
+        U64(DEADLINE),
+        U128(2 * ONE_NEAR),
+    );
+    c.flush();
+    let opened = near_sdk::env::storage_usage() - before;
+
+    // The receipt text changes with the model id, so this signature will not
+    // verify; write the worst-case receipt directly to measure its bytes.
+    let mut e = c.get_engagement(id).unwrap();
+    let before = near_sdk::env::storage_usage();
+    e.receipt = Some(Receipt {
+        model_id: long_model,
+        request_hash: HexBytes([1; 32]),
+        response_hash: HexBytes([2; 32]),
+        signer: tee_address(),
+        signature_kind: SignatureKind::ProviderTee,
+        submitted_at: U64(T0),
+    });
+    e.delivered_at = Some(U64(T0));
+    c.engagements.insert(id, e);
+    c.used_receipts.insert(HexBytes([2; 32]));
+    c.flush();
+    let delivered = near_sdk::env::storage_usage() - before;
+
+    assert!(
+        opened + delivered <= ENGAGEMENT_STORAGE_BYTES,
+        "{opened} + {delivered} bytes > {ENGAGEMENT_STORAGE_BYTES} prepaid"
+    );
+    assert!(storage_cost(opened + delivered) <= crate::storage::engagement_storage_fee());
+}

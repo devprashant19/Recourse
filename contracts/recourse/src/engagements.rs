@@ -97,9 +97,64 @@ impl Recourse {
         refund(attached - required);
         id
     }
+
+    /// The agent proves delivery with a TEE-signed receipt, checked on-chain
+    /// (see `tee.rs`). Must arrive by the deadline, and each response hash can
+    /// be used once across all engagements (T3).
+    pub fn submit_receipt(
+        &mut self,
+        id: EngagementId,
+        model_id: String,
+        request_hash: Hash,
+        response_hash: Hash,
+        signature: Signature65,
+        kind: SignatureKind,
+    ) -> Receipt {
+        let mut e = self.engagement_of(id);
+        require!(
+            env::predecessor_account_id() == e.agent,
+            "only the engagement's agent"
+        );
+        require!(e.status == EngagementStatus::Open, "engagement is not open");
+        let now = env::block_timestamp();
+        require!(now <= e.deadline.0, "deadline has passed");
+
+        let receipt = self.verify_receipt(&ReceiptInput {
+            model_id,
+            request_hash,
+            response_hash,
+            signature,
+            kind,
+        });
+        require!(
+            self.used_receipts.insert(response_hash),
+            "receipt already used"
+        );
+        e.receipt = Some(receipt.clone());
+        e.delivered_at = Some(U64(now));
+        self.set_engagement_status(id, &mut e, EngagementStatus::Delivered);
+
+        Event::ReceiptSubmitted.emit(json!({
+            "id": U64(id),
+            "agent": e.agent,
+            "model_id": receipt.model_id,
+            "request_hash": receipt.request_hash,
+            "response_hash": receipt.response_hash,
+            "signer": receipt.signer,
+            "kind": receipt.signature_kind,
+        }));
+        receipt
+    }
 }
 
 impl Recourse {
+    pub(crate) fn engagement_of(&self, id: EngagementId) -> Engagement {
+        self.engagements
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("engagement not found"))
+    }
+
     /// Locks liability on both sides. Callers have already checked capacity.
     fn lock_liability(
         &mut self,
@@ -122,5 +177,20 @@ impl Recourse {
         let exposure = self.agent_exposure.get(&key).copied().unwrap_or(0);
         self.agent_exposure
             .insert(key, add(exposure, vault_amt, "agent exposure"));
+    }
+
+    /// Moves an engagement to `next`, refusing any backwards move (I8).
+    pub(crate) fn set_engagement_status(
+        &mut self,
+        id: EngagementId,
+        e: &mut Engagement,
+        next: EngagementStatus,
+    ) {
+        require!(
+            e.status.can_move_to(next),
+            format!("engagement cannot move from {:?} to {:?}", e.status, next)
+        );
+        e.status = next;
+        self.engagements.insert(id, e.clone());
     }
 }
