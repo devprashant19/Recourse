@@ -166,6 +166,12 @@ impl Recourse {
     }
 }
 
+impl Recourse {
+    pub(crate) fn assert_not_paused(&self) {
+        require!(!self.paused, "contract is paused");
+    }
+}
+
 /// Rejects any config that would make a later invariant impossible to keep.
 fn validate_config(c: &Config) {
     require!(

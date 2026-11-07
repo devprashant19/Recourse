@@ -9,12 +9,13 @@
 //! cannot be "inflated" to steal the next deposit, and every division rounds
 //! down — toward the vault, never the LP (invariant I7).
 
-use near_sdk::json_types::U128;
+use near_sdk::json_types::{U128, U64};
 use near_sdk::serde_json::json;
 use near_sdk::{env, near, require, AccountId, NearToken, Promise};
 
 use crate::events::Event;
 use crate::math::{add, mul_div_floor, sub};
+use crate::pricing::premium_floor_bps;
 use crate::storage::refund;
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
@@ -151,6 +152,70 @@ impl Recourse {
             .transfer(NearToken::from_yoctonear(assets))
             .detach();
         U128(assets)
+    }
+}
+
+#[near]
+impl Recourse {
+    /// The caller's vault agrees to back `agent` up to `limit` locked at a
+    /// time, at `premium_bps` of each job's liability, until `expires_at`.
+    ///
+    /// Phase 1 stand-in for the sealed-bid market (Phase 4 `settle_round`
+    /// writes the same record). Only the vault's own underwriter can commit
+    /// its capital, the rate can never be below the agent's premium floor, and
+    /// a vault cannot displace another vault's live coverage. Engagements
+    /// record their own vault, so rebinding never affects open work.
+    #[payable]
+    pub fn bind_coverage(
+        &mut self,
+        agent: AccountId,
+        limit: U128,
+        premium_bps: u32,
+        expires_at: U64,
+    ) -> Coverage {
+        let vault = env::predecessor_account_id();
+        self.vault_of(&vault);
+        let a = self
+            .agents
+            .get(&agent)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("agent not registered"));
+        require!(limit.0 > 0, "limit must be positive");
+        let floor = premium_floor_bps(&a.stats);
+        require!(
+            premium_bps >= floor,
+            format!("premium_bps below the agent's floor of {floor}")
+        );
+        require!(premium_bps <= BPS_DENOM, "premium_bps above 100%");
+        let now = env::block_timestamp();
+        require!(expires_at.0 > now, "expires_at must be in the future");
+        if let Some(existing) = self.coverage.get(&agent) {
+            require!(
+                existing.vault == vault || existing.expires_at.0 <= now,
+                "agent already has live coverage from another vault"
+            );
+        }
+
+        let before = env::storage_usage();
+        let cov = Coverage {
+            vault: vault.clone(),
+            limit,
+            premium_bps,
+            bound_at: now.into(),
+            expires_at,
+        };
+        self.coverage.insert(agent.clone(), cov.clone());
+        let unused = self.charge_storage(before, env::attached_deposit().as_yoctonear());
+
+        Event::CoverageBound.emit(json!({
+            "agent": agent,
+            "vault": vault,
+            "limit": limit,
+            "premium_bps": premium_bps,
+            "expires_at": expires_at,
+        }));
+        refund(unused);
+        cov
     }
 }
 

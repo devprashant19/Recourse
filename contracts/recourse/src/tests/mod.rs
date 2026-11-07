@@ -10,6 +10,7 @@
 mod agents;
 mod bonds;
 mod common;
+mod engagements;
 mod events;
 mod init;
 mod pool;

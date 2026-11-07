@@ -129,3 +129,57 @@ pub fn uw() -> AccountId {
 pub fn lp() -> AccountId {
     acc("lp.near")
 }
+
+pub fn client() -> AccountId {
+    acc("client.near")
+}
+
+pub const DAY: u64 = 24 * 60 * MINUTE;
+pub const VAULT_CAPITAL: u128 = 100 * ONE_NEAR;
+pub const PREMIUM_BPS: u32 = 200;
+/// Job deadline used by `open_job`.
+pub const DEADLINE: u64 = T0 + 10 * MINUTE;
+
+/// Agent bonded with `bond`, `uw()`'s vault funded with ~100 NEAR, and
+/// coverage bound at 2% with a 50 NEAR limit for a day.
+pub fn ready_with_bond(bond: u128) -> Recourse {
+    let mut c = new_contract();
+    register_bonded(&mut c, &agent(), bond);
+    ctx(&uw(), STORAGE_DEPOSIT, T0);
+    c.create_vault();
+    ctx(&lp(), VAULT_CAPITAL + STORAGE_DEPOSIT, T0);
+    c.deposit_vault(uw());
+    ctx(&uw(), STORAGE_DEPOSIT, T0);
+    c.bind_coverage(agent(), U128(50 * ONE_NEAR), PREMIUM_BPS, U64(T0 + DAY));
+    c
+}
+
+pub fn ready() -> Recourse {
+    ready_with_bond(10 * ONE_NEAR)
+}
+
+/// Exact deposit `open_engagement` needs for this cap and price.
+pub fn job_deposit(c: &Recourse, cap: u128, price: u128) -> u128 {
+    c.quote_job(agent(), U128(cap), Some(U128(price)))
+        .and_then(|q| q.total_deposit)
+        .expect("quote has a deposit")
+        .0
+}
+
+/// Opens a job from `client()` at time `now`; returns its id.
+pub fn open_job_at(c: &mut Recourse, cap: u128, price: u128, now: u64) -> u64 {
+    let deposit = job_deposit(c, cap, price);
+    ctx(&client(), deposit, now);
+    c.open_engagement(
+        agent(),
+        HexBytes([9; 32]),
+        U128(cap),
+        U64(DEADLINE),
+        U128(price),
+    )
+}
+
+/// Opens a 2 NEAR job with a 2 NEAR liability cap at `T0`.
+pub fn open_job(c: &mut Recourse) -> u64 {
+    open_job_at(c, 2 * ONE_NEAR, 2 * ONE_NEAR, T0)
+}

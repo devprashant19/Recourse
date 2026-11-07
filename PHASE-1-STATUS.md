@@ -175,7 +175,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 11. `feat(pricing): implement risk scoring and liability calculations`
 
-- **Commit:** (this commit)
+- **Commit:** `3435348`
 - **Did:** the four spec formulas with the score as an exact fraction (no floats), constants named
   (`UPHELD_WEIGHT = 3`, floor 150 bps + 1000 bps per upheld, 4x liability multiplier). Rounding
   always goes against the party asking: bond share and premium floor round up, liability ceiling
@@ -194,6 +194,28 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Limitations:** RULES.md's worked example rounds the score to 0.643 and floors the premium
   floor, giving 3071 / 221 bps; the contract computes 3072 / 222 bps. RULES.md gets a rounding note
   in the docs commit.
+
+### 12. `feat(engagements): implement coverage binding and job creation`
+
+- **Commit:** (this commit)
+- **Did:** `bind_coverage(agent, limit, premium_bps, expires_at)` (payable): only a vault's own
+  underwriter can commit its capital; rate between the agent's premium floor and 100%; a vault
+  cannot displace another vault's live coverage. `open_engagement(agent, terms_hash, liability_cap,
+  deadline, price)` (payable): not paused, client is not the agent, deadline in the future, then
+  `plan_job` (the same check `quote_job` runs); escrows price + premium, prepays engagement +
+  receipt storage, refunds any excess; locks the bond share, the vault share and the per-agent
+  exposure, re-asserting `locked <= amount/capital` at the lock site (I2, I3); emits
+  `engagement_opened`.
+- **Files:** `src/engagements.rs`, `src/pool.rs`, `src/lib.rs`, `src/tests/{engagements,common,mod}.rs`
+- **Tests added:** 19 (coverage: binding, non-owner, below floor, displacement refused, rebinding
+  after expiry; open: locks/escrow/premium/I3/totals/event, excess refunded, quote matches deposit,
+  paused, no coverage, expired coverage, above `max_liability`, under-bonded (T5), above the 25%
+  exposure cap, exposure accumulating across jobs, short deposit, self-hire, past deadline, bond
+  pending withdrawal not lockable).
+- **Ran:** `cargo fmt`, `cargo test` (98 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** coverage is bound directly by the underwriter, as the spec says for Phase 1; the
+  sealed-bid market replaces this path in Phase 4.
 
 ---
 
@@ -217,6 +239,13 @@ Filled in as they are made.
   bytes are prepaid by the client: a fixed fee in `open_engagement` (engagement + receipt) and in
   `file_claim` (claim + verdict + payout), with all string inputs length-capped so the fee is a real
   upper bound.
+- **`open_engagement` takes an explicit `price`.** The spec's signature infers the price from the
+  deposit. That lets an underwriter rebind coverage at a higher premium between the client's quote
+  and its transaction and silently shrink the agent's pay; with an explicit price the call fails
+  instead. The client attaches `price + premium + storage fee` (from `quote_job`); excess is refunded.
+- **`bind_coverage`** is the Phase 1 way to bind coverage (the spec says to bind it directly in
+  `seed.ts`). Only the vault's own underwriter may call it, at or above the agent's premium floor,
+  and it cannot displace another vault's live coverage.
 
 ## Open items
 
