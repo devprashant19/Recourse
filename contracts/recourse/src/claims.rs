@@ -253,8 +253,9 @@ impl Recourse {
 
     /// Applies an arbiter's verdict once the appeal window has passed. Anyone
     /// may call it. Upheld: the agent's bond and then the vault are slashed
-    /// for the award, which becomes a pending payout to the claimant, and the
-    /// claimant gets the escrowed price and the stake back now. Rejected: the
+    /// for the award, which becomes a pending payout to the claimant; the
+    /// claimant's stake comes back now and the escrowed price stays with the
+    /// vault (the award is the compensation). Rejected: the
     /// stake and the price go to the agent and the job counts as completed.
     pub fn finalize(&mut self, claim_id: ClaimId) {
         let claim = self.claim_of(claim_id);
@@ -272,6 +273,56 @@ impl Recourse {
             "appeal window still open"
         );
         self.apply_verdict(claim_id);
+    }
+
+    /// Unwinds a quality claim no arbiter ruled on within `claim_window +
+    /// appeal_window` of filing, so a missing arbiter can never lock funds
+    /// forever. No fault is found: the client gets the price and the stake
+    /// back, the vault keeps the premium, all locks are released, nobody is
+    /// slashed and the agent's record is unchanged. Anyone may call it.
+    pub fn close_stale_claim(&mut self, claim_id: ClaimId) {
+        let mut claim = self.claim_of(claim_id);
+        require!(
+            claim.kind == ClaimKind::Quality,
+            "only quality claims wait for an arbiter"
+        );
+        require!(
+            claim.status == ClaimStatus::Filed,
+            "claim is not awaiting a verdict"
+        );
+        let limit = claim
+            .filed_at
+            .0
+            .saturating_add(self.config.claim_window.0)
+            .saturating_add(self.config.appeal_window.0);
+        require!(
+            env::block_timestamp() > limit,
+            "arbiter still has time to rule"
+        );
+
+        let eid = claim.engagement_id;
+        let mut e = self.engagement_of(eid);
+        let stake = claim.stake.0;
+        self.totals.claim_stakes = U128(sub(self.totals.claim_stakes.0, stake, "total stakes"));
+        let mut bond = self.bond_of(&e.agent);
+        bond.open_claims = bond.open_claims.saturating_sub(1);
+        self.bonds.insert(e.agent.clone(), bond);
+        self.release_liability(&e);
+        self.pay_premium_to_vault(&e);
+        self.release_escrow(&e);
+        self.set_engagement_status(eid, &mut e, EngagementStatus::Cancelled);
+        self.set_claim_status(claim_id, &mut claim, ClaimStatus::TimedOut);
+        let refund_amt = add(e.price.0, stake, "claimant refund");
+
+        Event::ClaimTimedOut.emit(json!({
+            "claim_id": U64(claim_id),
+            "engagement_id": U64(eid),
+            "refunded": U128(refund_amt),
+            "claimant": claim.claimant,
+        }));
+        Promise::new(claim.claimant.clone())
+            .transfer(NearToken::from_yoctonear(refund_amt))
+            .detach();
     }
 }
 
@@ -295,6 +346,10 @@ impl Recourse {
         if verdict.upheld {
             let split = self.slash(eid, &e, verdict.award.0);
             self.pay_premium_to_vault(&e);
+            // The award is the client's compensation; the price stays with
+            // the vault that paid it. Refunding it as well would let a client
+            // and agent that are the same person profit from the vault (T6).
+            self.retain_price_in_vault(&e);
             self.release_escrow(&e);
             let paid = split.paid();
             if paid > 0 {
@@ -319,7 +374,6 @@ impl Recourse {
             }
             self.set_engagement_status(eid, &mut e, EngagementStatus::Slashed);
             self.set_claim_status(claim_id, &mut claim, ClaimStatus::Finalized);
-            let refund_now = add(e.price.0, stake, "claimant refund");
 
             Event::ClaimFinalized.emit(json!({
                 "claim_id": U64(claim_id),
@@ -328,12 +382,12 @@ impl Recourse {
                 "award": U128(paid),
                 "from_bond": U128(split.from_bond),
                 "from_vault": U128(split.from_vault),
-                "price_refunded": e.price,
+                "price_to_vault": e.price,
                 "stake_refunded": claim.stake,
                 "claimant": claim.claimant,
             }));
             Promise::new(claim.claimant.clone())
-                .transfer(NearToken::from_yoctonear(refund_now))
+                .transfer(NearToken::from_yoctonear(stake))
                 .detach();
         } else {
             self.settle_in_agents_favour(&e);

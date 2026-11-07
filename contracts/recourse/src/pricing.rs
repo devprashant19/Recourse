@@ -204,7 +204,12 @@ impl Recourse {
             ),
             coverage_vault: cov.map(|c| c.vault.clone()),
             storage_fee: U128(fee),
-            total_deposit: price.and_then(|p| premium_amt.map(|pr| U128(p.0 + pr + fee))),
+            total_deposit: price.and_then(|p| {
+                premium_amt
+                    .and_then(|pr| p.0.checked_add(pr))
+                    .and_then(|x| x.checked_add(fee))
+                    .map(U128)
+            }),
             can_open: plan.is_ok(),
             reason: plan.err(),
         })

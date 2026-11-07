@@ -60,27 +60,41 @@ fn another_vault_may_bind_once_coverage_has_expired() {
 // ----- open_engagement ----------------------------------------------------
 
 #[test]
-fn opening_escrows_price_and_premium_and_locks_liability() {
+fn proposing_escrows_price_and_premium_but_locks_nothing() {
     let mut c = ready();
-    let id = open_job(&mut c);
+    let id = propose_job_at(&mut c, 2 * ONE_NEAR, 2 * ONE_NEAR, T0);
     assert_eq!(id, 0);
     let e = c.get_engagement(0).unwrap();
-    // New agent: 50% of a 2 NEAR cap from the bond, 50% from the vault.
+    assert_eq!(e.status, EngagementStatus::Proposed);
+    // Planned split for a new agent: 50% bond, 50% vault (I3 holds already).
     assert_eq!(e.bond_locked, U128(ONE_NEAR));
     assert_eq!(e.vault_locked, U128(ONE_NEAR));
     assert_eq!(e.bond_locked.0 + e.vault_locked.0, e.liability_cap.0, "I3");
     // Premium is exactly 2% of the liability.
     assert_eq!(e.premium, U128(2 * ONE_NEAR * 200 / 10_000));
-    assert_eq!(e.status, EngagementStatus::Open);
-    assert_eq!(e.vault, uw());
-
-    assert_eq!(c.get_bond(agent()).unwrap().locked, U128(ONE_NEAR));
-    assert_eq!(c.get_vault(uw()).unwrap().locked, U128(ONE_NEAR));
-    assert_eq!(c.get_agent_exposure(uw(), agent()), U128(ONE_NEAR));
     assert_eq!(c.get_totals().escrow, U128(e.price.0 + e.premium.0));
     assert_eq!(c.get_counters().engagement, 1);
     assert_eq!(events()[0]["event"], "engagement_opened");
     assert!(transfers().is_empty(), "exact deposit, nothing to refund");
+    assert_eq!(
+        c.get_bond(agent()).unwrap().locked,
+        U128(0),
+        "agent has not consented"
+    );
+    assert_eq!(c.get_vault(uw()).unwrap().locked, U128(0));
+}
+
+#[test]
+fn accepting_locks_the_liability() {
+    let mut c = ready();
+    let id = propose_job_at(&mut c, 2 * ONE_NEAR, 2 * ONE_NEAR, T0);
+    ctx(&agent(), 0, T0);
+    c.accept_engagement(id);
+    assert_eq!(c.get_engagement(id).unwrap().status, EngagementStatus::Open);
+    assert_eq!(c.get_bond(agent()).unwrap().locked, U128(ONE_NEAR));
+    assert_eq!(c.get_vault(uw()).unwrap().locked, U128(ONE_NEAR));
+    assert_eq!(c.get_agent_exposure(uw(), agent()), U128(ONE_NEAR));
+    assert_eq!(events()[0]["event"], "engagement_accepted");
 }
 
 #[test]

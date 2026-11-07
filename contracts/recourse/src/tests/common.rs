@@ -148,7 +148,7 @@ pub fn ready_with_bond(bond: u128) -> Recourse {
     ctx(&uw(), STORAGE_DEPOSIT, T0);
     c.create_vault();
     ctx(&lp(), VAULT_CAPITAL + STORAGE_DEPOSIT, T0);
-    c.deposit_vault(uw());
+    c.deposit_vault(uw(), None);
     ctx(&uw(), STORAGE_DEPOSIT, T0);
     c.bind_coverage(agent(), U128(50 * ONE_NEAR), PREMIUM_BPS, U64(T0 + DAY));
     c
@@ -166,8 +166,8 @@ pub fn job_deposit(c: &Recourse, cap: u128, price: u128) -> u128 {
         .0
 }
 
-/// Opens a job from `client()` at time `now`; returns its id.
-pub fn open_job_at(c: &mut Recourse, cap: u128, price: u128, now: u64) -> u64 {
+/// Proposes a job from `client()` at time `now`; returns its id.
+pub fn propose_job_at(c: &mut Recourse, cap: u128, price: u128, now: u64) -> u64 {
     let deposit = job_deposit(c, cap, price);
     ctx(&client(), deposit, now);
     c.open_engagement(
@@ -177,6 +177,14 @@ pub fn open_job_at(c: &mut Recourse, cap: u128, price: u128, now: u64) -> u64 {
         U64(DEADLINE),
         U128(price),
     )
+}
+
+/// Proposes a job and has the agent accept it at time `now`; returns its id.
+pub fn open_job_at(c: &mut Recourse, cap: u128, price: u128, now: u64) -> u64 {
+    let id = propose_job_at(c, cap, price, now);
+    ctx(&agent(), 0, now);
+    c.accept_engagement(id);
+    id
 }
 
 /// Opens a 2 NEAR job with a 2 NEAR liability cap at `T0`.

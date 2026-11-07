@@ -13,6 +13,7 @@ mod claims;
 mod common;
 mod engagements;
 mod events;
+mod hardening;
 mod init;
 mod lifecycle;
 mod payouts;

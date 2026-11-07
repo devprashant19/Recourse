@@ -11,15 +11,16 @@
 //! Build order and full spec: `phases/phase-01-contract-core.md`.
 //!
 //! ## Status
-//! Phase 0 scaffold. Struct, storage keys and `new()` exist; the modules below are
-//! declared and empty. Phase 1 fills them in this order:
-//!   1. `types`, `roles`, `events`, `views`
-//!   2. `agents`, `bonds`, `pool`
-//!   3. `engagements` (incl. on-chain ecrecover + `used_receipts`)
-//!   4. `claims`, `slashing`, `payouts` (Direct mode only)
-//!   5. `pricing`
+//! Phase 1 contract core: agents and bonds (`agents`, `bonds`), underwriter
+//! vaults (`pool`), track-record pricing (`pricing`), engagements with agent
+//! acceptance and on-chain TEE receipts (`engagements`, `tee`), claims,
+//! objective resolution, arbiter verdicts and slashing (`claims`, `slashing`),
+//! Direct payouts (`payouts`), caller-pays storage (`storage`), NEP-297 events
+//! (`events`) and views including `solvency()` (`views`).
 //!
-//! Phase 3 adds `ft`, Intents payouts and appeals. Phase 4 adds `underwriting`.
+//! Phase 3 adds `ft` (USDC), Intents payouts and appeals. Phase 4 adds
+//! `underwriting` (sealed-bid coverage). Status and deviations from the spec:
+//! `PHASE-1-STATUS.md`.
 
 use near_sdk::borsh::BorshSerialize;
 use near_sdk::serde_json::json;

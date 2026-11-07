@@ -50,9 +50,10 @@ fn award_within_the_bond_lock_comes_only_from_the_bond() {
     let e = c.get_engagement(0).unwrap();
     assert_eq!(
         v.capital.0,
-        vault_before.capital.0 + e.premium.0,
-        "vault only gains the premium"
+        vault_before.capital.0 + e.premium.0 + e.price.0,
+        "vault pays nothing, gains the premium and keeps the price"
     );
+    assert_eq!(v.prices_retained, e.price);
 }
 
 #[test]
@@ -68,13 +69,16 @@ fn award_beyond_the_bond_lock_takes_the_rest_from_the_vault() {
     let v = c.get_vault(uw()).unwrap();
     assert_eq!(v.losses_paid, U128(ONE_NEAR));
     let e = c.get_engagement(0).unwrap();
-    assert_eq!(v.capital.0, vault_before.capital.0 - ONE_NEAR + e.premium.0);
+    assert_eq!(
+        v.capital.0,
+        vault_before.capital.0 - ONE_NEAR + e.premium.0 + e.price.0
+    );
     assert_eq!(e.status, EngagementStatus::Slashed);
     assert_eq!(c.get_agent_exposure(uw(), agent()), U128(0));
 }
 
 #[test]
-fn upheld_claim_creates_a_capped_payout_and_refunds_price_and_stake() {
+fn upheld_claim_creates_a_capped_payout_and_refunds_only_the_stake() {
     let mut c = ready();
     let cid = ruled(&mut c, CAP, true, CAP);
     let stake = c.get_claim(cid).unwrap().stake.0;
@@ -91,7 +95,11 @@ fn upheld_claim_creates_a_capped_payout_and_refunds_price_and_stake() {
     assert_eq!(p.mode, PayoutMode::Direct);
     assert_eq!(p.claimant, client());
     assert_eq!(p.destination, destination());
-    assert_eq!(transfers(), vec![(client(), 2 * ONE_NEAR + stake)]);
+    assert_eq!(
+        transfers(),
+        vec![(client(), stake)],
+        "the award is the compensation"
+    );
 
     let t = c.get_totals();
     assert_eq!(t.pending_payouts, U128(CAP));

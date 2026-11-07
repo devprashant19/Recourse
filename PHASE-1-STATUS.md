@@ -374,7 +374,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 20. `feat(payouts): implement secure direct payout execution`
 
-- **Commit:** (this commit)
+- **Commit:** `ef7d5d5`
 - **Did:** `execute_payout(claim_id, deposit_address?, quote_id?, quote_hash?)`: keeper only;
   Direct mode only, and the Intents-only arguments must be absent, so a keeper cannot inject its
   own deposit address (T8); amount fixed by the verdict, recipient fixed as the claimant;
@@ -396,6 +396,47 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
   exercised in the sandbox. Deferred with Intents mode (Phase 3, per the spec): `confirm_payout`,
   1Click `REFUNDED`/`FAILED` statuses, refunds matched from `unattributed`, and `ft_transfer`
   callbacks — the spec's payout tests for those are Phase 3 tests.
+
+### 21. `feat(contract): enforce accounting invariants and complete protocol events`
+
+- **Commit:** (this commit)
+- **Review:** an independent Rust review (`ecc:rust-reviewer`) and security review
+  (`ecc:security-reviewer`) of the whole contract ran before this commit. Neither found drift
+  between `totals` and the records or any lock asymmetry; both independently found the same
+  economic drain, which turned out to be **a contradiction inside the spec** (see Deviations).
+  Three protocol-changing fixes were put to the user and approved:
+  1. **T6 money flow** — on an upheld claim the escrowed price stays with the vault
+     (`Vault::prices_retained`) and the award is the client's compensation; only the stake is
+     refunded. Self-dealing with a new agent now nets `-(0.5 x cap) - premium`.
+  2. **Agent consent** — `open_engagement` now creates a `Proposed` engagement with escrow only;
+     `accept_engagement` (agent, not paused, before the deadline, coverage unchanged, capacity
+     re-checked) locks liability; `cancel_engagement` refunds price + premium (client any time
+     before acceptance, anyone after the deadline). Hiring an agent onto an impossible deadline
+     no longer puts anything of its at risk.
+  3. **Stale-claim timeout** — `close_stale_claim` (anyone) unwinds a quality claim with no verdict
+     `claim_window + appeal_window` after filing: price + stake to the client, premium to the vault,
+     locks released, no slash, record unchanged (`ClaimStatus::TimedOut`,
+     `EngagementStatus::Cancelled`).
+  Plus safe fixes: `deposit_vault(vault, min_shares?)` slippage guard; deposits refused into a
+  vault with shares but no capital (avoids a permanent mul-div overflow); `quote_job` returns
+  `total_deposit: None` instead of overflowing; `get_storage_fees` view for the SDK; new events
+  `engagement_accepted`, `engagement_cancelled`, `claim_timed_out`. Event inventory cross-checked:
+  all 20 Phase 1 spec events are emitted; `bid_*`, `claim_appealed`, `council_decided` are Phase 3/4.
+- **Files:** `src/{types,engagements,claims,pool,pricing,views,events,lib}.rs`,
+  `src/tests/{hardening,engagements,slashing,types,common,pool,mod}.rs`
+- **Tests added/changed:** 17 new (consent: only agent, no double accept, not at deadline, not while
+  paused, bond re-checked, unaccepted job unclaimable and refunded, client cancel, stranger cannot
+  cancel early, accepted job not cancellable; `t06_self_dealing_no_delivery_claim_loses_money`;
+  stale claim unwound, not early, not after a verdict; `min_shares`; wiped-out vault; quote overflow;
+  storage fees view). Existing tests updated where the expected money flow legitimately changed.
+- **Ran:** `cargo fmt --check`, `cargo test` (203 passed), `cargo clippy --all-targets -D warnings`
+  (clean), wasm release build (ok).
+- **Limitations (documented, not fixed):** the owner and keepers can install signers and arbiters,
+  so they are trusted not to install their own (spec-granted powers; Phase 3 appeals mitigate);
+  receipts and verdict receipts are not bound to a specific engagement/claim on-chain because the
+  contract sees only hashes (Phase 2 binds the request off-chain); an LP can redeem unlocked capital
+  at the pre-loss price while a claim is pending; detached transfers to a deleted account become
+  untracked surplus.
 
 ---
 
@@ -432,6 +473,17 @@ Filled in as they are made.
 - **Direct payouts settle from their own transfer callback**, not from a keeper report:
   `confirm_payout` and `unattributed` matching only make sense for 1Click (Intents) payouts, which the
   spec defers to Phase 3, so `confirm_payout` is not exposed yet.
+- **Spec contradiction, resolved with the user: upheld claims do not refund the price.** The spec
+  (section 6) refunds the price *and* pays the award, while THREAT_MODEL T6 promises a colluding
+  client + new agent cannot profit. With the spec's numbers they net `+0.5 x price - premium` per job,
+  taken from LPs, via a no-delivery claim needing no arbiter (found independently by both reviews).
+  Approved fix: the price stays with the vault; the award is the compensation.
+- **Agent acceptance (`accept_engagement`, `cancel_engagement`, `EngagementStatus::Proposed`).** The
+  spec has no agent consent, so anyone could hire a covered agent with a deadline seconds away and
+  claim against it. Approved by the user.
+- **`close_stale_claim` (`ClaimStatus::TimedOut`).** The spec has no exit for a quality claim no
+  arbiter rules on, which locks funds and blocks withdrawals forever. Approved by the user.
+- **`deposit_vault` takes an optional `min_shares`** (slippage guard) — the spec signature has none.
 
 ## Open items
 

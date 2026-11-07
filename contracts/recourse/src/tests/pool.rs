@@ -11,7 +11,7 @@ fn vault_with_lp_deposit(amount: u128) -> (Recourse, u128) {
     ctx(&uw(), STORAGE_DEPOSIT, T0);
     c.create_vault();
     ctx(&lp(), amount, T0);
-    let shares = c.deposit_vault(uw()).0;
+    let shares = c.deposit_vault(uw(), None).0;
     (c, shares)
 }
 
@@ -54,7 +54,7 @@ fn first_deposit_mints_one_to_one_after_the_storage_fee() {
 fn second_deposit_by_the_same_lp_pays_no_storage() {
     let (mut c, first) = vault_with_lp_deposit(10 * ONE_NEAR);
     ctx(&lp(), 3 * ONE_NEAR, T0);
-    let second = c.deposit_vault(uw()).0;
+    let second = c.deposit_vault(uw(), None).0;
     let v = c.get_vault(uw()).unwrap();
     assert_eq!(v.capital.0, first + 3 * ONE_NEAR, "whole deposit credited");
     assert!(second <= 3 * ONE_NEAR, "never more shares than value");
@@ -70,7 +70,7 @@ fn deposit_after_a_loss_mints_more_shares() {
     c.vaults.insert(uw(), v);
 
     ctx(&acc("lp2.near"), ONE_NEAR + STORAGE_DEPOSIT, T0);
-    let second = c.deposit_vault(uw()).0;
+    let second = c.deposit_vault(uw(), None).0;
     let paid = c.get_vault(uw()).unwrap().capital.0 - (first / 2);
     assert!(
         second > paid,
@@ -83,7 +83,7 @@ fn deposit_after_a_loss_mints_more_shares() {
 fn deposit_into_unknown_vault_fails() {
     let mut c = new_contract();
     ctx(&lp(), ONE_NEAR, T0);
-    c.deposit_vault(uw());
+    c.deposit_vault(uw(), None);
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn deposit_that_only_covers_storage_fails() {
     ctx(&uw(), STORAGE_DEPOSIT, T0);
     c.create_vault();
     ctx(&lp(), 1, T0);
-    c.deposit_vault(uw());
+    c.deposit_vault(uw(), None);
 }
 
 #[test]

@@ -184,6 +184,9 @@ pub struct Vault {
     pub total_shares: U128,
     pub premiums_earned: U128,
     pub losses_paid: U128,
+    /// Prices of jobs whose claims were upheld. The client is compensated by
+    /// the award, so the price stays with the vault that paid it (T6).
+    pub prices_retained: U128,
 }
 
 #[near(serializers = [json, borsh])]
@@ -277,7 +280,10 @@ pub struct Signer {
 #[near(serializers = [json, borsh])]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EngagementStatus {
-    /// Escrowed and locked; waiting for a receipt.
+    /// The client has escrowed price + premium; waiting for the agent to
+    /// accept. Nothing is locked yet.
+    Proposed,
+    /// Accepted: liability locked; waiting for a receipt.
     Open,
     /// Receipt accepted; the claim window is running.
     Delivered,
@@ -289,6 +295,9 @@ pub enum EngagementStatus {
     Slashed,
     /// Never delivered and never claimed: the price went back to the client.
     Expired,
+    /// Unwound with no fault found: never accepted, or a claim no arbiter
+    /// ruled on in time. Price (and any stake) went back to the client.
+    Cancelled,
 }
 
 impl EngagementStatus {
@@ -298,18 +307,24 @@ impl EngagementStatus {
         use EngagementStatus::*;
         matches!(
             (self, next),
-            (Open, Delivered)
+            (Proposed, Open)
+                | (Proposed, Cancelled)
+                | (Open, Delivered)
                 | (Open, Claimed)
                 | (Open, Expired)
                 | (Delivered, Claimed)
                 | (Delivered, Completed)
                 | (Claimed, Completed)
                 | (Claimed, Slashed)
+                | (Claimed, Cancelled)
         )
     }
 
     pub fn is_terminal(self) -> bool {
-        matches!(self, Self::Completed | Self::Slashed | Self::Expired)
+        matches!(
+            self,
+            Self::Completed | Self::Slashed | Self::Expired | Self::Cancelled
+        )
     }
 }
 
@@ -362,6 +377,8 @@ pub enum ClaimStatus {
     Finalized,
     /// Settled in the agent's favour; the stake went to the agent.
     Rejected,
+    /// No arbiter ruled in time; unwound with no fault and the stake returned.
+    TimedOut,
 }
 
 impl ClaimStatus {
@@ -377,11 +394,12 @@ impl ClaimStatus {
                 | (Resolved, Rejected)
                 | (Appealed, Finalized)
                 | (Appealed, Rejected)
+                | (Filed, TimedOut)
         )
     }
 
     pub fn is_terminal(self) -> bool {
-        matches!(self, Self::Finalized | Self::Rejected)
+        matches!(self, Self::Finalized | Self::Rejected | Self::TimedOut)
     }
 }
 

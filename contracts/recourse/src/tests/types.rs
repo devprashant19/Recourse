@@ -64,13 +64,15 @@ fn engagement_round_trips_through_borsh() {
     assert_eq!(borsh::from_slice::<Engagement>(&bytes).unwrap(), e);
 }
 
-const ENGAGEMENT_STATUSES: [EngagementStatus; 6] = [
+const ENGAGEMENT_STATUSES: [EngagementStatus; 8] = [
+    EngagementStatus::Proposed,
     EngagementStatus::Open,
     EngagementStatus::Delivered,
     EngagementStatus::Claimed,
     EngagementStatus::Completed,
     EngagementStatus::Slashed,
     EngagementStatus::Expired,
+    EngagementStatus::Cancelled,
 ];
 
 #[test]
@@ -87,8 +89,14 @@ fn engagement_statuses_never_move_backwards_or_to_themselves() {
     for s in ENGAGEMENT_STATUSES {
         assert!(!s.can_move_to(s), "{s:?} -> itself must be refused");
         assert!(
-            !s.can_move_to(EngagementStatus::Open),
-            "{s:?} -> Open must be refused"
+            !s.can_move_to(EngagementStatus::Proposed),
+            "{s:?} -> Proposed must be refused"
+        );
+        let to_open = s.can_move_to(EngagementStatus::Open);
+        assert_eq!(
+            to_open,
+            s == EngagementStatus::Proposed,
+            "only acceptance opens a job"
         );
     }
     assert!(!EngagementStatus::Claimed.can_move_to(EngagementStatus::Delivered));
@@ -98,7 +106,7 @@ fn engagement_statuses_never_move_backwards_or_to_themselves() {
 #[test]
 fn claim_statuses_only_move_forward() {
     use ClaimStatus::*;
-    let all = [Filed, Resolved, Appealed, Finalized, Rejected];
+    let all = [Filed, Resolved, Appealed, Finalized, Rejected, TimedOut];
     for s in all {
         assert!(!s.can_move_to(s));
         assert!(!s.can_move_to(Filed));

@@ -10,6 +10,13 @@ use crate::math::add;
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
 
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StorageFees {
+    pub engagement: U128,
+    pub claim: U128,
+}
+
 /// Largest page `list_vaults` returns, so a view can never run out of gas.
 pub const MAX_PAGE: u32 = 100;
 
@@ -79,6 +86,15 @@ impl Recourse {
 
     pub fn get_totals(&self) -> Totals {
         self.totals.clone()
+    }
+
+    /// Prepaid storage fees, in yocto: what `open_engagement` and
+    /// `file_claim` add on top of price + premium and stake.
+    pub fn get_storage_fees(&self) -> StorageFees {
+        StorageFees {
+            engagement: U128(crate::storage::engagement_storage_fee()),
+            claim: U128(crate::storage::claim_storage_fee()),
+        }
     }
 
     /// Vaults in insertion order, `limit` capped at `MAX_PAGE`.

@@ -60,6 +60,7 @@ impl Recourse {
             total_shares: U128(0),
             premiums_earned: U128(0),
             losses_paid: U128(0),
+            prices_retained: U128(0),
         };
         self.vaults.insert(underwriter.clone(), vault.clone());
         let unused = self.charge_storage(before, env::attached_deposit().as_yoctonear());
@@ -71,9 +72,10 @@ impl Recourse {
 
     /// Deposits the attached NEAR into `vault` and mints shares to the caller
     /// at the current price. A first-time LP pays for its share record out of
-    /// the deposit; returns the shares minted.
+    /// the deposit; returns the shares minted. `min_shares` guards against the
+    /// share price moving between quoting and execution.
     #[payable]
-    pub fn deposit_vault(&mut self, vault: AccountId) -> U128 {
+    pub fn deposit_vault(&mut self, vault: AccountId, min_shares: Option<U128>) -> U128 {
         let lp = env::predecessor_account_id();
         let mut v = self.vault_of(&vault);
         let key = (vault.clone(), lp.clone());
@@ -86,8 +88,15 @@ impl Recourse {
         let amount = self.charge_storage(before, env::attached_deposit().as_yoctonear());
         require!(amount > 0, "deposit must exceed the storage fee");
 
+        require!(
+            v.capital.0 > 0 || v.total_shares.0 == 0,
+            "vault has shares but no capital; deposits are closed"
+        );
         let shares = shares_for_deposit(v.capital.0, v.total_shares.0, amount);
         require!(shares > 0, "deposit too small to mint a share");
+        if let Some(min) = min_shares {
+            require!(shares >= min.0, "fewer shares than min_shares");
+        }
 
         v.capital = U128(add(v.capital.0, amount, "vault capital"));
         v.total_shares = U128(add(v.total_shares.0, shares, "vault shares"));
