@@ -2,8 +2,9 @@
 //! helper that sets caller, deposit and time in one call.
 
 use near_sdk::json_types::{U128, U64};
+use near_sdk::mock::MockAction;
 use near_sdk::serde_json::{self, Value};
-use near_sdk::test_utils::{get_logs, VMContextBuilder};
+use near_sdk::test_utils::{get_created_receipts, get_logs, VMContextBuilder};
 use near_sdk::{testing_env, AccountId, NearToken};
 
 use crate::types::*;
@@ -83,4 +84,34 @@ pub fn keeper() -> AccountId {
 }
 pub fn stranger() -> AccountId {
     acc("stranger.near")
+}
+
+pub fn agent() -> AccountId {
+    acc("agent.near")
+}
+pub fn operator() -> AccountId {
+    acc("operator.near")
+}
+
+/// Enough to cover any single record's storage in these tests.
+pub const STORAGE_DEPOSIT: u128 = ONE_NEAR / 10;
+
+/// Every native transfer the last call scheduled, as (receiver, yocto).
+pub fn transfers() -> Vec<(AccountId, u128)> {
+    get_created_receipts()
+        .into_iter()
+        .flat_map(|r| {
+            let to = r.receiver_id.clone();
+            r.actions.into_iter().filter_map(move |a| match a {
+                MockAction::Transfer { deposit, .. } => Some((to.clone(), deposit.as_yoctonear())),
+                _ => None,
+            })
+        })
+        .collect()
+}
+
+/// Registers `who` as an agent.
+pub fn register(c: &mut Recourse, who: &AccountId) {
+    ctx(who, STORAGE_DEPOSIT, T0);
+    c.register_agent("ipfs://agent".to_string(), operator());
 }

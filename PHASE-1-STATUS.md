@@ -72,7 +72,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 5. `feat(contract): add protocol views and solvency reporting`
 
-- **Commit:** (this commit)
+- **Commit:** `0b26e32`
 - **Did:** every read path the indexer/UI/SDK need — `get_agent`, `get_bond`, `get_vault`,
   `get_vault_shares`, `get_coverage`, `get_agent_exposure`, `get_round`, `get_engagement`,
   `get_claim`, `get_payout`, `get_signer`, `is_receipt_used`, `get_counters`, `get_totals`,
@@ -88,6 +88,22 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Limitations:** `get_agent_score` and `quote_job` arrive with pricing. Unit tests cannot observe
   real storage usage (the mock resets it per context), so the storage side of `solvency()` is
   checked in the sandbox scenarios.
+
+### 6. `feat(agents): implement agent registration and profiles`
+
+- **Commit:** (this commit)
+- **Did:** `register_agent(metadata_uri, operator)` (payable): the caller is the agent; creates the
+  profile with zeroed stats and an empty `Bond` up front (so later bond writes do not grow storage
+  unpaid), charges the measured storage to the attached deposit and refunds the rest; duplicate
+  registration and empty / >512-byte metadata are refused. `storage.rs` adds caller-pays storage
+  (T13): flush-then-measure for writes whose size is known at call time, and fixed prepaid fees for
+  records that function-call-key callers write later (receipts, verdicts, payouts).
+- **Files:** `src/agents.rs`, `src/storage.rs`, `src/lib.rs`, `src/tests/{agents,common,mod}.rs`
+- **Tests added:** 6 (profile + empty bond; refund equals unused deposit and matches the event;
+  duplicate, zero-deposit, empty and oversized metadata rejected).
+- **Ran:** `cargo fmt`, `cargo test` (39 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** no `update_agent` — nothing in the Phase 1 spec needs it.
 
 ---
 
@@ -106,6 +122,11 @@ Filled in as they are made.
 - **`EngagementStatus::Expired`.** The spec has no exit for an engagement that is neither delivered
   nor claimed, which would lock the agent's bond, the vault and the client's escrow forever. See
   `expire()` below.
+- **Prepaid storage fees.** Function-call access keys cannot attach a deposit, yet the agent
+  (`submit_receipt`), arbiter (`resolve_claim`) and keeper (`execute_payout`) write records. Those
+  bytes are prepaid by the client: a fixed fee in `open_engagement` (engagement + receipt) and in
+  `file_claim` (claim + verdict + payout), with all string inputs length-capped so the fee is a real
+  upper bound.
 
 ## Open items
 

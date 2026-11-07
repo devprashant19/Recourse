@@ -7,6 +7,7 @@
 //! `require!` failures are asserted with `#[should_panic(expected = "...")]`,
 //! which pins the exact error message a client would receive.
 
+mod agents;
 mod common;
 mod events;
 mod init;

@@ -41,6 +41,7 @@ pub mod pool;
 pub mod pricing;
 pub mod roles;
 pub mod slashing;
+pub mod storage;
 pub mod underwriting;
 pub mod views;
 
