@@ -34,6 +34,16 @@ async function main() {
   const responseHash = sha256('{"id":"chat-1","choices":[{"message":{"content":"{}"}}]}');
 
   const providerText = `${model}:${requestHash}:${responseHash}`;
+
+  // The arbiter's verdict is itself a receipt: a different model, different
+  // bytes, a different TEE key.
+  const arbiter = new Wallet(testKey("arbiter"));
+  const arbiterModel = "zai-org/GLM-4.6";
+  const verdictRequestHash = sha256('{"rubric":"v1","claim":0}');
+  const verdictResponseHash = sha256('{"upheld":true,"award_bps":10000}');
+  const verdictText = `${arbiterModel}:${verdictRequestHash}:${verdictResponseHash}`;
+  const verdictSig = await arbiter.signMessage(verdictText);
+  if (verifyMessage(verdictText, verdictSig) !== arbiter.address) throw new Error("ethers self-check failed");
   const gatewayText = `${requestHash}:${responseHash}`;
 
   const providerSig = await tee.signMessage(providerText);
@@ -68,6 +78,12 @@ async function main() {
     gateway_signature: gatewaySig,
     other_signer_signature: otherSig,
     high_s_signature: malleableSig,
+    arbiter_address: arbiter.address.toLowerCase(),
+    arbiter_model_id: arbiterModel,
+    verdict_request_hash: verdictRequestHash,
+    verdict_response_hash: verdictResponseHash,
+    verdict_text: verdictText,
+    verdict_signature: verdictSig,
   };
   const out = fileURLToPath(
     new URL("../contracts/recourse/src/tests/fixtures/receipt_vectors.json", import.meta.url),

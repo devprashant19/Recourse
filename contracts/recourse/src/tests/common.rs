@@ -267,3 +267,44 @@ pub fn file(c: &mut Recourse, id: u64, kind: ClaimKind, amount: u128, now: u64) 
         destination(),
     )
 }
+
+/// The arbiter's signed verdict receipt from the vectors.
+pub fn verdict_receipt() -> ReceiptInput {
+    ReceiptInput {
+        model_id: vec_str("arbiter_model_id"),
+        request_hash: Hash::from_hex(&vec_str("verdict_request_hash")).unwrap(),
+        response_hash: Hash::from_hex(&vec_str("verdict_response_hash")).unwrap(),
+        signature: Signature65::from_hex(&vec_str("verdict_signature")).unwrap(),
+        kind: SignatureKind::ProviderTee,
+    }
+}
+
+/// Adds `arbiter()` and allow-lists the arbiter's TEE key.
+pub fn setup_arbiter(c: &mut Recourse) {
+    ctx(&owner(), 0, T0);
+    if !c.is_arbiter(arbiter()) {
+        c.add_arbiter(arbiter());
+    }
+    let addr = EvmAddress::from_hex(&vec_str("arbiter_address")).unwrap();
+    if c.get_signer(addr).is_none() {
+        c.register_signer(
+            addr,
+            vec_str("arbiter_model_id"),
+            HexBytes([4; 32]),
+            SignatureKind::ProviderTee,
+        );
+    }
+}
+
+/// The arbiter rules on `claim_id` at time `now`.
+pub fn rule(c: &mut Recourse, claim_id: u64, upheld: bool, award: u128, now: u64) -> Verdict {
+    setup_arbiter(c);
+    ctx(&arbiter(), 0, now);
+    c.resolve_claim(
+        claim_id,
+        upheld,
+        U128(award),
+        HexBytes([6; 32]),
+        verdict_receipt(),
+    )
+}

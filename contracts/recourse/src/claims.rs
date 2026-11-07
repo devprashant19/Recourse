@@ -173,6 +173,83 @@ impl Recourse {
     }
 }
 
+#[near]
+impl Recourse {
+    /// The arbiter rules on a quality claim. The verdict must carry the
+    /// arbiter's own TEE receipt, verified on-chain exactly like a delivery
+    /// receipt (and likewise usable only once), so every verdict can be traced
+    /// to a specific attested model run that anyone can re-run. An upheld
+    /// claim needs a positive award no larger than the claimed amount; a
+    /// rejected one has an award of zero. Starts the appeal window.
+    pub fn resolve_claim(
+        &mut self,
+        claim_id: ClaimId,
+        upheld: bool,
+        award: U128,
+        reasons_hash: Hash,
+        verdict_receipt: ReceiptInput,
+    ) -> Verdict {
+        self.assert_arbiter();
+        let arbiter = env::predecessor_account_id();
+        let mut claim = self.claim_of(claim_id);
+        require!(
+            claim.kind == ClaimKind::Quality,
+            "only quality claims go to the arbiter"
+        );
+        require!(
+            claim.status == ClaimStatus::Filed,
+            "claim is not awaiting a verdict"
+        );
+        let e = self.engagement_of(claim.engagement_id);
+        require!(
+            arbiter != e.client && arbiter != e.agent,
+            "arbiter is a party to this engagement"
+        );
+        if upheld {
+            require!(award.0 > 0, "an upheld claim needs a positive award");
+            require!(
+                award.0 <= claim.amount.0,
+                "award exceeds the claimed amount"
+            );
+        } else {
+            require!(award.0 == 0, "a rejected claim has no award");
+        }
+
+        let receipt = self.verify_receipt(&verdict_receipt);
+        require!(
+            self.used_receipts.insert(receipt.response_hash),
+            "receipt already used"
+        );
+        let now = env::block_timestamp();
+        let verdict = Verdict {
+            upheld,
+            award,
+            reasons_hash,
+            verdict_receipt: Some(receipt.clone()),
+            arbiter: Some(arbiter.clone()),
+            decided_at: U64(now),
+            appeal_deadline: U64(now.saturating_add(self.config.appeal_window.0)),
+            appealed_by: None,
+        };
+        claim.verdict = Some(verdict.clone());
+        self.set_claim_status(claim_id, &mut claim, ClaimStatus::Resolved);
+
+        Event::ClaimResolved.emit(json!({
+            "claim_id": U64(claim_id),
+            "engagement_id": U64(claim.engagement_id),
+            "objective": false,
+            "upheld": upheld,
+            "award": award,
+            "reasons_hash": reasons_hash,
+            "arbiter": arbiter,
+            "verdict_response_hash": receipt.response_hash,
+            "verdict_signer": receipt.signer,
+            "appeal_deadline": verdict.appeal_deadline,
+        }));
+        verdict
+    }
+}
+
 impl Recourse {
     pub(crate) fn claim_of(&self, id: ClaimId) -> Claim {
         self.claims

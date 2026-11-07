@@ -310,7 +310,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 17. `feat(claims): implement objective no-delivery resolution`
 
-- **Commit:** (this commit)
+- **Commit:** `f61dfdd`
 - **Did:** `resolve_objective(claim_id)` (anyone): claim must be a `NoDelivery` claim still `Filed`,
   its engagement must have no receipt and a passed deadline. Records an upheld verdict for the full
   claimed amount with no arbiter and no verdict receipt; objective verdicts are not appealable
@@ -324,6 +324,29 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
   wasm release build (ok).
 - **Limitations:** the slash itself lands with `finalize`; from then on `resolve_objective`
   settles in the same call.
+
+### 18. `feat(claims): implement arbiter verdict verification`
+
+- **Commit:** (this commit)
+- **Did:** `resolve_claim(claim_id, upheld, award, reasons_hash, verdict_receipt)`: arbiter only
+  (role checked against the predecessor); quality claims still `Filed` only; the arbiter may not be
+  the engagement's client or agent; upheld needs `0 < award <= amount`, rejected needs `award == 0`.
+  The verdict receipt is verified on-chain exactly like a delivery receipt (EIP-191 + `ecrecover`,
+  signer allow-listed for its model and kind) and its response hash is consumed in `used_receipts`,
+  so one verdict run cannot back two verdicts. Appeal window starts (`decided_at + appeal_window`).
+  Emits `claim_resolved` with the verdict signer and response hash for re-running.
+- **Vectors:** the generator now also produces an arbiter key, model and signed verdict receipt;
+  existing vectors are byte-identical (deterministic generation).
+- **Files:** `src/claims.rs`, `src/roles.rs`, `src/tests/{claims,common}.rs`,
+  `src/tests/fixtures/receipt_vectors.json`, `scripts/receipt-test-vectors.ts`
+- **Tests added:** 11 (verdict recorded with its receipt and appeal deadline; rejection; non-arbiter;
+  award above claim; upheld with zero; rejected with an award; unlisted verdict signer; tampered
+  verdict signature; ruling twice; arbiter on a no-delivery claim; arbiter who is a party).
+- **Ran:** `cargo fmt`, `cargo test` (163 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok), `tsc --noEmit` + `eslint` (clean).
+- **Limitations:** the contract proves the verdict came from an attested model run, not that the
+  run's output says `upheld`/`award` — it sees only hashes. That link is checked off-chain
+  (`rerun-verdict`, Phase 2) and contestable by appeal (Phase 3). Arbiter bonding and fines are Phase 3.
 
 ---
 

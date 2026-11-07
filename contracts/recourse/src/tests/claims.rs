@@ -330,3 +330,140 @@ fn objective_resolution_cannot_repeat() {
     c.resolve_objective(cid);
     c.resolve_objective(cid);
 }
+
+// ----- resolve_claim ------------------------------------------------------
+
+const RULED_AT: u64 = DELIVERED_AT + 2 * MINUTE;
+
+fn quality_claim(c: &mut crate::Recourse) -> u64 {
+    let id = delivered_job(c);
+    file(c, id, ClaimKind::Quality, CLAIM, DELIVERED_AT + MINUTE)
+}
+
+#[test]
+fn arbiter_records_a_verdict_backed_by_its_own_receipt() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    let v = rule(&mut c, cid, true, ONE_NEAR, RULED_AT);
+    assert!(v.upheld);
+    assert_eq!(v.award, U128(ONE_NEAR));
+    assert_eq!(v.arbiter, Some(arbiter()));
+    assert_eq!(v.appeal_deadline.0, RULED_AT + 3 * MINUTE);
+    let r = v.verdict_receipt.unwrap();
+    assert_eq!(
+        r.signer.to_hex(),
+        vec_str("arbiter_address").trim_start_matches("0x")
+    );
+    assert!(c.is_receipt_used(r.response_hash));
+    assert_eq!(c.get_claim(cid).unwrap().status, ClaimStatus::Resolved);
+    let ev = events();
+    assert_eq!(ev[0]["event"], "claim_resolved");
+    assert_eq!(ev[0]["data"][0]["objective"], false);
+}
+
+#[test]
+fn arbiter_can_reject_with_zero_award() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    let v = rule(&mut c, cid, false, 0, RULED_AT);
+    assert!(!v.upheld);
+}
+
+#[test]
+#[should_panic(expected = "arbiter only")]
+fn only_an_arbiter_can_resolve() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    setup_arbiter(&mut c);
+    ctx(&owner(), 0, RULED_AT);
+    c.resolve_claim(
+        cid,
+        true,
+        U128(ONE_NEAR),
+        HexBytes([6; 32]),
+        verdict_receipt(),
+    );
+}
+
+#[test]
+#[should_panic(expected = "award exceeds the claimed amount")]
+fn award_above_the_claim_fails() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, true, CLAIM + 1, RULED_AT);
+}
+
+#[test]
+#[should_panic(expected = "an upheld claim needs a positive award")]
+fn upheld_with_zero_award_fails() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, true, 0, RULED_AT);
+}
+
+#[test]
+#[should_panic(expected = "a rejected claim has no award")]
+fn rejected_with_an_award_fails() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, false, 1, RULED_AT);
+}
+
+#[test]
+#[should_panic(expected = "signer not allow-listed")]
+fn verdict_with_an_unlisted_signer_fails() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    ctx(&owner(), 0, T0);
+    c.add_arbiter(arbiter());
+    ctx(&arbiter(), 0, RULED_AT);
+    c.resolve_claim(
+        cid,
+        true,
+        U128(ONE_NEAR),
+        HexBytes([6; 32]),
+        verdict_receipt(),
+    );
+}
+
+#[test]
+#[should_panic(expected = "bad signature")]
+fn tampered_verdict_receipt_fails() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    setup_arbiter(&mut c);
+    let mut r = verdict_receipt();
+    r.signature.0[64] = 30;
+    ctx(&arbiter(), 0, RULED_AT);
+    c.resolve_claim(cid, true, U128(ONE_NEAR), HexBytes([6; 32]), r);
+}
+
+#[test]
+#[should_panic(expected = "claim is not awaiting a verdict")]
+fn a_claim_cannot_be_ruled_twice() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, true, ONE_NEAR, RULED_AT);
+    rule(&mut c, cid, false, 0, RULED_AT);
+}
+
+#[test]
+#[should_panic(expected = "only quality claims go to the arbiter")]
+fn arbiter_cannot_rule_on_a_no_delivery_claim() {
+    let mut c = ready();
+    let id = open_job(&mut c);
+    let cid = file(&mut c, id, ClaimKind::NoDelivery, CLAIM, DEADLINE + 1);
+    rule(&mut c, cid, false, 0, DEADLINE + 2);
+}
+
+#[test]
+#[should_panic(expected = "arbiter is a party to this engagement")]
+fn arbiter_cannot_rule_on_its_own_engagement() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    ctx(&owner(), 0, T0);
+    c.add_arbiter(client());
+    setup_arbiter(&mut c);
+    ctx(&client(), 0, RULED_AT);
+    c.resolve_claim(cid, false, U128(0), HexBytes([6; 32]), verdict_receipt());
+}

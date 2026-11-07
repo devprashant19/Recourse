@@ -69,6 +69,13 @@ impl Recourse {
         );
     }
 
+    pub(crate) fn assert_arbiter(&self) {
+        require!(
+            self.roles.arbiters.contains(&env::predecessor_account_id()),
+            "arbiter only"
+        );
+    }
+
     fn add_member(list: &mut Vec<AccountId>, who: &AccountId, role: &str) {
         require!(
             !list.contains(who),
