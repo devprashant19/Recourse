@@ -1,6 +1,11 @@
-//! Contract unit tests, one module per contract module (~60 tests).
+//! Contract unit tests, one module per contract module.
 //!
 //! Spec: phases/phase-01-contract-core.md section 11.
 //!
-//! TODO(Phase 1): bonds, pool, engagements, receipts, claims, slashing, payouts.
-//! TODO(Phase 4): underwriting.
+//! Every test drives the contract through `VMContextBuilder`, so each call sees
+//! the predecessor, attached deposit and block timestamp it would see on-chain.
+//! `require!` failures are asserted with `#[should_panic(expected = "...")]`,
+//! which pins the exact error message a client would receive.
+
+mod common;
+mod init;
