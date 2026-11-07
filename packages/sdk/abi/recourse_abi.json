@@ -1,0 +1,2624 @@
+{
+  "schema_version": "0.4.0",
+  "metadata": {
+    "name": "recourse",
+    "version": "0.1.0",
+    "build": {
+      "compiler": "rustc 1.95.0",
+      "builder": "cargo-near cargo-near-build 0.11.5"
+    },
+    "wasm_hash": "GLAfBauARziLPyNViDEABioYmExic82Fx2faEvnb5ony"
+  },
+  "body": {
+    "functions": [
+      {
+        "name": "accept_engagement",
+        "doc": " The agent consents to a proposed job: its bond share, the vault share\n and the per-agent exposure are locked now, against the amounts fixed\n in the proposal. Refused if they no longer fit, if the coverage moved\n to another vault or expired, if the deadline has passed, or while\n paused.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "add_arbiter",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "add_keeper",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "bind_coverage",
+        "doc": " The caller's vault agrees to back `agent` up to `limit` locked at a\n time, at `premium_bps` of each job's liability, until `expires_at`.\n\n Phase 1 stand-in for the sealed-bid market (Phase 4 `settle_round`\n writes the same record). Only the vault's own underwriter can commit\n its capital, the rate can never be below the agent's premium floor, and\n a vault cannot displace another vault's live coverage. Engagements\n record their own vault, so rebinding never affects open work.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "agent",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "premium_bps",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "expires_at",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Coverage"
+          }
+        }
+      },
+      {
+        "name": "cancel_engagement",
+        "doc": " Unwinds a proposal the agent never accepted: price and premium go back\n to the client. The client may cancel at any time before acceptance;\n once the deadline has passed anyone may.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "check_receipt",
+        "doc": " Checks a receipt exactly as `submit_receipt` will, without recording\n it. Returns the receipt with its recovered signer, or fails with the\n same error the transaction would. Does not check replay.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "receipt",
+              "type_schema": {
+                "$ref": "#/definitions/ReceiptInput"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Receipt"
+          }
+        }
+      },
+      {
+        "name": "close_stale_claim",
+        "doc": " Unwinds a quality claim no arbiter ruled on within `claim_window +\n appeal_window` of filing, so a missing arbiter can never lock funds\n forever. No fault is found: the client gets the price and the stake\n back, the vault keeps the premium, all locks are released, nobody is\n slashed and the agent's record is unchanged. Anyone may call it.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "claim_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "complete",
+        "doc": " Settles a delivered engagement once the claim window has closed with no\n claim: the price goes to the agent, the premium to the vault, and both\n locks are released. Anyone may call it.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "contract_source_metadata",
+        "kind": "view"
+      },
+      {
+        "name": "create_vault",
+        "doc": " Creates a vault owned by the caller. Attach enough to cover storage;\n the rest is refunded.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Vault"
+          }
+        }
+      },
+      {
+        "name": "deposit_vault",
+        "doc": " Deposits the attached NEAR into `vault` and mints shares to the caller\n at the current price. A first-time LP pays for its share record out of\n the deposit; returns the shares minted. `min_shares` guards against the\n share price moving between quoting and execution.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "vault",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "min_shares",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "execute_payout",
+        "doc": " Sends a pending payout. Keeper only. In Direct mode the amount and the\n recipient (the claimant) are fixed by the verdict and the claim; the\n keeper only chooses *when*. The Intents-only arguments must be absent.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "claim_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "deposit_address",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "quote_id",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "quote_hash",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/HexBytes32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Promise"
+          }
+        }
+      },
+      {
+        "name": "expire",
+        "doc": " Closes an engagement that was never delivered and never claimed, once\n the no-delivery claim window has also passed, so no money stays locked\n forever. The price goes back to the client; the premium goes to the\n vault, which carried the risk for the whole period. Anyone may call it.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "file_claim",
+        "doc": " Files a claim of `amount` against engagement `id`. Attach the stake\n (`claim_stake_bps` of `amount`, rounded up) plus the claim storage fee;\n any excess is refunded. The stake comes back if the claim is upheld and\n goes to the agent if it is rejected. `destination` is fixed now so no\n one can redirect the payout later (T8).",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "kind",
+              "type_schema": {
+                "$ref": "#/definitions/ClaimKind"
+              }
+            },
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "evidence_hash",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes32"
+              }
+            },
+            {
+              "name": "evidence_uri",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "destination",
+              "type_schema": {
+                "$ref": "#/definitions/Destination"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "finalize",
+        "doc": " Applies an arbiter's verdict once the appeal window has passed. Anyone\n may call it. Upheld: the agent's bond and then the vault are slashed\n for the award, which becomes a pending payout to the claimant; the\n claimant's stake comes back now and the escrowed price stays with the\n vault (the award is the compensation). Rejected: the\n stake and the price go to the agent and the job counts as completed.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "claim_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "get_agent",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "agent",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Agent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_agent_exposure",
+        "doc": " Vault capital currently locked for `agent` in `vault`.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "vault",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "agent",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "get_agent_score",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "agent",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AgentScore"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_bond",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "agent",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Bond"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_claim",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "claim_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Claim"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_config",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Config"
+          }
+        }
+      },
+      {
+        "name": "get_counters",
+        "doc": " The next id each kind of record will get; ids below it exist.",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Counters"
+          }
+        }
+      },
+      {
+        "name": "get_coverage",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "agent",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Coverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_engagement",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "engagement_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Engagement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_payout",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "claim_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Payout"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_roles",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Roles"
+          }
+        }
+      },
+      {
+        "name": "get_round",
+        "doc": " Sealed-bid rounds arrive in Phase 4; until then this is always `None`.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "round_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/BidRound"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_signer",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "address",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes20"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Signer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_storage_fees",
+        "doc": " Prepaid storage fees, in yocto: what `open_engagement` and\n `file_claim` add on top of price + premium and stake.",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/StorageFees"
+          }
+        }
+      },
+      {
+        "name": "get_totals",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Totals"
+          }
+        }
+      },
+      {
+        "name": "get_vault",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "vault",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/Vault"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "get_vault_shares",
+        "doc": " Shares `lp` holds in `vault`; zero if none.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "vault",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "lp",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "is_arbiter",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "is_keeper",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "is_paused",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "is_receipt_used",
+        "doc": " Whether a response hash has already been accepted as a receipt (T3).",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "response_hash",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes32"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "name": "list_vaults",
+        "doc": " Vaults in insertion order, `limit` capped at `MAX_PAGE`.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": [
+                {
+                  "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/definitions/Vault"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            }
+          }
+        }
+      },
+      {
+        "name": "new",
+        "kind": "call",
+        "modifiers": [
+          "init"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "config",
+              "type_schema": {
+                "$ref": "#/definitions/Config"
+              }
+            },
+            {
+              "name": "owner",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "on_payout_transfer",
+        "doc": " Settles a Direct payout from its transfer's outcome. Only this\n contract can call it.",
+        "kind": "call",
+        "modifiers": [
+          "private"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "claim_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/PayoutStatus"
+          }
+        }
+      },
+      {
+        "name": "open_engagement",
+        "doc": " Proposes one job to `agent`. Attach `price + premium + storage fee`\n (`quote_job` returns the exact figure); any excess is refunded. The\n money is escrowed; liability is locked only when the agent accepts.\n\n `price` is explicit rather than inferred from the deposit so that a\n premium change between quoting and signing makes the call fail instead\n of silently shrinking what the agent is paid.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "agent",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "terms_hash",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes32"
+              }
+            },
+            {
+              "name": "liability_cap",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "deadline",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "price",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "pause",
+        "doc": " Stops NEW engagements only. Work in flight, claims, verdicts, slashes and\n payouts all continue — pausing must never trap a client's money.",
+        "kind": "call"
+      },
+      {
+        "name": "post_bond",
+        "doc": " Adds the attached deposit to the caller's bond. The bond record was\n created (and its storage paid) at registration, and its size is fixed,\n so the whole deposit becomes bond.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Bond"
+          }
+        }
+      },
+      {
+        "name": "quote_job",
+        "doc": " Prices a job for `agent` at `liability_cap` and says whether\n `open_engagement` would accept it. Pass `price` to check the liability\n ceiling and get the exact deposit to attach.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "agent",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "liability_cap",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "price",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/JobQuote"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "redeem",
+        "doc": " Burns `shares` of the caller's position in `vault` and pays out their\n value, rounded down. Only unlocked capital can leave: money backing\n open engagements stays until those engagements settle.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "vault",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "shares",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "register_agent",
+        "doc": " Registers the caller as an agent with an empty bond. Attach enough to\n cover the storage; the rest is refunded.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "metadata_uri",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "operator",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Agent"
+          }
+        }
+      },
+      {
+        "name": "register_signer",
+        "doc": " Allow-lists a TEE signing address for `model_id`, after the caller has\n verified the TEE attestation off-chain with a fresh nonce.\n `attestation_hash` is the sha256 of the attestation report, so anyone\n can re-check it. Owner or keeper only.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "address",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes20"
+              }
+            },
+            {
+              "name": "model_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "attestation_hash",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes32"
+              }
+            },
+            {
+              "name": "kind",
+              "type_schema": {
+                "$ref": "#/definitions/SignatureKind"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Signer"
+          }
+        }
+      },
+      {
+        "name": "remove_arbiter",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "remove_keeper",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "remove_signer",
+        "doc": " Removes a signer, e.g. after its attestation is revoked. Owner only:\n a keeper must not be able to switch off delivery for everyone.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "address",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes20"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "request_withdrawal",
+        "doc": " Starts the cooldown for withdrawing `amount` of unlocked bond. A new\n request replaces any earlier one and restarts the cooldown.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Bond"
+          }
+        }
+      },
+      {
+        "name": "resolve_claim",
+        "doc": " The arbiter rules on a quality claim. The verdict must carry the\n arbiter's own TEE receipt, verified on-chain exactly like a delivery\n receipt (and likewise usable only once), so every verdict can be traced\n to a specific attested model run that anyone can re-run. An upheld\n claim needs a positive award no larger than the claimed amount; a\n rejected one has an award of zero. Starts the appeal window.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "claim_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "upheld",
+              "type_schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "award",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "reasons_hash",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes32"
+              }
+            },
+            {
+              "name": "verdict_receipt",
+              "type_schema": {
+                "$ref": "#/definitions/ReceiptInput"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Verdict"
+          }
+        }
+      },
+      {
+        "name": "resolve_objective",
+        "doc": " Upholds a no-delivery claim with no arbiter: the deadline passed and no\n receipt exists, which the contract can see for itself. Anyone may call\n it. The award is the full claimed amount; objective verdicts are not\n appealable, so the appeal deadline is the moment of decision.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "claim_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Verdict"
+          }
+        }
+      },
+      {
+        "name": "solvency",
+        "doc": " Both sides of invariant I1. `ok` holds when what the contract holds,\n less what the runtime reserves for storage, covers every liability.",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Solvency"
+          }
+        }
+      },
+      {
+        "name": "submit_receipt",
+        "doc": " The agent proves delivery with a TEE-signed receipt, checked on-chain\n (see `tee.rs`). Must arrive by the deadline, and each response hash can\n be used once across all engagements (T3).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "model_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "request_hash",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes32"
+              }
+            },
+            {
+              "name": "response_hash",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes32"
+              }
+            },
+            {
+              "name": "signature",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes65"
+              }
+            },
+            {
+              "name": "kind",
+              "type_schema": {
+                "$ref": "#/definitions/SignatureKind"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Receipt"
+          }
+        }
+      },
+      {
+        "name": "unpause",
+        "kind": "call"
+      },
+      {
+        "name": "withdraw",
+        "doc": " Pays out the requested amount once the cooldown has passed, provided no\n claim is open and the amount is still unlocked.",
+        "kind": "call",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      }
+    ],
+    "root_schema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "String",
+      "type": "string",
+      "definitions": {
+        "Agent": {
+          "type": "object",
+          "required": [
+            "metadata_uri",
+            "operator",
+            "registered_at",
+            "stats"
+          ],
+          "properties": {
+            "metadata_uri": {
+              "description": "Name, job types, model ids.",
+              "type": "string"
+            },
+            "operator": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            },
+            "registered_at": {
+              "type": "string"
+            },
+            "stats": {
+              "$ref": "#/definitions/AgentStats"
+            }
+          }
+        },
+        "AgentScore": {
+          "type": "object",
+          "required": [
+            "max_liability_multiplier_bps",
+            "premium_floor_bps",
+            "required_bond_share_bps",
+            "score_bps"
+          ],
+          "properties": {
+            "max_liability_multiplier_bps": {
+              "description": "`max_liability = price * max_liability_multiplier_bps / 10_000`.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "premium_floor_bps": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "required_bond_share_bps": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "score_bps": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            }
+          }
+        },
+        "AgentStats": {
+          "description": "Drives pricing. One upheld claim resets a long clean record — see `pricing.rs` and THREAT_MODEL T6.",
+          "type": "object",
+          "required": [
+            "claims_rejected",
+            "claims_upheld",
+            "completed",
+            "failed",
+            "slashed_total",
+            "volume"
+          ],
+          "properties": {
+            "claims_rejected": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "claims_upheld": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "completed": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "failed": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "slashed_total": {
+              "type": "string"
+            },
+            "volume": {
+              "type": "string"
+            }
+          }
+        },
+        "BidRound": {
+          "description": "Sealed-bid round for coverage. Defined now so the state layout is final; the methods that use it arrive in Phase 4.",
+          "type": "object",
+          "required": [
+            "agent",
+            "commit_deadline",
+            "commits",
+            "requested_limit",
+            "reveal_deadline",
+            "reveals",
+            "status"
+          ],
+          "properties": {
+            "agent": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            },
+            "commit_deadline": {
+              "type": "string"
+            },
+            "commits": {
+              "description": "sha256(premium_bps || salt || underwriter) — commit-reveal blocks bid copying (T12).",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/definitions/HexBytes32"
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            "requested_limit": {
+              "type": "string"
+            },
+            "reveal_deadline": {
+              "type": "string"
+            },
+            "reveals": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer",
+                    "format": "uint32",
+                    "minimum": 0.0
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            "status": {
+              "$ref": "#/definitions/RoundStatus"
+            }
+          }
+        },
+        "Bond": {
+          "description": "An agent's own collateral. `locked` is the sum of `bond_locked` across its open engagements; it can never exceed `amount` (invariant I2) and `amount` can never drop below it (invariant I4).",
+          "type": "object",
+          "required": [
+            "amount",
+            "locked",
+            "open_claims",
+            "withdrawal_amount"
+          ],
+          "properties": {
+            "amount": {
+              "type": "string"
+            },
+            "locked": {
+              "type": "string"
+            },
+            "open_claims": {
+              "description": "Claims filed against this agent that are not yet finalized. While non-zero, nothing can be withdrawn (invariant I4, threat T4).",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "withdrawal_amount": {
+              "description": "How much the pending request will withdraw. Excluded from what new engagements may lock, so a requested withdrawal cannot be trapped.",
+              "type": "string"
+            },
+            "withdrawal_requested_at": {
+              "description": "Set by `request_withdrawal`; restarted if a claim is filed during the cooldown.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "BondAsset": {
+          "description": "What bonds, vault capital, prices and payouts are denominated in.",
+          "oneOf": [
+            {
+              "description": "Native NEAR. Sandbox and testnet.",
+              "type": "string",
+              "enum": [
+                "Native"
+              ]
+            },
+            {
+              "description": "A NEP-141 token (USDC on mainnet). Arrives with `ft.rs` in Phase 3; `new()` rejects it until then.",
+              "type": "object",
+              "required": [
+                "Ft"
+              ],
+              "properties": {
+                "Ft": {
+                  "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "Claim": {
+          "type": "object",
+          "required": [
+            "amount",
+            "claimant",
+            "destination",
+            "engagement_id",
+            "evidence_hash",
+            "evidence_uri",
+            "filed_at",
+            "kind",
+            "stake",
+            "status"
+          ],
+          "properties": {
+            "amount": {
+              "type": "string"
+            },
+            "claimant": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            },
+            "destination": {
+              "$ref": "#/definitions/Destination"
+            },
+            "engagement_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "evidence_hash": {
+              "$ref": "#/definitions/HexBytes32"
+            },
+            "evidence_uri": {
+              "type": "string"
+            },
+            "filed_at": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/definitions/ClaimKind"
+            },
+            "stake": {
+              "description": "5% of the claim, forfeited to the agent if the claim is rejected (T11).",
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/definitions/ClaimStatus"
+            },
+            "verdict": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Verdict"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "ClaimKind": {
+          "oneOf": [
+            {
+              "description": "Objective: resolves on-chain with no arbiter. Anyone may call `resolve_objective`.",
+              "type": "string",
+              "enum": [
+                "NoDelivery"
+              ]
+            },
+            {
+              "description": "Subjective: the work arrived but is wrong. Goes to the arbiter.",
+              "type": "string",
+              "enum": [
+                "Quality"
+              ]
+            }
+          ]
+        },
+        "ClaimStatus": {
+          "oneOf": [
+            {
+              "description": "Waiting for a verdict.",
+              "type": "string",
+              "enum": [
+                "Filed"
+              ]
+            },
+            {
+              "description": "Arbiter ruled; the appeal window is running.",
+              "type": "string",
+              "enum": [
+                "Resolved"
+              ]
+            },
+            {
+              "description": "Frozen for the council (Phase 3).",
+              "type": "string",
+              "enum": [
+                "Appealed"
+              ]
+            },
+            {
+              "description": "Settled in the claimant's favour.",
+              "type": "string",
+              "enum": [
+                "Finalized"
+              ]
+            },
+            {
+              "description": "Settled in the agent's favour; the stake went to the agent.",
+              "type": "string",
+              "enum": [
+                "Rejected"
+              ]
+            },
+            {
+              "description": "No arbiter ruled in time; unwound with no fault and the stake returned.",
+              "type": "string",
+              "enum": [
+                "TimedOut"
+              ]
+            }
+          ]
+        },
+        "Config": {
+          "description": "Set once at `new()`, readable by anyone via `get_config`. Never mutated except through an explicit migration.",
+          "type": "object",
+          "required": [
+            "appeal_window",
+            "base_bond_share_bps",
+            "bid_commit_window",
+            "bid_reveal_window",
+            "bond_asset",
+            "claim_stake_bps",
+            "claim_window",
+            "max_vault_exposure_bps",
+            "min_bond",
+            "min_bond_share_bps",
+            "withdrawal_cooldown"
+          ],
+          "properties": {
+            "appeal_window": {
+              "description": "How long after a verdict either side may appeal. 3 min / 48 h.",
+              "type": "string"
+            },
+            "base_bond_share_bps": {
+              "description": "Share of liability the agent's own bond must cover before the track-record discount (5000 = 50%), and the floor it falls to (2000 = 20%).",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "bid_commit_window": {
+              "description": "Underwriter sealed-bid timing (Phase 4). 60 s / 1 h each.",
+              "type": "string"
+            },
+            "bid_reveal_window": {
+              "type": "string"
+            },
+            "bond_asset": {
+              "$ref": "#/definitions/BondAsset"
+            },
+            "claim_stake_bps": {
+              "description": "Claimant stakes this share of the claim; lost if the claim is rejected. 500 = 5%.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "claim_window": {
+              "description": "How long after delivery a client may claim. 3 min / 72 h.",
+              "type": "string"
+            },
+            "council": {
+              "description": "Sputnik DAO v2 account. The ONLY account that can decide appeals (Phase 3).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "max_vault_exposure_bps": {
+              "description": "One agent may use at most this share of a vault's capital. 2500 = 25%.",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "min_bond": {
+              "description": "Smallest bond an agent may post. 5 NEAR sandbox/testnet, 2 USDC mainnet.",
+              "type": "string"
+            },
+            "min_bond_share_bps": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "withdrawal_cooldown": {
+              "description": "Between asking to withdraw and withdrawing. 5 min / 7 days.",
+              "type": "string"
+            }
+          }
+        },
+        "Counters": {
+          "description": "The next id each kind of record will get. Ids start at 0 and never repeat.",
+          "type": "object",
+          "required": [
+            "claim",
+            "engagement",
+            "round"
+          ],
+          "properties": {
+            "claim": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "engagement": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "round": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        "Coverage": {
+          "type": "object",
+          "required": [
+            "bound_at",
+            "expires_at",
+            "limit",
+            "premium_bps",
+            "vault"
+          ],
+          "properties": {
+            "bound_at": {
+              "type": "string"
+            },
+            "expires_at": {
+              "type": "string"
+            },
+            "limit": {
+              "description": "Most this vault will have locked for this agent at any one time.",
+              "type": "string"
+            },
+            "premium_bps": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "vault": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            }
+          }
+        },
+        "Destination": {
+          "description": "Fixed by the claimant when filing, so the keeper cannot redirect a payout (T8).",
+          "type": "object",
+          "required": [
+            "asset_id",
+            "recipient"
+          ],
+          "properties": {
+            "asset_id": {
+              "description": "1Click asset id, read from GET /v0/tokens. Never hard-coded.",
+              "type": "string"
+            },
+            "recipient": {
+              "type": "string"
+            }
+          }
+        },
+        "Engagement": {
+          "type": "object",
+          "required": [
+            "agent",
+            "bond_locked",
+            "client",
+            "created_at",
+            "deadline",
+            "liability_cap",
+            "premium",
+            "price",
+            "status",
+            "terms_hash",
+            "vault",
+            "vault_locked"
+          ],
+          "properties": {
+            "agent": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            },
+            "bond_locked": {
+              "description": "bond_locked + vault_locked == liability_cap for every open engagement (invariant I3).",
+              "type": "string"
+            },
+            "claim_id": {
+              "description": "At most one claim per engagement.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "client": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "deadline": {
+              "type": "string"
+            },
+            "delivered_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "liability_cap": {
+              "type": "string"
+            },
+            "premium": {
+              "type": "string"
+            },
+            "price": {
+              "type": "string"
+            },
+            "receipt": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Receipt"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status": {
+              "$ref": "#/definitions/EngagementStatus"
+            },
+            "terms_hash": {
+              "description": "Hash of the job terms, including the document and the output schema.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/HexBytes32"
+                }
+              ]
+            },
+            "vault": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            },
+            "vault_locked": {
+              "type": "string"
+            }
+          }
+        },
+        "EngagementStatus": {
+          "oneOf": [
+            {
+              "description": "The client has escrowed price + premium; waiting for the agent to accept. Nothing is locked yet.",
+              "type": "string",
+              "enum": [
+                "Proposed"
+              ]
+            },
+            {
+              "description": "Accepted: liability locked; waiting for a receipt.",
+              "type": "string",
+              "enum": [
+                "Open"
+              ]
+            },
+            {
+              "description": "Receipt accepted; the claim window is running.",
+              "type": "string",
+              "enum": [
+                "Delivered"
+              ]
+            },
+            {
+              "description": "A claim was filed and is not yet settled.",
+              "type": "string",
+              "enum": [
+                "Claimed"
+              ]
+            },
+            {
+              "description": "Settled in the agent's favour (no claim, or the claim was rejected).",
+              "type": "string",
+              "enum": [
+                "Completed"
+              ]
+            },
+            {
+              "description": "Settled against the agent: the bond (and maybe the vault) paid out.",
+              "type": "string",
+              "enum": [
+                "Slashed"
+              ]
+            },
+            {
+              "description": "Never delivered and never claimed: the price went back to the client.",
+              "type": "string",
+              "enum": [
+                "Expired"
+              ]
+            },
+            {
+              "description": "Unwound with no fault found: never accepted, or a claim no arbiter ruled on in time. Price (and any stake) went back to the client.",
+              "type": "string",
+              "enum": [
+                "Cancelled"
+              ]
+            }
+          ]
+        },
+        "HexBytes20": {
+          "type": "string"
+        },
+        "HexBytes32": {
+          "type": "string"
+        },
+        "HexBytes65": {
+          "type": "string"
+        },
+        "JobQuote": {
+          "description": "Everything a client needs before `open_engagement`, and whether it would pass.",
+          "type": "object",
+          "required": [
+            "bond_available",
+            "can_open",
+            "min_price",
+            "premium_floor_bps",
+            "required_bond",
+            "required_bond_share_bps",
+            "score_bps",
+            "storage_fee",
+            "vault_available",
+            "vault_share"
+          ],
+          "properties": {
+            "bond_available": {
+              "description": "Bond the agent can still lock.",
+              "type": "string"
+            },
+            "can_open": {
+              "type": "boolean"
+            },
+            "coverage_vault": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "min_price": {
+              "description": "Smallest price for which `liability_cap` is allowed.",
+              "type": "string"
+            },
+            "premium": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "premium_bps": {
+              "description": "The bound coverage's premium rate, if any.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "premium_floor_bps": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "reason": {
+              "description": "Why `can_open` is false.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "required_bond": {
+              "description": "Locked from the agent's bond.",
+              "type": "string"
+            },
+            "required_bond_share_bps": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "score_bps": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "storage_fee": {
+              "description": "Prepaid storage for the engagement and its receipt.",
+              "type": "string"
+            },
+            "total_deposit": {
+              "description": "`price + premium + storage_fee` to attach, when `price` was given.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "vault_available": {
+              "description": "Vault capital the agent can still lock in its coverage vault.",
+              "type": "string"
+            },
+            "vault_share": {
+              "description": "Locked from the backing vault: `liability_cap - required_bond`.",
+              "type": "string"
+            }
+          }
+        },
+        "Payout": {
+          "description": "Reaches `Success` at most once; only `Refunded`/`Failed` may move it back to `Pending` (invariant I6).",
+          "type": "object",
+          "required": [
+            "amount",
+            "attempts",
+            "claimant",
+            "destination",
+            "mode",
+            "status"
+          ],
+          "properties": {
+            "amount": {
+              "type": "string"
+            },
+            "attempts": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "claimant": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            },
+            "deposit_address": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "dest_tx": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "destination": {
+              "$ref": "#/definitions/Destination"
+            },
+            "final_status": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "mode": {
+              "$ref": "#/definitions/PayoutMode"
+            },
+            "quote_hash": {
+              "description": "sha256 of the raw 1Click quote response, so anyone can re-check the recipient.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HexBytes32"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "quote_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status": {
+              "$ref": "#/definitions/PayoutStatus"
+            }
+          }
+        },
+        "PayoutMode": {
+          "oneOf": [
+            {
+              "description": "Straight transfer to the claimant on NEAR.",
+              "type": "string",
+              "enum": [
+                "Direct"
+              ]
+            },
+            {
+              "description": "Through NEAR Intents 1Click to the claimant's chosen chain (Phase 3).",
+              "type": "string",
+              "enum": [
+                "Intents"
+              ]
+            }
+          ]
+        },
+        "PayoutStatus": {
+          "type": "string",
+          "enum": [
+            "Pending",
+            "Sent",
+            "Success",
+            "Refunded",
+            "Failed"
+          ]
+        },
+        "Promise": true,
+        "Receipt": {
+          "description": "Proves which model produced which bytes inside an attested TEE. It does NOT prove the output is correct — that is the arbiter's job.",
+          "type": "object",
+          "required": [
+            "model_id",
+            "request_hash",
+            "response_hash",
+            "signature_kind",
+            "signer",
+            "submitted_at"
+          ],
+          "properties": {
+            "model_id": {
+              "type": "string"
+            },
+            "request_hash": {
+              "$ref": "#/definitions/HexBytes32"
+            },
+            "response_hash": {
+              "$ref": "#/definitions/HexBytes32"
+            },
+            "signature_kind": {
+              "$ref": "#/definitions/SignatureKind"
+            },
+            "signer": {
+              "description": "Address recovered on-chain via `env::ecrecover`, then checked against `signers`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/HexBytes20"
+                }
+              ]
+            },
+            "submitted_at": {
+              "type": "string"
+            }
+          }
+        },
+        "ReceiptInput": {
+          "description": "A signed receipt as submitted by a caller, before the contract checks it.",
+          "type": "object",
+          "required": [
+            "kind",
+            "model_id",
+            "request_hash",
+            "response_hash",
+            "signature"
+          ],
+          "properties": {
+            "kind": {
+              "$ref": "#/definitions/SignatureKind"
+            },
+            "model_id": {
+              "type": "string"
+            },
+            "request_hash": {
+              "$ref": "#/definitions/HexBytes32"
+            },
+            "response_hash": {
+              "$ref": "#/definitions/HexBytes32"
+            },
+            "signature": {
+              "$ref": "#/definitions/HexBytes65"
+            }
+          }
+        },
+        "Roles": {
+          "description": "The owner can ONLY pause new engagements and manage arbiters, keepers and TEE signers. There is deliberately no method that lets the owner move funds (T16).",
+          "type": "object",
+          "required": [
+            "arbiters",
+            "keepers",
+            "owner"
+          ],
+          "properties": {
+            "arbiters": {
+              "type": "array",
+              "items": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            "council": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "keepers": {
+              "type": "array",
+              "items": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            "owner": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            }
+          }
+        },
+        "RoundStatus": {
+          "type": "string",
+          "enum": [
+            "Committing",
+            "Revealing",
+            "Settled",
+            "Failed"
+          ]
+        },
+        "SignatureKind": {
+          "oneOf": [
+            {
+              "description": "Signed text is \"<model_id>:<request_hash>:<response_hash>\".",
+              "type": "string",
+              "enum": [
+                "ProviderTee"
+              ]
+            },
+            {
+              "description": "Signed text is \"<request_hash>:<response_hash>\".",
+              "type": "string",
+              "enum": [
+                "Gateway"
+              ]
+            }
+          ]
+        },
+        "Signer": {
+          "description": "An allow-listed TEE signing address, registered only after an off-chain attestation check with a fresh nonce.",
+          "type": "object",
+          "required": [
+            "attestation_hash",
+            "kind",
+            "model_id",
+            "verified_at"
+          ],
+          "properties": {
+            "attestation_hash": {
+              "$ref": "#/definitions/HexBytes32"
+            },
+            "kind": {
+              "$ref": "#/definitions/SignatureKind"
+            },
+            "model_id": {
+              "type": "string"
+            },
+            "verified_at": {
+              "type": "string"
+            }
+          }
+        },
+        "Solvency": {
+          "description": "Both sides of invariant I1, as returned by `solvency()`.",
+          "type": "object",
+          "required": [
+            "bonds",
+            "claim_stakes",
+            "escrow",
+            "held",
+            "liabilities",
+            "ok",
+            "pending_payouts",
+            "storage_reserved",
+            "surplus",
+            "unattributed",
+            "vault_capital"
+          ],
+          "properties": {
+            "bonds": {
+              "type": "string"
+            },
+            "claim_stakes": {
+              "type": "string"
+            },
+            "escrow": {
+              "type": "string"
+            },
+            "held": {
+              "description": "The contract's balance, as the runtime reports it.",
+              "type": "string"
+            },
+            "liabilities": {
+              "description": "Sum of the six buckets above.",
+              "type": "string"
+            },
+            "ok": {
+              "description": "`held - storage_reserved >= liabilities`.",
+              "type": "boolean"
+            },
+            "pending_payouts": {
+              "type": "string"
+            },
+            "storage_reserved": {
+              "description": "Part of `held` the runtime keeps aside to pay for the contract's storage.",
+              "type": "string"
+            },
+            "surplus": {
+              "description": "`held - storage_reserved - liabilities`, or 0 if that would be negative.",
+              "type": "string"
+            },
+            "unattributed": {
+              "type": "string"
+            },
+            "vault_capital": {
+              "type": "string"
+            }
+          }
+        },
+        "StorageFees": {
+          "type": "object",
+          "required": [
+            "claim",
+            "engagement"
+          ],
+          "properties": {
+            "claim": {
+              "type": "string"
+            },
+            "engagement": {
+              "type": "string"
+            }
+          }
+        },
+        "Totals": {
+          "description": "Running sums of every bucket of money the contract owes someone — the right-hand side of invariant I1. Kept in step with the individual records on every write; the invariant tests check both agree.",
+          "type": "object",
+          "required": [
+            "bonds",
+            "claim_stakes",
+            "escrow",
+            "pending_payouts",
+            "vault_capital"
+          ],
+          "properties": {
+            "bonds": {
+              "description": "Sum of `Bond::amount`.",
+              "type": "string"
+            },
+            "claim_stakes": {
+              "description": "Stakes of every claim that is not yet settled.",
+              "type": "string"
+            },
+            "escrow": {
+              "description": "Price + premium of every engagement that is not yet settled.",
+              "type": "string"
+            },
+            "pending_payouts": {
+              "description": "Payouts owed but not yet sent (status `Pending`).",
+              "type": "string"
+            },
+            "vault_capital": {
+              "description": "Sum of `Vault::capital`.",
+              "type": "string"
+            }
+          }
+        },
+        "Vault": {
+          "type": "object",
+          "required": [
+            "capital",
+            "locked",
+            "losses_paid",
+            "premiums_earned",
+            "prices_retained",
+            "total_shares",
+            "underwriter"
+          ],
+          "properties": {
+            "capital": {
+              "description": "Everything the LPs own: deposits + premiums - losses - redemptions.",
+              "type": "string"
+            },
+            "locked": {
+              "description": "Capital backing open engagements. `locked <= capital` (invariant I2).",
+              "type": "string"
+            },
+            "losses_paid": {
+              "type": "string"
+            },
+            "premiums_earned": {
+              "type": "string"
+            },
+            "prices_retained": {
+              "description": "Prices of jobs whose claims were upheld. The client is compensated by the award, so the price stays with the vault that paid it (T6).",
+              "type": "string"
+            },
+            "total_shares": {
+              "type": "string"
+            },
+            "underwriter": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            }
+          }
+        },
+        "Verdict": {
+          "type": "object",
+          "required": [
+            "appeal_deadline",
+            "award",
+            "decided_at",
+            "reasons_hash",
+            "upheld"
+          ],
+          "properties": {
+            "appeal_deadline": {
+              "type": "string"
+            },
+            "appealed_by": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "arbiter": {
+              "description": "`None` only for objective claims.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "award": {
+              "type": "string"
+            },
+            "decided_at": {
+              "type": "string"
+            },
+            "reasons_hash": {
+              "$ref": "#/definitions/HexBytes32"
+            },
+            "upheld": {
+              "type": "boolean"
+            },
+            "verdict_receipt": {
+              "description": "The arbiter's own TEE receipt: a verdict is itself a receipt. `None` only for objective claims, which no arbiter touches.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Receipt"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

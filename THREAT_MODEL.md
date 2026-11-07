@@ -13,7 +13,7 @@ column says where to look if one fails.
 | T3 | Re-use an old receipt for a new job | `used_receipts` set; request includes engagement ID | `t03_receipt_replay_rejected` | Phase 1 |
 | T4 | Withdraw bond before a claim lands | Cooldown + locks + claim freeze | `t04_withdraw_during_claim_blocked` | Phase 1 |
 | T5 | Agent takes a job it cannot cover | Required bond share checked at `open_engagement` | `t05_underbonded_job_rejected` | Phase 1 |
-| T6 | Client and agent collude to drain a vault | `max_liability` tied to price and score; 25% exposure cap; score reset | `t06_collusion_unprofitable` | Phase 1 |
+| T6 | Client and agent collude to drain a vault | `max_liability` tied to price and score; upheld claims keep the price in the vault; agent must accept a job before it is liable; 25% exposure cap; score reset | `t06_collusion_unprofitable` (contract unit test: `t06_self_dealing_no_delivery_claim_loses_money`) | Phase 1 |
 | T7 | Biased arbiter | Appeal to council; arbiter fined | `t07_overturned_arbiter_fined` | Phase 3 |
 | T8 | Keeper quotes a payout to its own address | Destination fixed in claim; quote hash on-chain; `mainnet:verify` checks the quote's recipient; keeper bonded | `t08_quote_recipient_mismatch_detected` | Phase 3 |
 | T9 | Double payout | Payout state machine | `t09_double_payout_rejected` | Phase 1/3 |
@@ -34,6 +34,13 @@ can only claim back what the client actually paid; the 25% exposure cap limits t
 one upheld claim resets the score, so the record needed to make the attack profitable is destroyed by
 running it once. The test asserts **the colluders' net position is <= 0** for a new agent.
 
+This needed one change to the original plan, found by review during Phase 1: if an upheld claim refunds
+the client's price *and* pays the award, a client and new agent who are the same person net about
+`+0.5 x price - premium` per job, taken from LPs, through a no-delivery claim that needs no arbiter.
+So the price stays with the vault on an upheld claim (the award is the compensation), which makes the
+net `-(0.5 x cap) - premium`. And because an agent must **accept** a job before anything of its is
+locked, no one can hire a third party's agent onto an impossible deadline and claim against it.
+
 **T8 — a dishonest keeper.** The keeper picks the 1Click deposit address, which looks like an
 opportunity to redirect money. It is not: the destination chain and address are fixed **by the
 claimant at filing time**, the amount is fixed by the verdict, and the quote ID and the hash of the raw
@@ -47,6 +54,14 @@ validated against `rubric.schema.json` so a model that goes off-script produces 
 rather than a wrong one. Tested against a recorded fixture so it is deterministic.
 
 ## What is NOT defended against
+
+- **Receipts are bound to a model and a key, not to a job.** The contract only sees hashes, so it
+  cannot check that a receipt's request was *this* engagement's job or that a verdict's response says
+  what the arbiter submitted. Phase 2 puts the engagement id in the request and `pnpm rerun-verdict`
+  re-checks verdicts off-chain; the appeal path (Phase 3) is the on-chain recourse.
+- **The owner and keepers choose the TEE signers and arbiters.** They cannot move funds (T16), but an
+  owner who allow-lists its own key or arbiter could influence outcomes. That trust is explicit; appeals
+  to the council (Phase 3) bound it.
 
 Stated plainly, because a judge will ask:
 

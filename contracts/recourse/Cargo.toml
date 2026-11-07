@@ -26,7 +26,7 @@ uint = { version = "0.9", default-features = false }
 near-sdk = { version = "5.29", features = ["unstable", "unit-testing"] }
 proptest = "1.5"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-near-workspaces = "0.16"
+near-workspaces = "0.24"
 anyhow = "1"
 # Same version near-sdk's unit-testing mock uses; lets tests feed promise
 # results (e.g. a failed transfer) into callbacks via `testing_env!`.
@@ -38,3 +38,11 @@ secp256k1 = { version = "0.27", features = ["recovery"] }
 [[test]]
 name = "invariants"
 path = "../../tests/invariants/main.rs"
+
+# Scenarios on a real sandbox against the cargo-near wasm (tests/integration/).
+# Needs the built wasm and network access for the sandbox binary, so it is not
+# part of plain `cargo test`; run it with `pnpm test:integration`.
+[[test]]
+name = "integration"
+path = "../../tests/integration/main.rs"
+test = false

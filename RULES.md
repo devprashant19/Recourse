@@ -69,7 +69,15 @@ This is what makes collusion unprofitable: a client and an agent who team up to 
 claim what the client actually paid, until the agent has built a long clean record — and one upheld
 claim resets it (see `THREAT_MODEL.md`, T6).
 
-## 6. Claims
+## 6. Hiring an agent
+
+The client **proposes** a job: it escrows the price and the premium. Nothing of the agent's is at risk
+yet. The agent **accepts** — only then are its bond share and the vault share locked — and has until
+the deadline to deliver a TEE-signed receipt. Until it accepts, the client can cancel for a full
+refund, and after the deadline anyone can. So nobody can hire an agent onto a deadline it cannot meet
+and then claim against it.
+
+## 7. Claims
 
 A client who is unhappy files a **claim** inside the claim window — 3 minutes on sandbox/testnet,
 **72 hours** on mainnet after delivery.
@@ -83,7 +91,7 @@ Two kinds:
   call `resolve_objective` and the slash happens.
 - **Quality** — the work arrived but is wrong. An arbiter reads a published rubric and rules.
 
-## 7. Verdicts and appeals
+## 8. Verdicts and appeals
 
 - The arbiter runs a published rubric on a TEE model at temperature 0. **Its verdict is itself a
   receipt**, so anyone can re-run it and check.
@@ -94,7 +102,7 @@ Two kinds:
 - **If the council overturns the arbiter, the arbiter is fined from its own bond, paid to whoever
   appealed.** The arbiter has money at stake in being right.
 
-## 8. How a slash moves money
+## 9. How a slash moves money
 
 For an upheld claim of award **A**, on a job with **B** locked from the agent's bond and **V** locked
 from the vault:
@@ -102,8 +110,10 @@ from the vault:
 1. Take `min(A, B)` from the **agent's own bond** first.
 2. Take the remainder, up to **V**, from the **backing vault**. The vault's LPs lose pro-rata through
    the share price.
-3. The client receives the award — never more than `liability_cap` — **plus** their escrowed price back
-   **plus** their claim stake back.
+3. The client receives the award — never more than `liability_cap` — **plus** their claim stake back.
+   The award *is* the compensation: the escrowed price stays with the vault that paid out. (Refunding
+   the price as well would let a client and agent who are the same person profit from the vault — see
+   T6.)
 4. Unused locks are released. The agent's stats update, which raises its premium floor and its required
    bond share for every future job.
 
@@ -112,7 +122,11 @@ The client is paid in **the token and chain they chose when filing**, through NE
 A **rejected** claim does the opposite: the claimant's stake goes to the agent, and the agent is paid
 in full.
 
-## 9. What the owner can and cannot do
+If **no arbiter rules** on a quality claim within `claim_window + appeal_window` of filing, anyone can
+close it with no fault found: the client gets the price and the stake back, the vault keeps the
+premium, every lock is released and nobody's record changes. A missing arbiter can never freeze money.
+
+## 10. What the owner can and cannot do
 
 The owner can **pause new engagements** and **add or remove arbiters, keepers and TEE signers**.
 
@@ -168,6 +182,14 @@ The floor premium on $300 of coverage is **$6.64**. The balanced underwriter per
 agent's score rises to `(13-3)/(13+2) = 0.667` — slightly cheaper next time.
 
 **If the work is wrong and the arbiter upholds a $300 claim:** $92.14 comes out of the agent's bond,
-$207.86 out of the vault, and the client receives **$300 + $100 price back + $15 stake back**. The
+$207.86 out of the vault, and the client receives **$300 + $15 stake back**; the $100 price stays with
+the vault. The
 agent's score falls to `(12 - 6)/(14) = 0.429`, its required bond share jumps to 37.1%, and its premium
 floor rises to 275 bps. Failure is immediately more expensive.
+
+### Rounding
+
+The contract keeps the score as an exact fraction (`9/14` here, not `0.643`) and always rounds against
+the party asking for something: the required bond share and the premium floor round **up**, the
+liability ceiling rounds **down**. So it computes **3072 bps** (not 3071) and **222 bps** (not 221) for
+this agent — never looser than the hand calculation above.

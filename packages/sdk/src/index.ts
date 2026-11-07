@@ -1,11 +1,10 @@
 /**
- * @recourse/sdk
+ * @recourse/sdk — typed client for the `recourse` contract, its JSON types,
+ * and the NEP-297 event parser.
  *
- * Typed client for the contract (near-api-js), shared types, NEP-297 event parser.
- *
- * Built in: Phase 1
  * Spec: phases/phase-01-contract-core.md
  */
 
-export const PLACEHOLDER = true;
-// TODO(Phase 1): implement.
+export * from "./types.js";
+export * from "./events.js";
+export * from "./client.js";

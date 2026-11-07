@@ -462,7 +462,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 23. `test(contract): verify solvency and state invariants`
 
-- **Commit:** (this commit)
+- **Commit:** `19417ad`
 - **Did:** `tests/invariants/main.rs` (cargo target `invariants`, the location the spec names):
   `proptest`, **256 runs x 50 steps**, 19 action kinds (wait, bond, withdraw, vault deposit/redeem,
   propose/accept/cancel, deliver, complete, expire, file claim, objective resolution, arbiter ruling,
@@ -488,11 +488,60 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Limitations:** runs in the unit-test VM (which does not revert state on panic — hence
   valid-actions-only); the compiled wasm is exercised by the sandbox scenarios.
 
+### 24. `chore(contract): add sandbox deployment and SDK integration`
+
+- **Commit:** (this commit)
+- **Did:**
+  - **Sandbox integration tests** (`tests/integration/main.rs`, `pnpm test:integration`): scenarios
+    01 and 03 on a real nearcore **2.14.0** sandbox against the `cargo near` wasm, with
+    `fast_forward`. Proves on the real runtime: an ethers-signed receipt passes the `ecrecover`
+    host function, the `#[private]` payout callback rejects an outside caller, a real transfer
+    settles a payout, and `solvency()` is OK against the real balance.
+  - **`@recourse/sdk`**: typed client over near-api-js 7.4.0, contract JSON types, NEP-297 event
+    parser; it computes required deposits (price + premium + fee, stake + fee) from the contract's
+    own views. `abi/recourse_abi.json` is the `cargo near` ABI (`pnpm sdk:abi` refreshes it).
+  - **`scripts/deploy.ts`**: creates, funds, deploys and initialises in **one** transaction (no
+    window to front-run `new()`), with **no access key** on the contract account; refuses mainnet
+    until USDC support exists. **`scripts/seed.ts`**: seven funded accounts with fresh keys (saved
+    to git-ignored `.data/`, mode 600, never printed), keeper, arbiter, test TEE signer, a bonded
+    agent, a funded vault and coverage.
+  - **TS scenarios** `demo/scenarios/01-happy-path.ts`, `03-no-delivery.ts` (`pnpm scenario:01|03`)
+    drive the SDK end to end against the deployed, seeded sandbox.
+  - **Docs:** RULES.md (hiring and acceptance, price stays with the vault, stale-claim timeout,
+    rounding note), THREAT_MODEL.md (T6 correction, two stated trust limits), test READMEs.
+- **Found while doing it:**
+  - near-workspaces 0.16 defaults to nearcore 2.4.0, which rejects current wasm
+    (`PrepareError::Deserialization`), and its RPC client cannot parse nearcore 2.14. The
+    dev-dependency moves to **0.24** and the sandbox is pinned to 2.14.0.
+  - near-sdk 5.30 only uses on-chain host functions under `cfg(near)`, which `cargo near` sets.
+    The plain `cargo build --target wasm32` in CI therefore builds pure-Rust fallbacks, **not the
+    deployable artifact**.
+  - `pnpm deploy` is a pnpm built-in. The repo script must be run as `pnpm run deploy`.
+  - near-api-js signs against the *final* block; right after `fast_forward` that hash is outside
+    the sandbox's 100-block validity window, so `skipPast` waits for finality to catch up.
+- **Files:** `tests/integration/{main.rs,README.md}`, `packages/sdk/{package.json,src/*,test/*,abi/*}`,
+  `scripts/{deploy,seed}.ts`, `scripts/lib/{near,scenario,tee}.ts`,
+  `demo/scenarios/{01-happy-path,03-no-delivery}.ts`, `package.json`, `pnpm-lock.yaml`,
+  `contracts/recourse/Cargo.toml`, `Cargo.lock`, `RULES.md`, `THREAT_MODEL.md`
+- **Ran:**
+  - `pnpm test:integration`: 2 passed on the sandbox.
+  - `pnpm run deploy --network sandbox` + `pnpm run seed --network sandbox` + `pnpm scenario:01` +
+    `pnpm scenario:03` against a local nearcore 2.14 sandbox: all PASS, solvency OK.
+  - `pnpm test:services`: 54 passed. That includes 50 ABI-agreement checks and an event-list check
+    against `events.rs`.
+  - `pnpm typecheck` and `pnpm lint`: clean.
+  - `cargo fmt --check` and `cargo clippy --all-targets -D warnings` (also on `--test integration`):
+    clean.
+- **Limitations:**
+  - Testnet deploy and seed were not run (no testnet keys here).
+  - The scenario scripts sign receipts with the label-derived test TEE key, not a NEAR AI Cloud key
+    (Spike A).
+  - Prior-job history is not seeded.
+
 ---
 
 ## Deviations from the spec (deliberate, each with a reason)
 
-Filled in as they are made.
 
 - **Events beyond the spec list:** `role_updated`, `signer_removed`, `engagement_expired`. The spec
   says an event missed here is a hole in the UI; these cover state changes the list did not name.
@@ -535,7 +584,38 @@ Filled in as they are made.
   arbiter rules on, which locks funds and blocks withdrawals forever. Approved by the user.
 - **`deposit_vault` takes an optional `min_shares`** (slippage guard) — the spec signature has none.
 
+## Exit criteria (from the phase doc)
+
+- [x] **All unit and invariant tests green.**
+  - 214 contract unit tests pass (94.4% line coverage, measured).
+  - The invariant harness passes: 8 invariants x 256 runs x 50 steps, plus a path-coverage check.
+- [x] **Scenario 01 (happy path) runs against the sandbox from a script:**
+  `pnpm test:integration` (Rust) and `pnpm scenario:01` (TypeScript, via `@recourse/sdk`).
+- [x] **Scenario 03 (no delivery) runs against the sandbox from a script:**
+  `pnpm test:integration` and `pnpm scenario:03`.
+
+## Deferred, as the spec says
+
+- USDC (`ft.rs`, `ft_on_transfer`), the Intents payout mode, `confirm_payout` with 1Click
+  statuses, refunds matched from `unattributed`, and `ft_transfer` callbacks: Phase 3.
+- Appeals (`appeal`, `council_decide`), the council, and arbiter and keeper bonds and fines:
+  Phase 3.
+- Sealed-bid underwriting (`open_bond_request`, `commit_bid`, `reveal_bid`, `settle_round`):
+  Phase 4. `bind_coverage` is the Phase 1 stand-in.
+
 ## Open items
+
+- **CI builds the wrong wasm.** The CI "Build wasm" step uses plain `cargo build --target
+  wasm32-unknown-unknown`. With near-sdk 5.30 that output uses pure-Rust fallbacks and is not the
+  deployable artifact; use `cargo near build`.
+- **CI runs the invariant harness.** CI's `cargo test` step now also runs it (~3 min). The sandbox
+  integration test is excluded from plain `cargo test` and is not wired into CI.
+- **Node version mismatch.** Locally Node 22 is in use; the repo pins Node 20 (Phase 0 open item).
+- **Function-call keys cannot attach deposits.** `.env.example` plans an agent FC key covering
+  `post_bond` / `register_agent`, which need deposits; agents need a full-access key for those.
+- **Contract hardening the reviews raised, not done in Phase 1:**
+  - LPs can redeem unlocked capital while a claim is pending (exit before a loss).
+  - Detached transfers to a deleted account become untracked surplus.
 
 - **Spike A has not been run.** No real NEAR AI Cloud signature exists in the repo, so the receipt
   check is verified against deterministic EIP-191 vectors produced by `ethers`, not against a live
