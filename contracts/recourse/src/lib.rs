@@ -170,11 +170,4 @@ impl Recourse {
     pub fn get_config(&self) -> Config {
         self.config.clone()
     }
-
-    pub(crate) fn assert_owner(&self) {
-        require!(
-            env::predecessor_account_id() == self.roles.owner,
-            "owner only"
-        );
-    }
 }

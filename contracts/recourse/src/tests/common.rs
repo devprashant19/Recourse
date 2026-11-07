@@ -2,7 +2,8 @@
 //! helper that sets caller, deposit and time in one call.
 
 use near_sdk::json_types::{U128, U64};
-use near_sdk::test_utils::VMContextBuilder;
+use near_sdk::serde_json::{self, Value};
+use near_sdk::test_utils::{get_logs, VMContextBuilder};
 use near_sdk::{testing_env, AccountId, NearToken};
 
 use crate::types::*;
@@ -58,4 +59,23 @@ pub fn ctx(caller: &AccountId, deposit: u128, now: u64) {
 pub fn new_contract() -> Recourse {
     ctx(&owner(), 0, T0);
     Recourse::new(sandbox_config(), owner())
+}
+
+/// Every NEP-297 event logged by the last call, parsed.
+pub fn events() -> Vec<Value> {
+    get_logs()
+        .iter()
+        .filter_map(|l| l.strip_prefix("EVENT_JSON:"))
+        .map(|j| serde_json::from_str(j).expect("event is valid JSON"))
+        .collect()
+}
+
+pub fn arbiter() -> AccountId {
+    acc("arbiter.near")
+}
+pub fn keeper() -> AccountId {
+    acc("keeper.near")
+}
+pub fn stranger() -> AccountId {
+    acc("stranger.near")
 }

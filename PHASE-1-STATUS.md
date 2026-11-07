@@ -25,7 +25,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 2. `feat(contract): define core protocol types and state`
 
-- **Commit:** (this commit)
+- **Commit:** `ae0b7bc`
 - **Did:** JSON-safe types throughout: amounts are `U128` and times `U64` (decimal strings in
   JSON — a nanosecond timestamp is far past JS's 2^53); hashes, EVM addresses and signatures are
   `HexBytes<N>` (raw bytes in borsh, lowercase hex in JSON, `0x` accepted). Added
@@ -40,11 +40,31 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
   after replacing a manual `%` check with `is_multiple_of`), wasm release build (ok).
 - **Limitations:** `BidRound` is defined for state-layout stability only; it is unused until Phase 4.
 
+### 3. `feat(contract): implement access roles and protocol events`
+
+- **Commit:** (this commit)
+- **Did:** owner-only `add_arbiter` / `remove_arbiter` / `add_keeper` / `remove_keeper`, role views
+  (`get_roles`, `is_arbiter`, `is_keeper`), `assert_owner` moved into `roles.rs`. Role lists are
+  capped at 32 so contract state cannot grow without bound. Authorization always reads
+  `predecessor_account_id`, never an argument. `events.rs` defines every Phase 1 event name and the
+  NEP-297 envelope (`standard: "recourse"`, `version: "1.0.0"`, `data: [ {...} ]`). Arbiter/keeper
+  guards land with the methods that use them (signers, verdicts, payouts) so no dead code ships.
+- **Files:** `src/roles.rs`, `src/events.rs`, `src/lib.rs`, `src/tests/{roles,events,common,mod}.rs`
+- **Tests added:** 8 (owner manages roles; stranger and keeper rejected; duplicates and missing
+  members rejected; `role_updated` payload; envelope shape; event names unique and snake_case).
+- **Ran:** `cargo fmt`, `cargo test` (20 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** none.
+
 ---
 
 ## Deviations from the spec (deliberate, each with a reason)
 
 Filled in as they are made.
+
+- **Events beyond the spec list:** `role_updated`, `signer_removed`, `engagement_expired`. The spec
+  says an event missed here is a hole in the UI; these cover state changes the list did not name.
+  `paused` carries `{ "paused": true|false }` and is used for both pause and unpause.
 - **Extra fields on spec types.** `Engagement` gains `vault`, `created_at`, `claim_id`; `Bond` gains
   `withdrawal_amount` and `open_claims`; `Claim` gains `filed_at`; `Payout` gains `claimant`;
   `Verdict.verdict_receipt` and `Verdict.arbiter` are `Option` (objective claims have neither).
