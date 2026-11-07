@@ -76,7 +76,7 @@ These are the real Phase 0 exit criteria, and none of them can be done from here
 - [ ] **Run Spike B** — `pnpm spike:b`. Keep the printed asset IDs for the README.
 - [ ] **Run Spike C** — `pnpm spike:c`, **on Linux/macOS/WSL2**, not on Windows (see Findings).
       Decide the sandbox tooling by what actually works.
-- [x] ~~CI green~~ — **all four jobs pass** as of commit `25ad04d`. It took five runs; what each one
+- [x] ~~CI green~~ — **all four jobs pass** as of commit `5bd36b8`. It took five runs; what each one
       taught us is in the commit history.
 
 ## What CI actually verifies today
