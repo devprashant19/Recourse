@@ -399,7 +399,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 21. `feat(contract): enforce accounting invariants and complete protocol events`
 
-- **Commit:** (this commit)
+- **Commit:** `58447d9`
 - **Review:** an independent Rust review (`ecc:rust-reviewer`) and security review
   (`ecc:security-reviewer`) of the whole contract ran before this commit. Neither found drift
   between `totals` and the records or any lock asymmetry; both independently found the same
@@ -437,6 +437,28 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
   contract sees only hashes (Phase 2 binds the request off-chain); an LP can redeem unlocked capital
   at the pre-loss price while a claim is pending; detached transfers to a deleted account become
   untracked surplus.
+
+### 22. `test(contract): expand protocol unit and integration coverage`
+
+- **Commit:** (this commit)
+- **Did:** filled the remaining spec section 11 / threat-model gaps:
+  `t16_owner_cannot_move_funds` (the owner calls every method it has — pause, unpause, add/remove
+  arbiter and keeper, register/remove signer — during live engagements and an open claim; no
+  transfer is scheduled and no total, bond, vault or engagement changes), the owner cannot redeem LP
+  capital or claim against an agent; T13 for every record-creating call (vault, coverage,
+  engagement fee, claim fee); acceptance refused after coverage moved to another vault. Whole-flow
+  tests with a records-vs-totals cross-check: scenario 01 (happy path), scenario 03 (no delivery,
+  stranger resolves, keeper pays out) and a seven-engagement run covering every terminal outcome
+  (completed, rejected, open claim, no-delivery, expired, cancelled, stale claim).
+- **Files:** `src/tests/{security,flows,mod}.rs`
+- **Tests added:** 11 (214 unit tests in total).
+- **Coverage (measured, `cargo llvm-cov --lib`):** 94.38% lines, 92.78% regions; every module
+  >= 85% lines; `slashing.rs`, `views.rs`, `events.rs` 100%.
+- **Ran:** `cargo fmt --check`, `cargo test` (214 passed), `cargo clippy --all-targets -D warnings`
+  (clean), `cargo llvm-cov --lib --summary-only`.
+- **Limitations:** spec section 11 items that test Phase 3 features — council-only appeals,
+  1Click `REFUNDED`, `unattributed` matching, failed `ft_transfer` callbacks — are deferred with
+  those features. Integration tests on the compiled wasm are in the sandbox commit.
 
 ---
 
