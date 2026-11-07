@@ -12,3 +12,4 @@ mod events;
 mod init;
 mod roles;
 mod types;
+mod views;

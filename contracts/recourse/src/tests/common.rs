@@ -46,12 +46,17 @@ pub fn sandbox_config() -> Config {
 
 /// Sets the caller, attached deposit (yocto) and block time for the next call.
 pub fn ctx(caller: &AccountId, deposit: u128, now: u64) {
+    ctx_with_balance(caller, deposit, now, 1_000_000 * ONE_NEAR);
+}
+
+/// As `ctx`, with an explicit contract balance (yocto).
+pub fn ctx_with_balance(caller: &AccountId, deposit: u128, now: u64, balance: u128) {
     let mut b = VMContextBuilder::new();
     b.current_account_id(contract_id())
         .predecessor_account_id(caller.clone())
         .signer_account_id(caller.clone())
         .attached_deposit(NearToken::from_yoctonear(deposit))
-        .account_balance(NearToken::from_near(1_000_000))
+        .account_balance(NearToken::from_yoctonear(balance))
         .block_timestamp(now);
     testing_env!(b.build());
 }

@@ -58,7 +58,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 4. `feat(contract): initialize protocol configuration and controls`
 
-- **Commit:** (this commit)
+- **Commit:** `5f5c050`
 - **Did:** `new()` validates the whole config: Native bond asset only (an `Ft` config would accept
   native deposits as if they were USDC until `ft.rs` exists), positive `min_bond`, every window and
   cooldown positive, `claim_stake_bps` in (0, 100%], `min_bond_share <= base_bond_share <= 100%`,
@@ -69,6 +69,25 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Ran:** `cargo fmt`, `cargo test` (30 passed), `cargo clippy --all-targets -D warnings` (clean),
   wasm release build (ok).
 - **Limitations:** the pause guard for new engagements arrives with `open_engagement`.
+
+### 5. `feat(contract): add protocol views and solvency reporting`
+
+- **Commit:** (this commit)
+- **Did:** every read path the indexer/UI/SDK need — `get_agent`, `get_bond`, `get_vault`,
+  `get_vault_shares`, `get_coverage`, `get_agent_exposure`, `get_round`, `get_engagement`,
+  `get_claim`, `get_payout`, `get_signer`, `is_receipt_used`, `get_counters`, `get_totals`,
+  `list_vaults` (paged, max 100) — and `solvency()`, which returns both sides of I1: what the
+  contract holds, what the runtime reserves for storage, each liability bucket, their sum, the
+  surplus, and `ok = held - storage_reserved >= liabilities`. All views take `&self`, so the macro
+  exposes them as non-mutating view calls.
+- **Files:** `src/views.rs`, `src/tests/{views,common,mod}.rs`
+- **Tests added:** 3 (unknown records are `None`/zero; fresh contract solvent; every bucket summed
+  and a shortfall flagged).
+- **Ran:** `cargo fmt`, `cargo test` (33 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** `get_agent_score` and `quote_job` arrive with pricing. Unit tests cannot observe
+  real storage usage (the mock resets it per context), so the storage side of `solvency()` is
+  checked in the sandbox scenarios.
 
 ---
 
