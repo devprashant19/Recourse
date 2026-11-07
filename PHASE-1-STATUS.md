@@ -91,7 +91,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 6. `feat(agents): implement agent registration and profiles`
 
-- **Commit:** (this commit)
+- **Commit:** `dc119f0`
 - **Did:** `register_agent(metadata_uri, operator)` (payable): the caller is the agent; creates the
   profile with zeroed stats and an empty `Bond` up front (so later bond writes do not grow storage
   unpaid), charges the measured storage to the attached deposit and refunds the rest; duplicate
@@ -104,6 +104,19 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Ran:** `cargo fmt`, `cargo test` (39 passed), `cargo clippy --all-targets -D warnings` (clean),
   wasm release build (ok).
 - **Limitations:** no `update_agent` — nothing in the Phase 1 spec needs it.
+
+### 7. `feat(bonds): implement native NEAR bond deposits`
+
+- **Commit:** (this commit)
+- **Did:** `post_bond()` (payable): registered agents only; the whole deposit becomes bond (its
+  fixed-size record was paid for at registration); `existing + amount >= min_bond`; zero deposits
+  refused; `totals.bonds` kept in step; emits `bond_posted` with the posted amount and new total.
+- **Files:** `src/bonds.rs`, `src/tests/{bonds,common,mod}.rs`
+- **Tests added:** 5 (minimum succeeds and updates totals + event; small top-ups once bonded;
+  below-minimum, zero and unregistered rejected).
+- **Ran:** `cargo fmt`, `cargo test` (44 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** native NEAR only; `ft_on_transfer(msg="bond")` is USDC support (Phase 3).
 
 ---
 

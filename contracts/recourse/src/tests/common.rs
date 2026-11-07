@@ -115,3 +115,10 @@ pub fn register(c: &mut Recourse, who: &AccountId) {
     ctx(who, STORAGE_DEPOSIT, T0);
     c.register_agent("ipfs://agent".to_string(), operator());
 }
+
+/// Registers `who` and posts `amount` yocto of bond.
+pub fn register_bonded(c: &mut Recourse, who: &AccountId, amount: u128) {
+    register(c, who);
+    ctx(who, amount, T0);
+    c.post_bond();
+}

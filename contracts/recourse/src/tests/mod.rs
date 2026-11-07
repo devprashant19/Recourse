@@ -8,6 +8,7 @@
 //! which pins the exact error message a client would receive.
 
 mod agents;
+mod bonds;
 mod common;
 mod events;
 mod init;
