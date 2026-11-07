@@ -22,6 +22,7 @@
 //! Phase 3 adds `ft`, Intents payouts and appeals. Phase 4 adds `underwriting`.
 
 use near_sdk::borsh::BorshSerialize;
+use near_sdk::serde_json::json;
 use near_sdk::store::{IterableMap, LookupMap, LookupSet};
 use near_sdk::{env, near, require, AccountId, BorshStorageKey, PanicOnDefault};
 
@@ -46,6 +47,7 @@ pub mod views;
 #[cfg(test)]
 mod tests;
 
+use events::Event;
 use types::*;
 
 #[derive(BorshSerialize, BorshStorageKey)]
@@ -107,20 +109,7 @@ impl Recourse {
     #[init]
     pub fn new(config: Config, owner: AccountId) -> Self {
         require!(!env::state_exists(), "already initialised");
-        require!(config.min_bond.0 > 0, "min_bond must be positive");
-        require!(
-            config.base_bond_share_bps <= BPS_DENOM
-                && config.min_bond_share_bps <= config.base_bond_share_bps,
-            "bad bond share config"
-        );
-        require!(
-            config.max_vault_exposure_bps > 0 && config.max_vault_exposure_bps <= BPS_DENOM,
-            "bad vault exposure config"
-        );
-        require!(
-            config.claim_stake_bps <= BPS_DENOM,
-            "bad claim stake config"
-        );
+        validate_config(&config);
 
         let council = config.council.clone();
 
@@ -155,12 +144,16 @@ impl Recourse {
     /// payouts all continue — pausing must never trap a client's money.
     pub fn pause(&mut self) {
         self.assert_owner();
+        require!(!self.paused, "already paused");
         self.paused = true;
+        Event::Paused.emit(json!({ "paused": true, "by": env::predecessor_account_id() }));
     }
 
     pub fn unpause(&mut self) {
         self.assert_owner();
+        require!(self.paused, "not paused");
         self.paused = false;
+        Event::Paused.emit(json!({ "paused": false, "by": env::predecessor_account_id() }));
     }
 
     pub fn is_paused(&self) -> bool {
@@ -170,4 +163,34 @@ impl Recourse {
     pub fn get_config(&self) -> Config {
         self.config.clone()
     }
+}
+
+/// Rejects any config that would make a later invariant impossible to keep.
+fn validate_config(c: &Config) {
+    require!(
+        c.bond_asset == BondAsset::Native,
+        "only the Native bond asset is supported until USDC support lands"
+    );
+    require!(c.min_bond.0 > 0, "min_bond must be positive");
+    for (name, d) in [
+        ("withdrawal_cooldown", c.withdrawal_cooldown),
+        ("claim_window", c.claim_window),
+        ("appeal_window", c.appeal_window),
+        ("bid_commit_window", c.bid_commit_window),
+        ("bid_reveal_window", c.bid_reveal_window),
+    ] {
+        require!(d.0 > 0, format!("{name} must be positive"));
+    }
+    require!(
+        c.claim_stake_bps > 0 && c.claim_stake_bps <= BPS_DENOM,
+        "bad claim stake config"
+    );
+    require!(
+        c.base_bond_share_bps <= BPS_DENOM && c.min_bond_share_bps <= c.base_bond_share_bps,
+        "bad bond share config"
+    );
+    require!(
+        c.max_vault_exposure_bps > 0 && c.max_vault_exposure_bps <= BPS_DENOM,
+        "bad vault exposure config"
+    );
 }

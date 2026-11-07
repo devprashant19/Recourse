@@ -42,7 +42,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 3. `feat(contract): implement access roles and protocol events`
 
-- **Commit:** (this commit)
+- **Commit:** `fcba444`
 - **Did:** owner-only `add_arbiter` / `remove_arbiter` / `add_keeper` / `remove_keeper`, role views
   (`get_roles`, `is_arbiter`, `is_keeper`), `assert_owner` moved into `roles.rs`. Role lists are
   capped at 32 so contract state cannot grow without bound. Authorization always reads
@@ -55,6 +55,20 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Ran:** `cargo fmt`, `cargo test` (20 passed), `cargo clippy --all-targets -D warnings` (clean),
   wasm release build (ok).
 - **Limitations:** none.
+
+### 4. `feat(contract): initialize protocol configuration and controls`
+
+- **Commit:** (this commit)
+- **Did:** `new()` validates the whole config: Native bond asset only (an `Ft` config would accept
+  native deposits as if they were USDC until `ft.rs` exists), positive `min_bond`, every window and
+  cooldown positive, `claim_stake_bps` in (0, 100%], `min_bond_share <= base_bond_share <= 100%`,
+  exposure cap in (0, 100%]. `pause()` / `unpause()` refuse no-op calls and emit `paused`.
+- **Files:** `src/lib.rs`, `src/tests/init.rs`
+- **Tests added:** 10 (each invalid config field, Ft rejected, pause/unpause events, stranger cannot
+  pause, double pause rejected).
+- **Ran:** `cargo fmt`, `cargo test` (30 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** the pause guard for new engagements arrives with `open_engagement`.
 
 ---
 
