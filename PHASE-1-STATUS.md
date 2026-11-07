@@ -158,7 +158,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 10. `feat(pool): implement safe vault redemption`
 
-- **Commit:** (this commit)
+- **Commit:** `a263ef4`
 - **Did:** `redeem(vault, shares)`: positive and `<=` the caller's own shares (no way to burn
   another LP's position); value rounded down; refused if it rounds to zero or exceeds
   `capital - locked`, so money backing open engagements cannot leave; state and totals updated
@@ -172,6 +172,28 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
   test bumped a vault's capital without the matching total — the checked accounting caught the
   inconsistency; the test was fixed, not the check.
 - **Limitations:** none.
+
+### 11. `feat(pricing): implement risk scoring and liability calculations`
+
+- **Commit:** (this commit)
+- **Did:** the four spec formulas with the score as an exact fraction (no floats), constants named
+  (`UPHELD_WEIGHT = 3`, floor 150 bps + 1000 bps per upheld, 4x liability multiplier). Rounding
+  always goes against the party asking: bond share and premium floor round up, liability ceiling
+  rounds down. `min_price_for(cap)`, `required_bond`, `premium` (on the full liability, rounded up).
+  `plan_job` is the single eligibility check (registered, bonded >= `min_bond`, positive price and
+  cap, `cap <= max_liability`, live coverage, bond available net of a pending withdrawal, vault
+  capacity = min(unlocked capital, 25% exposure room, coverage-limit room)) used by `quote_job` now
+  and `open_engagement` next, so a quote cannot disagree with the contract. Views:
+  `get_agent_score`, `quote_job(agent, liability_cap, price?)` with `can_open` and a `reason`.
+- **Files:** `src/pricing.rs`, `src/tests/{pricing,mod}.rs`
+- **Tests added:** 10 (new agent; RULES.md worked example; long record approaches 20%; one upheld
+  claim resets a short record and many clamp at 0; rounding direction; `min_price` is minimal for a
+  grid of records and caps; score view; quote reasons for no coverage, cap above ceiling, unbonded).
+- **Ran:** `cargo fmt`, `cargo test` (79 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** RULES.md's worked example rounds the score to 0.643 and floors the premium
+  floor, giving 3071 / 221 bps; the contract computes 3072 / 222 bps. RULES.md gets a rounding note
+  in the docs commit.
 
 ---
 

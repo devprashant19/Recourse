@@ -13,6 +13,7 @@ mod common;
 mod events;
 mod init;
 mod pool;
+mod pricing;
 mod roles;
 mod types;
 mod views;
