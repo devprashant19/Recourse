@@ -1,5 +1,5 @@
 [toolchain]
-channel = "1.83.0"
+channel = "1.85.0"   # minimum that stabilises edition2024, which near-sdk 5.29 needs
 components = ["rustfmt", "clippy"]
 targets = ["wasm32-unknown-unknown"]
 profile = "minimal"
