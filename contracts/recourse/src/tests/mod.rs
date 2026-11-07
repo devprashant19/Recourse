@@ -12,6 +12,7 @@ mod bonds;
 mod common;
 mod events;
 mod init;
+mod pool;
 mod roles;
 mod types;
 mod views;

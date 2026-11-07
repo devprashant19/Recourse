@@ -120,7 +120,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 8. `feat(bonds): implement secure withdrawal and cooldown`
 
-- **Commit:** (this commit)
+- **Commit:** `803a79b`
 - **Did:** `request_withdrawal(amount)`: positive, `<= amount - locked`, refused while any claim is
   open; a new request replaces the old one and restarts the cooldown. `withdraw()`: needs a request,
   the cooldown elapsed, no open claim, and the requested amount still unlocked (locks taken during
@@ -135,6 +135,26 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
   wasm release build (ok).
 - **Limitations:** the "claim filed during cooldown restarts it" path is wired in `file_claim` and
   tested there.
+
+### 9. `feat(pool): implement vault deposits and share accounting`
+
+- **Commit:** (this commit)
+- **Did:** `create_vault()` (payable, measured storage, refund) keyed by the underwriter's account;
+  `deposit_vault(vault)` (payable): a first-time LP pays for its share record out of the deposit,
+  shares minted at the current price with an ERC-4626 virtual offset (1 share, 1 yocto) so the
+  first deposit is 1:1, an empty vault cannot be inflated against the next depositor, and every
+  division rounds toward the vault (I7). **Found while testing:** `amount * shares` overflows u128
+  at real yocto magnitudes (1e25 x 1e25), so `math::mul_div_*` now computes in 256 bits via the
+  `uint` crate (0.9, already in the tree through nearcore) — exact for any u128 inputs whose result
+  fits. The clippy allow is scoped to the macro's own generated code.
+- **Files:** `src/pool.rs`, `src/math.rs`, `Cargo.toml`, `Cargo.lock`, `src/tests/{pool,common,mod}.rs`
+- **Tests added:** 10 (vault creation + event; duplicate vault; first deposit 1:1 after storage
+  fee; repeat LP pays no storage; deposit after a loss mints more shares; unknown vault; deposit
+  that only covers storage; exhaustive 1-yocto rounding sweep proving deposit-then-redeem never
+  returns more than was paid; 256-bit exactness; overflow of the result rejected).
+- **Ran:** `cargo fmt`, `cargo test` (62 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok).
+- **Limitations:** native NEAR only (`ft_on_transfer(msg="vault:<id>")` is Phase 3).
 
 ---
 

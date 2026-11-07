@@ -122,3 +122,10 @@ pub fn register_bonded(c: &mut Recourse, who: &AccountId, amount: u128) {
     ctx(who, amount, T0);
     c.post_bond();
 }
+
+pub fn uw() -> AccountId {
+    acc("uw.near")
+}
+pub fn lp() -> AccountId {
+    acc("lp.near")
+}
