@@ -1,6 +1,7 @@
 //! Shared fixtures for the unit tests: accounts, a sandbox config and a context
 //! helper that sets caller, deposit and time in one call.
 
+use near_sdk::json_types::{U128, U64};
 use near_sdk::test_utils::VMContextBuilder;
 use near_sdk::{testing_env, AccountId, NearToken};
 
@@ -28,12 +29,12 @@ pub fn contract_id() -> AccountId {
 pub fn sandbox_config() -> Config {
     Config {
         bond_asset: BondAsset::Native,
-        min_bond: 5 * ONE_NEAR,
-        withdrawal_cooldown: 5 * MINUTE,
-        claim_window: 3 * MINUTE,
-        appeal_window: 3 * MINUTE,
-        bid_commit_window: 60 * SECOND,
-        bid_reveal_window: 60 * SECOND,
+        min_bond: U128(5 * ONE_NEAR),
+        withdrawal_cooldown: U64(5 * MINUTE),
+        claim_window: U64(3 * MINUTE),
+        appeal_window: U64(3 * MINUTE),
+        bid_commit_window: U64(60 * SECOND),
+        bid_reveal_window: U64(60 * SECOND),
         claim_stake_bps: 500,
         base_bond_share_bps: 5000,
         min_bond_share_bps: 2000,

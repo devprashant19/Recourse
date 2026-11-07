@@ -25,6 +25,7 @@ use near_sdk::borsh::BorshSerialize;
 use near_sdk::store::{IterableMap, LookupMap, LookupSet};
 use near_sdk::{env, near, require, AccountId, BorshStorageKey, PanicOnDefault};
 
+pub mod math;
 pub mod types;
 
 // Filled in during Phase 1 — see the module header above.
@@ -61,6 +62,7 @@ enum StorageKey {
     Payouts,
     Signers,
     UsedReceipts,
+    AgentExposure,
 }
 
 #[near(contract_state)]
@@ -92,6 +94,12 @@ pub struct Recourse {
     unattributed: u128,
     next_ids: Counters,
     paused: bool,
+    /// (vault, agent) -> vault capital currently locked for that agent. Enforces
+    /// both the coverage limit and the 25% per-agent exposure cap, and survives
+    /// an agent moving to a different vault.
+    agent_exposure: LookupMap<(AccountId, AccountId), u128>,
+    /// Running sums of every liability bucket (right-hand side of invariant I1).
+    totals: Totals,
 }
 
 #[near]
@@ -99,7 +107,7 @@ impl Recourse {
     #[init]
     pub fn new(config: Config, owner: AccountId) -> Self {
         require!(!env::state_exists(), "already initialised");
-        require!(config.min_bond > 0, "min_bond must be positive");
+        require!(config.min_bond.0 > 0, "min_bond must be positive");
         require!(
             config.base_bond_share_bps <= BPS_DENOM
                 && config.min_bond_share_bps <= config.base_bond_share_bps,
@@ -138,6 +146,8 @@ impl Recourse {
             unattributed: 0,
             next_ids: Counters::default(),
             paused: false,
+            agent_exposure: LookupMap::new(StorageKey::AgentExposure),
+            totals: Totals::default(),
         }
     }
 
