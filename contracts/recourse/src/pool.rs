@@ -11,10 +11,10 @@
 
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
-use near_sdk::{env, near, require, AccountId};
+use near_sdk::{env, near, require, AccountId, NearToken, Promise};
 
 use crate::events::Event;
-use crate::math::{add, mul_div_floor};
+use crate::math::{add, mul_div_floor, sub};
 use crate::storage::refund;
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
@@ -108,6 +108,49 @@ impl Recourse {
             "total_shares": v.total_shares,
         }));
         U128(shares)
+    }
+
+    /// Burns `shares` of the caller's position in `vault` and pays out their
+    /// value, rounded down. Only unlocked capital can leave: money backing
+    /// open engagements stays until those engagements settle.
+    pub fn redeem(&mut self, vault: AccountId, shares: U128) -> U128 {
+        let lp = env::predecessor_account_id();
+        let mut v = self.vault_of(&vault);
+        let key = (vault.clone(), lp.clone());
+        let held = self.vault_shares.get(&key).copied().unwrap_or(0);
+        require!(shares.0 > 0, "shares must be positive");
+        require!(shares.0 <= held, "not enough shares");
+
+        let assets = assets_for_shares(v.capital.0, v.total_shares.0, shares.0);
+        require!(assets > 0, "redemption too small to pay out");
+        let unlocked = sub(v.capital.0, v.locked.0, "unlocked vault capital");
+        require!(
+            assets <= unlocked,
+            "vault capital is locked by open engagements"
+        );
+
+        v.capital = U128(sub(v.capital.0, assets, "vault capital"));
+        v.total_shares = U128(sub(v.total_shares.0, shares.0, "vault shares"));
+        self.vaults.insert(vault.clone(), v.clone());
+        self.vault_shares.insert(key, held - shares.0);
+        self.totals.vault_capital = U128(sub(
+            self.totals.vault_capital.0,
+            assets,
+            "total vault capital",
+        ));
+
+        Event::VaultRedeem.emit(json!({
+            "vault": vault,
+            "lp": lp,
+            "shares": shares,
+            "amount": U128(assets),
+            "capital": v.capital,
+            "total_shares": v.total_shares,
+        }));
+        Promise::new(lp)
+            .transfer(NearToken::from_yoctonear(assets))
+            .detach();
+        U128(assets)
     }
 }
 

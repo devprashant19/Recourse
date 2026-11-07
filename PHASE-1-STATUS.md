@@ -138,7 +138,7 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 
 ### 9. `feat(pool): implement vault deposits and share accounting`
 
-- **Commit:** (this commit)
+- **Commit:** `8e5501a`
 - **Did:** `create_vault()` (payable, measured storage, refund) keyed by the underwriter's account;
   `deposit_vault(vault)` (payable): a first-time LP pays for its share record out of the deposit,
   shares minted at the current price with an ERC-4626 virtual offset (1 share, 1 yocto) so the
@@ -155,6 +155,23 @@ Toolchain used locally: Rust 1.95.0 (`rust-toolchain.toml`), near-sdk 5.30.1, No
 - **Ran:** `cargo fmt`, `cargo test` (62 passed), `cargo clippy --all-targets -D warnings` (clean),
   wasm release build (ok).
 - **Limitations:** native NEAR only (`ft_on_transfer(msg="vault:<id>")` is Phase 3).
+
+### 10. `feat(pool): implement safe vault redemption`
+
+- **Commit:** (this commit)
+- **Did:** `redeem(vault, shares)`: positive and `<=` the caller's own shares (no way to burn
+  another LP's position); value rounded down; refused if it rounds to zero or exceeds
+  `capital - locked`, so money backing open engagements cannot leave; state and totals updated
+  before the transfer is scheduled; emits `vault_redeem`.
+- **Files:** `src/pool.rs`, `src/tests/pool.rs`
+- **Tests added:** 7 (sole LP full exit empties the vault; premiums raise the payout, rounded
+  toward the vault by at most 1 yocto; partial redeem within unlocked capital; locked capital,
+  over-redeem, stranger and sub-yocto redemptions refused).
+- **Ran:** `cargo fmt`, `cargo test` (69 passed), `cargo clippy --all-targets -D warnings` (clean),
+  wasm release build (ok). One test first failed with `underflow: total vault capital` because the
+  test bumped a vault's capital without the matching total — the checked accounting caught the
+  inconsistency; the test was fixed, not the check.
+- **Limitations:** none.
 
 ---
 

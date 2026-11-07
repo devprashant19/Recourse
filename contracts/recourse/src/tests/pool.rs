@@ -116,3 +116,89 @@ fn share_maths_rounds_toward_the_vault_with_one_yocto_amounts() {
         }
     }
 }
+
+// ----- redemptions --------------------------------------------------------
+
+#[test]
+fn full_redemption_returns_the_deposit_and_empties_the_vault() {
+    let (mut c, shares) = vault_with_lp_deposit(10 * ONE_NEAR);
+    let capital = c.get_vault(uw()).unwrap().capital.0;
+    ctx(&lp(), 0, T0);
+    let paid = c.redeem(uw(), U128(shares)).0;
+    assert_eq!(paid, capital, "sole LP gets everything back");
+    assert_eq!(transfers(), vec![(lp(), paid)]);
+    assert_eq!(events()[0]["event"], "vault_redeem");
+    let v = c.get_vault(uw()).unwrap();
+    assert_eq!((v.capital.0, v.total_shares.0), (0, 0));
+    assert_eq!(c.get_vault_shares(uw(), lp()), U128(0));
+    assert_eq!(c.get_totals().vault_capital, U128(0));
+}
+
+#[test]
+fn redemption_after_premiums_pays_more_than_was_deposited() {
+    let (mut c, shares) = vault_with_lp_deposit(10 * ONE_NEAR);
+    let deposited = c.get_vault(uw()).unwrap().capital.0;
+    let mut v = c.get_vault(uw()).unwrap();
+    v.capital = U128(v.capital.0 + ONE_NEAR); // a premium arrived
+    c.vaults.insert(uw(), v);
+    c.totals.vault_capital = U128(c.totals.vault_capital.0 + ONE_NEAR);
+    ctx(&lp(), 0, T0);
+    let paid = c.redeem(uw(), U128(shares)).0;
+    let exact = deposited + ONE_NEAR;
+    assert!(
+        paid <= exact && exact - paid <= 1,
+        "gain passed on, rounded toward the vault: {paid}"
+    );
+}
+
+#[test]
+fn redeem_is_limited_to_unlocked_capital() {
+    let (mut c, shares) = vault_with_lp_deposit(10 * ONE_NEAR);
+    let mut v = c.get_vault(uw()).unwrap();
+    v.locked = U128(v.capital.0 - ONE_NEAR);
+    c.vaults.insert(uw(), v);
+    ctx(&lp(), 0, T0);
+    // About one NEAR's worth of shares can still leave.
+    assert_eq!(c.redeem(uw(), U128(ONE_NEAR)).0, ONE_NEAR);
+    let left = shares - ONE_NEAR;
+    assert!(left > 0);
+}
+
+#[test]
+#[should_panic(expected = "vault capital is locked by open engagements")]
+fn redeem_from_locked_capital_fails() {
+    let (mut c, shares) = vault_with_lp_deposit(10 * ONE_NEAR);
+    let mut v = c.get_vault(uw()).unwrap();
+    v.locked = U128(v.capital.0 - ONE_NEAR);
+    c.vaults.insert(uw(), v);
+    ctx(&lp(), 0, T0);
+    c.redeem(uw(), U128(shares));
+}
+
+#[test]
+#[should_panic(expected = "not enough shares")]
+fn redeeming_more_shares_than_held_fails() {
+    let (mut c, shares) = vault_with_lp_deposit(10 * ONE_NEAR);
+    ctx(&lp(), 0, T0);
+    c.redeem(uw(), U128(shares + 1));
+}
+
+#[test]
+#[should_panic(expected = "not enough shares")]
+fn stranger_cannot_redeem_someone_elses_shares() {
+    let (mut c, _) = vault_with_lp_deposit(10 * ONE_NEAR);
+    ctx(&stranger(), 0, T0);
+    c.redeem(uw(), U128(1));
+}
+
+#[test]
+#[should_panic(expected = "redemption too small to pay out")]
+fn redeeming_a_share_worth_less_than_a_yocto_fails() {
+    let (mut c, _) = vault_with_lp_deposit(10 * ONE_NEAR);
+    // Price below 1 yocto/share after a near-total loss.
+    let mut v = c.get_vault(uw()).unwrap();
+    v.capital = U128(1);
+    c.vaults.insert(uw(), v);
+    ctx(&lp(), 0, T0);
+    c.redeem(uw(), U128(1));
+}
