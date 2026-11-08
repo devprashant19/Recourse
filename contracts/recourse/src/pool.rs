@@ -78,47 +78,11 @@ impl Recourse {
     pub fn deposit_vault(&mut self, vault: AccountId, min_shares: Option<U128>) -> U128 {
         self.assert_native_mode();
         let lp = env::predecessor_account_id();
-        let mut v = self.vault_of(&vault);
-        let key = (vault.clone(), lp.clone());
-
         let before = env::storage_usage();
-        let held = self.vault_shares.get(&key).copied();
-        if held.is_none() {
-            self.vault_shares.insert(key.clone(), 0);
-        }
+        let held = self.open_lp_entry(&vault, &lp);
         let amount = self.charge_storage(before, env::attached_deposit().as_yoctonear());
         require!(amount > 0, "deposit must exceed the storage fee");
-
-        require!(
-            v.capital.0 > 0 || v.total_shares.0 == 0,
-            "vault has shares but no capital; deposits are closed"
-        );
-        let shares = shares_for_deposit(v.capital.0, v.total_shares.0, amount);
-        require!(shares > 0, "deposit too small to mint a share");
-        if let Some(min) = min_shares {
-            require!(shares >= min.0, "fewer shares than min_shares");
-        }
-
-        v.capital = U128(add(v.capital.0, amount, "vault capital"));
-        v.total_shares = U128(add(v.total_shares.0, shares, "vault shares"));
-        self.vaults.insert(vault.clone(), v.clone());
-        let lp_shares = add(held.unwrap_or(0), shares, "lp shares");
-        self.vault_shares.insert(key, lp_shares);
-        self.totals.vault_capital = U128(add(
-            self.totals.vault_capital.0,
-            amount,
-            "total vault capital",
-        ));
-
-        Event::VaultDeposit.emit(json!({
-            "vault": vault,
-            "lp": lp,
-            "amount": U128(amount),
-            "shares": U128(shares),
-            "capital": v.capital,
-            "total_shares": v.total_shares,
-        }));
-        U128(shares)
+        U128(self.mint_vault_shares(&vault, &lp, held, amount, min_shares.map(|m| m.0)))
     }
 
     /// Burns `shares` of the caller's position in `vault` and pays out their
@@ -230,6 +194,66 @@ impl Recourse {
 }
 
 impl Recourse {
+    /// Checks `vault` exists and makes sure `lp` has a share entry in it
+    /// (created at zero so the caller can charge its storage). Returns the
+    /// shares `lp` already held.
+    pub(crate) fn open_lp_entry(&mut self, vault: &AccountId, lp: &AccountId) -> u128 {
+        self.vault_of(vault);
+        let key = (vault.clone(), lp.clone());
+        match self.vault_shares.get(&key).copied() {
+            Some(held) => held,
+            None => {
+                self.vault_shares.insert(key, 0);
+                0
+            }
+        }
+    }
+
+    /// Mints shares in `vault` for `amount` deposited by `lp` (who held
+    /// `held` shares) at the current price, rounding toward the vault (I7).
+    /// Refuses deposits into a wiped-out vault and deposits worth no share.
+    pub(crate) fn mint_vault_shares(
+        &mut self,
+        vault: &AccountId,
+        lp: &AccountId,
+        held: u128,
+        amount: u128,
+        min_shares: Option<u128>,
+    ) -> u128 {
+        let mut v = self.vault_of(vault);
+        require!(
+            v.capital.0 > 0 || v.total_shares.0 == 0,
+            "vault has shares but no capital; deposits are closed"
+        );
+        let shares = shares_for_deposit(v.capital.0, v.total_shares.0, amount);
+        require!(shares > 0, "deposit too small to mint a share");
+        if let Some(min) = min_shares {
+            require!(shares >= min, "fewer shares than min_shares");
+        }
+
+        v.capital = U128(add(v.capital.0, amount, "vault capital"));
+        v.total_shares = U128(add(v.total_shares.0, shares, "vault shares"));
+        self.vaults.insert(vault.clone(), v.clone());
+        let lp_shares = add(held, shares, "lp shares");
+        self.vault_shares
+            .insert((vault.clone(), lp.clone()), lp_shares);
+        self.totals.vault_capital = U128(add(
+            self.totals.vault_capital.0,
+            amount,
+            "total vault capital",
+        ));
+
+        Event::VaultDeposit.emit(json!({
+            "vault": vault,
+            "lp": lp,
+            "amount": U128(amount),
+            "shares": U128(shares),
+            "capital": v.capital,
+            "total_shares": v.total_shares,
+        }));
+        shares
+    }
+
     pub(crate) fn vault_of(&self, vault: &AccountId) -> Vault {
         self.vaults
             .get(vault)

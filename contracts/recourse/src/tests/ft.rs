@@ -188,3 +188,110 @@ fn usdc_bond_for_an_unregistered_sender_is_refused() {
     ctx(&usdc(), 0, T0);
     let _ = c.ft_on_transfer(stranger(), U128(5_000_000), "bond".into());
 }
+
+// ----- USDC vault deposits --------------------------------------------------
+
+/// An Ft-mode contract with `uw()`'s vault and `lp()` holding a NEP-145 balance.
+fn ft_vault() -> Recourse {
+    let mut c = ft_contract();
+    ctx(&uw(), STORAGE_DEPOSIT, T0);
+    c.create_vault();
+    ctx(&lp(), ONE_NEAR / 10, T0);
+    c.storage_deposit(None);
+    c
+}
+
+fn usdc_vault_deposit(c: &mut Recourse, from: &near_sdk::AccountId, amount: u128) -> u128 {
+    ctx(&usdc(), 0, T0);
+    match c.ft_on_transfer(from.clone(), U128(amount), format!("vault:{}", uw())) {
+        PromiseOrValue::Value(U128(unused)) => unused,
+        PromiseOrValue::Promise(_) => panic!("vault deposits settle synchronously"),
+    }
+}
+
+#[test]
+fn usdc_vault_deposit_mints_shares_one_to_one_and_charges_storage_balance() {
+    let mut c = ft_vault();
+    let unused = usdc_vault_deposit(&mut c, &lp(), 10_000_000);
+    assert_eq!(unused, 0, "whole deposit used");
+    let v = c.get_vault(uw()).unwrap();
+    assert_eq!(v.capital, U128(10_000_000), "no USDC taken for storage");
+    assert_eq!(v.total_shares, U128(10_000_000), "1:1 on an empty vault");
+    assert_eq!(c.get_vault_shares(uw(), lp()), U128(10_000_000));
+    assert_eq!(c.get_totals().vault_capital, U128(10_000_000));
+    assert_eq!(c.get_ft_held(), U128(10_000_000));
+    let bal = c.storage_balance_of(lp()).unwrap().total.0;
+    assert!(
+        bal < ONE_NEAR / 10,
+        "LP entry storage came from the NEP-145 balance"
+    );
+    assert_eq!(events()[0]["event"], "vault_deposit");
+    assert!(c.solvency().ok);
+}
+
+#[test]
+fn second_usdc_vault_deposit_pays_no_storage() {
+    let mut c = ft_vault();
+    usdc_vault_deposit(&mut c, &lp(), 10_000_000);
+    let bal = c.storage_balance_of(lp()).unwrap().total;
+    usdc_vault_deposit(&mut c, &lp(), 5_000_000);
+    assert_eq!(c.storage_balance_of(lp()).unwrap().total, bal);
+    assert_eq!(c.get_vault(uw()).unwrap().capital, U128(15_000_000));
+    assert_eq!(c.get_ft_held(), U128(15_000_000));
+}
+
+#[test]
+fn usdc_vault_shares_round_toward_the_vault() {
+    let mut c = ft_vault();
+    usdc_vault_deposit(&mut c, &lp(), 3);
+    // Premiums raise the price: 3 shares now back 5 units.
+    let mut v = c.get_vault(uw()).unwrap();
+    v.capital = U128(5);
+    c.vaults.insert(uw(), v);
+    c.totals.vault_capital = U128(5);
+    c.ft_held = 5;
+    usdc_vault_deposit(&mut c, &lp(), 2);
+    let v = c.get_vault(uw()).unwrap();
+    // floor(2 * (3+1) / (5+1)) = 1 share for 2 units.
+    assert_eq!(v.total_shares, U128(4));
+    assert_eq!(v.capital, U128(7));
+}
+
+#[test]
+#[should_panic(expected = "vault not found")]
+fn usdc_deposit_into_an_unknown_vault_is_refused() {
+    let mut c = ft_vault();
+    ctx(&usdc(), 0, T0);
+    let _ = c.ft_on_transfer(lp(), U128(1_000_000), "vault:nobody.near".into());
+}
+
+#[test]
+#[should_panic(expected = "storage balance too low")]
+fn usdc_vault_deposit_without_a_storage_balance_is_refused() {
+    let mut c = ft_contract();
+    ctx(&uw(), STORAGE_DEPOSIT, T0);
+    c.create_vault();
+    usdc_vault_deposit(&mut c, &lp(), 1_000_000);
+}
+
+#[test]
+#[should_panic(expected = "deposit too small to mint a share")]
+fn usdc_vault_deposit_worth_no_share_is_refused() {
+    let mut c = ft_vault();
+    usdc_vault_deposit(&mut c, &lp(), 1_000);
+    let mut v = c.get_vault(uw()).unwrap();
+    v.capital = U128(1_000_000_000);
+    c.vaults.insert(uw(), v);
+    usdc_vault_deposit(&mut c, &lp(), 1);
+}
+
+#[test]
+#[should_panic(expected = "deposits are closed")]
+fn usdc_deposit_into_a_wiped_out_vault_is_refused() {
+    let mut c = ft_vault();
+    usdc_vault_deposit(&mut c, &lp(), 1_000);
+    let mut v = c.get_vault(uw()).unwrap();
+    v.capital = U128(0);
+    c.vaults.insert(uw(), v);
+    usdc_vault_deposit(&mut c, &lp(), 1_000);
+}

@@ -19,6 +19,7 @@ use near_sdk::{env, near, require, AccountId, NearToken, Promise, PromiseOrValue
 
 use crate::events::Event;
 use crate::math::{add, sub};
+use crate::storage::storage_cost;
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
 
@@ -164,7 +165,30 @@ impl Recourse {
                 self.add_to_bond(sender, amount);
                 amount
             }
+            FtAction::Vault(vault) => {
+                let before = env::storage_usage();
+                let held = self.open_lp_entry(&vault, sender);
+                self.charge_storage_balance(sender, before);
+                self.mint_vault_shares(&vault, sender, held, amount, None);
+                amount
+            }
             other => env::panic_str(&format!("deposit type not supported yet: {other:?}")),
         }
+    }
+
+    /// Charges the storage written since `before` to `who`'s NEP-145 balance.
+    pub(crate) fn charge_storage_balance(&mut self, who: &AccountId, before: u64) {
+        self.flush();
+        let cost = storage_cost(env::storage_usage().saturating_sub(before));
+        if cost == 0 {
+            return;
+        }
+        let bal = self.storage_balances.get(who).copied().unwrap_or(0);
+        require!(
+            bal >= cost,
+            format!("storage balance too low: call storage_deposit with at least {cost} yoctoNEAR")
+        );
+        self.storage_balances.insert(who.clone(), bal - cost);
+        self.storage_balance_total = sub(self.storage_balance_total, cost, "storage balances");
     }
 }
