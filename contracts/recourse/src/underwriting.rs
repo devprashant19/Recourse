@@ -23,7 +23,7 @@ use near_sdk::{env, near, require, AccountId, NearToken, Promise};
 use crate::events::Event;
 use crate::math::{add, bps_floor, sub};
 use crate::pricing::premium_floor_bps;
-use crate::storage::refund;
+use crate::storage::{refund, storage_cost};
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
 
@@ -32,6 +32,9 @@ use crate::{Recourse, RecourseExt};
 pub const BID_COMMIT_DEPOSIT: u128 = 50_000_000_000_000_000_000_000; // 0.05 NEAR
 /// Bids a round accepts, so `settle_round` has bounded gas.
 pub const MAX_BIDS_PER_ROUND: usize = 16;
+/// Storage the agent prepays at `open_bond_request` for the coverage record
+/// settlement may write (a 64-byte vault id, limit, rate, two times, key).
+pub const COVERAGE_STORAGE_BYTES: u64 = 300;
 /// How long coverage won in a round lasts.
 pub const COVERAGE_TERM_NS: u64 = 30 * 24 * 60 * 60 * 1_000_000_000;
 
@@ -90,7 +93,15 @@ impl Recourse {
             },
         );
         self.open_rounds.insert(agent.clone(), id);
-        let unused = self.charge_storage(before, env::attached_deposit().as_yoctonear());
+        // The round's own bytes, plus a reserve for the coverage record that
+        // settlement may write (settlement is permissionless and pays nothing).
+        let reserve = storage_cost(COVERAGE_STORAGE_BYTES);
+        let attached = env::attached_deposit().as_yoctonear();
+        require!(
+            attached >= reserve,
+            format!("attach at least {reserve} yoctoNEAR for the round and its coverage record")
+        );
+        let unused = self.charge_storage(before, attached - reserve);
 
         Event::BondRequestOpened.emit(json!({
             "round": U64(id),
@@ -215,6 +226,114 @@ impl Recourse {
         Promise::new(underwriter)
             .transfer(NearToken::from_yoctonear(deposit))
             .detach();
+    }
+
+    /// Anyone, after the reveal deadline. The lowest revealed premium wins,
+    /// ties going to the earliest commit, among bids still valid now: the
+    /// premium at least the agent's current floor and the vault still able
+    /// to cover the limit (`bid_capacity`, after releasing this round's own
+    /// promises). The winner's coverage is written as `bind_coverage` writes
+    /// it, for `COVERAGE_TERM_NS`; no valid bid means `Failed`. Unrevealed
+    /// commit deposits are forfeited to the agent. Works while paused, so
+    /// deposits and promises are never stuck.
+    pub fn settle_round(&mut self, round: RoundId) -> BidRound {
+        let mut r = self.round_of(round);
+        let now = env::block_timestamp();
+        match r.phase(now) {
+            RoundPhase::Settleable => {}
+            RoundPhase::Closed => env::panic_str("round already settled"),
+            _ => env::panic_str("round cannot be settled before the reveal deadline"),
+        }
+        let limit = r.requested_limit.0;
+
+        // Release this round's promises first, so capacity is judged fresh.
+        for b in r.bids.iter().filter(|b| b.premium_bps.is_some()) {
+            let pending = self
+                .pending_limits
+                .get(&b.underwriter)
+                .copied()
+                .unwrap_or(0);
+            self.pending_limits
+                .insert(b.underwriter.clone(), sub(pending, limit, "pending limits"));
+        }
+
+        let floor = premium_floor_bps(&self.agent_of(&r.agent).stats);
+        let mut winner: Option<RoundWinner> = None;
+        for b in &r.bids {
+            let Some(p) = b.premium_bps else { continue };
+            let better = winner.as_ref().is_none_or(|w| p < w.premium_bps);
+            if better && p >= floor && limit <= self.bid_capacity(&b.underwriter, &r.agent) {
+                winner = Some(RoundWinner {
+                    vault: b.underwriter.clone(),
+                    premium_bps: p,
+                });
+            }
+        }
+
+        let forfeited: u128 = r.bids.iter().map(|b| b.deposit.0).sum();
+        for b in r.bids.iter_mut() {
+            b.deposit = U128(0);
+        }
+        self.totals.bid_deposits = U128(sub(self.totals.bid_deposits.0, forfeited, "bid deposits"));
+
+        if let Some(w) = &winner {
+            let cov = Coverage {
+                vault: w.vault.clone(),
+                limit: r.requested_limit,
+                premium_bps: w.premium_bps,
+                bound_at: U64(now),
+                expires_at: U64(now.saturating_add(COVERAGE_TERM_NS)),
+            };
+            self.coverage.insert(r.agent.clone(), cov.clone());
+            Event::CoverageBound.emit(json!({
+                "agent": r.agent,
+                "vault": cov.vault,
+                "limit": cov.limit,
+                "premium_bps": cov.premium_bps,
+                "expires_at": cov.expires_at,
+            }));
+        }
+        r.status = if winner.is_some() {
+            RoundStatus::Settled
+        } else {
+            RoundStatus::Failed
+        };
+        r.winner = winner;
+        self.rounds.insert(round, r.clone());
+        self.open_rounds.remove(&r.agent);
+
+        if forfeited > 0 {
+            Event::BidDepositForfeited.emit(json!({
+                "round": U64(round),
+                "agent": r.agent,
+                "amount": U128(forfeited),
+                "underwriters": r
+                    .bids
+                    .iter()
+                    .filter(|b| b.premium_bps.is_none())
+                    .map(|b| b.underwriter.clone())
+                    .collect::<Vec<_>>(),
+            }));
+            Promise::new(r.agent.clone())
+                .transfer(NearToken::from_yoctonear(forfeited))
+                .detach();
+        }
+        Event::RoundSettled.emit(json!({
+            "round": U64(round),
+            "agent": r.agent,
+            "status": r.status,
+            "winner": r.winner,
+            "limit": r.requested_limit,
+            "bids": U64(r.bids.len() as u64),
+            "revealed": U64(r.bids.iter().filter(|b| b.premium_bps.is_some()).count() as u64),
+        }));
+        r
+    }
+
+    /// Most `vault` could newly promise `agent` now (what a reveal or a
+    /// settlement checks the round's limit against).
+    pub fn get_bid_capacity(&self, vault: AccountId, agent: AccountId) -> U128 {
+        U128(self.bid_capacity(&vault, &agent))
     }
 
     /// Limits of `vault`'s revealed bids in rounds not yet settled.

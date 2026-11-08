@@ -581,3 +581,247 @@ fn locked_capital_is_not_offered_again() {
     let at = reveal_at(&c, r);
     reveal(&mut c, r, &uw(), 300, 1, at);
 }
+
+// ----- commit 5: settle_round ------------------------------------------------
+
+/// After the reveal deadline of a round opened at `T0`.
+pub fn settle_at(c: &crate::Recourse, r: RoundId) -> u64 {
+    c.get_round(r).unwrap().reveal_deadline.0 + 1
+}
+
+pub fn settle(c: &mut crate::Recourse, r: RoundId) -> BidRound {
+    let at = settle_at(c, r);
+    ctx(&stranger(), 0, at);
+    c.settle_round(r)
+}
+
+/// Three vaults bid `p1`, `p2`, `p3` (commit order uw, uw2, uw3) and reveal.
+fn three_bids(limit: u128, p1: u32, p2: u32, p3: u32) -> (crate::Recourse, RoundId) {
+    let mut c = market();
+    let r = open_round(&mut c, limit);
+    for (i, (u, p)) in [(uw(), p1), (uw2(), p2), (uw3(), p3)]
+        .into_iter()
+        .enumerate()
+    {
+        commit(&mut c, r, &u, p, i as u8, T0 + 1 + i as u64);
+    }
+    let at = reveal_at(&c, r);
+    for (i, (u, p)) in [(uw(), p1), (uw2(), p2), (uw3(), p3)]
+        .into_iter()
+        .enumerate()
+    {
+        reveal(&mut c, r, &u, p, i as u8, at);
+    }
+    (c, r)
+}
+
+#[test]
+fn the_lowest_premium_wins_and_its_coverage_is_bound() {
+    let (mut c, r) = three_bids(10 * ONE_NEAR, 400, 300, 350);
+    let done = settle(&mut c, r);
+    assert_eq!(done.status, RoundStatus::Settled);
+    assert_eq!(
+        done.winner,
+        Some(RoundWinner {
+            vault: uw2(),
+            premium_bps: 300
+        })
+    );
+    let cov = c.get_coverage(agent()).unwrap();
+    let at = settle_at(&c, r);
+    assert_eq!(cov.vault, uw2());
+    assert_eq!(cov.limit, U128(10 * ONE_NEAR));
+    assert_eq!(cov.premium_bps, 300);
+    assert_eq!(cov.bound_at, U64(at));
+    assert_eq!(cov.expires_at, U64(at + COVERAGE_TERM_NS));
+    assert_eq!(c.get_open_round(agent()), None);
+    for u in [uw(), uw2(), uw3()] {
+        assert_eq!(c.get_pending_limit(u), U128(0), "promises released");
+    }
+    let names: Vec<_> = events()
+        .iter()
+        .map(|e| e["event"].as_str().unwrap().to_string())
+        .collect();
+    assert!(names.contains(&"round_settled".to_string()));
+    assert!(names.contains(&"coverage_bound".to_string()));
+    assert!(c.solvency().ok);
+}
+
+#[test]
+fn a_tie_goes_to_the_earliest_commit() {
+    let (mut c, r) = three_bids(ONE_NEAR, 300, 300, 300);
+    assert_eq!(settle(&mut c, r).winner.unwrap().vault, uw());
+}
+
+#[test]
+fn won_coverage_prices_new_jobs() {
+    let (mut c, r) = three_bids(10 * ONE_NEAR, 400, 300, 350);
+    settle(&mut c, r);
+    let q = c
+        .quote_job(agent(), U128(ONE_NEAR), Some(U128(ONE_NEAR)))
+        .unwrap();
+    assert!(q.can_open, "{:?}", q.reason);
+    assert_eq!(q.coverage_vault, Some(uw2()));
+    assert_eq!(q.premium_bps, Some(300));
+}
+
+#[test]
+fn a_vault_without_capacity_at_settlement_cannot_win() {
+    let (mut c, r) = three_bids(10 * ONE_NEAR, 400, 300, 350);
+    // uw2's capital is locked elsewhere after it revealed.
+    let mut v = c.get_vault(uw2()).unwrap();
+    v.locked = v.capital;
+    c.vaults.insert(uw2(), v);
+    assert_eq!(
+        settle(&mut c, r).winner.unwrap().vault,
+        uw3(),
+        "next lowest"
+    );
+}
+
+#[test]
+fn a_bid_under_a_floor_that_rose_before_settlement_cannot_win() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    let floor = c.get_agent_score(agent()).unwrap().premium_floor_bps;
+    commit(&mut c, r, &uw(), floor, 1, T0 + 1);
+    commit(&mut c, r, &uw2(), floor + 500, 2, T0 + 2);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), floor, 1, at);
+    reveal(&mut c, r, &uw2(), floor + 500, 2, at);
+    let mut a = c.get_agent(agent()).unwrap();
+    a.stats.claims_upheld += 1; // an upheld claim lands meanwhile
+    c.agents.insert(agent(), a);
+    assert_eq!(settle(&mut c, r).winner.unwrap().vault, uw2());
+}
+
+#[test]
+fn an_unrevealed_commit_forfeits_its_deposit_to_the_agent() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    commit(&mut c, r, &uw(), 300, 1, T0 + 1);
+    commit(&mut c, r, &uw2(), 250, 2, T0 + 2); // never revealed
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), 300, 1, at);
+    assert_eq!(c.get_totals().bid_deposits, U128(BID_COMMIT_DEPOSIT));
+    let done = settle(&mut c, r);
+    assert_eq!(
+        done.winner.unwrap().vault,
+        uw(),
+        "an unrevealed bid cannot win"
+    );
+    assert_eq!(transfers(), vec![(agent(), BID_COMMIT_DEPOSIT)]);
+    assert_eq!(c.get_totals().bid_deposits, U128(0));
+    assert_eq!(done.bids[1].deposit, U128(0));
+    let names: Vec<_> = events()
+        .iter()
+        .map(|e| e["event"].as_str().unwrap().to_string())
+        .collect();
+    assert!(names.contains(&"bid_deposit_forfeited".to_string()));
+    assert!(c.solvency().ok);
+}
+
+#[test]
+fn a_round_without_a_valid_bid_fails_and_frees_the_agent() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    commit(&mut c, r, &uw(), 300, 1, T0 + 1); // never revealed
+    let done = settle(&mut c, r);
+    assert_eq!(done.status, RoundStatus::Failed);
+    assert_eq!(done.winner, None);
+    assert_eq!(c.get_coverage(agent()), None);
+    assert_eq!(c.get_open_round(agent()), None);
+    assert_eq!(transfers(), vec![(agent(), BID_COMMIT_DEPOSIT)]);
+    // the agent may ask again
+    ctx(&agent(), STORAGE_DEPOSIT, settle_at(&c, r));
+    assert_eq!(c.open_bond_request(U128(ONE_NEAR)), 1);
+}
+
+#[test]
+fn an_empty_round_fails_cleanly() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    let done = settle(&mut c, r);
+    assert_eq!(done.status, RoundStatus::Failed);
+    assert!(transfers().is_empty());
+}
+
+#[test]
+#[should_panic(expected = "round cannot be settled before the reveal deadline")]
+fn settling_during_reveals_fails() {
+    let (mut c, r) = three_bids(ONE_NEAR, 300, 310, 320);
+    let at = c.get_round(r).unwrap().reveal_deadline.0;
+    ctx(&stranger(), 0, at);
+    c.settle_round(r);
+}
+
+#[test]
+#[should_panic(expected = "round already settled")]
+fn a_round_settles_once() {
+    let (mut c, r) = three_bids(ONE_NEAR, 300, 310, 320);
+    settle(&mut c, r);
+    settle(&mut c, r);
+}
+
+#[test]
+fn settlement_replaces_older_coverage_without_touching_open_work() {
+    let mut c = ready(); // agent covered by uw at 200 bps (common fixture)
+    let job = open_job(&mut c);
+    ctx(&uw2(), STORAGE_DEPOSIT, T0);
+    c.create_vault();
+    ctx(&acc("lp9.near"), 100 * ONE_NEAR, T0);
+    c.deposit_vault(uw2(), None);
+    let r = open_round(&mut c, ONE_NEAR);
+    commit(&mut c, r, &uw2(), 250, 1, T0 + 1);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw2(), 250, 1, at);
+    settle(&mut c, r);
+    assert_eq!(c.get_coverage(agent()).unwrap().vault, uw2());
+    assert_eq!(
+        c.get_engagement(job).unwrap().vault,
+        uw(),
+        "open work keeps its vault"
+    );
+}
+
+#[test]
+fn settling_works_while_paused_so_deposits_are_never_stuck() {
+    let (mut c, r) = three_bids(ONE_NEAR, 300, 310, 320);
+    ctx(&owner(), 0, T0);
+    c.pause();
+    assert_eq!(settle(&mut c, r).status, RoundStatus::Settled);
+}
+
+#[test]
+fn the_agent_prepays_the_coverage_record_when_opening() {
+    let mut c = bonded();
+    let before = near_sdk::env::storage_usage();
+    open_round(&mut c, ONE_NEAR);
+    c.flush();
+    let round_bytes = near_sdk::env::storage_usage() - before;
+    let paid = STORAGE_DEPOSIT - transfers().iter().map(|t| t.1).sum::<u128>();
+    assert!(
+        paid >= crate::storage::storage_cost(round_bytes + COVERAGE_STORAGE_BYTES),
+        "round {round_bytes} B + coverage reserve"
+    );
+}
+
+#[test]
+fn bid_capacity_is_visible_to_bidders() {
+    let mut c = market();
+    let cap = c.get_bid_capacity(uw(), agent()).0;
+    assert_eq!(
+        cap,
+        crate::math::bps_floor(c.get_vault(uw()).unwrap().capital.0, 2_500)
+    );
+    let r = open_round(&mut c, ONE_NEAR);
+    commit(&mut c, r, &uw(), 300, 1, T0 + 1);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), 300, 1, at);
+    assert_eq!(
+        c.get_bid_capacity(uw(), acc("other.near")).0,
+        cap.min(c.get_vault(uw()).unwrap().capital.0 - ONE_NEAR),
+        "a pending promise is not offered again"
+    );
+    assert_eq!(c.get_bid_capacity(stranger(), agent()), U128(0));
+}

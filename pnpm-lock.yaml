@@ -87,6 +87,9 @@ importers:
 
   packages/sdk:
     dependencies:
+      '@noble/hashes':
+        specifier: 2.2.0
+        version: 2.2.0
       near-api-js:
         specifier: 7.4.0
         version: 7.4.0
@@ -132,7 +135,14 @@ importers:
         specifier: 7.4.0
         version: 7.4.0
 
-  services/underwriters: {}
+  services/underwriters:
+    dependencies:
+      '@recourse/sdk':
+        specifier: workspace:^
+        version: link:../../packages/sdk
+      near-api-js:
+        specifier: 7.4.0
+        version: 7.4.0
 
   services/worker-agent:
     dependencies:

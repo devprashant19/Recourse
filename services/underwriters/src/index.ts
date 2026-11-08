@@ -1,11 +1,14 @@
 /**
- * @recourse/underwriters
- *
- * Three personas (cautious, balanced, aggressive) sharing one commit-reveal bidder.
- *
- * Built in: Phase 4
- * Spec: phases/phase-04-underwriting-indexer-attacks.md
+ * @recourse/underwriters — three personas (cautious, balanced, aggressive)
+ * sharing one commit-reveal bidder. Prices come from a deterministic
+ * formula on the agent's on-chain record; an optional LLM only writes the
+ * explanation shown in the UI.
  */
 
-export const PLACEHOLDER = true;
-// TODO(Phase 4): implement.
+export * from "./chain.js";
+export * from "./state.js";
+export * from "./log.js";
+export * from "./bidder.js";
+export * from "./personas.js";
+export * from "./rationale.js";
+export * from "./sdk-chain.js";

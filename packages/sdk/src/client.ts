@@ -27,9 +27,11 @@ import type {
   EvmAddress,
   Hash,
   JobQuote,
+  BidRound,
   Payout,
   PayoutOutcome,
   PayoutStatus,
+  RoundId,
   Receipt,
   ReceiptInput,
   Roles,
@@ -50,6 +52,10 @@ import type {
 export const DEFAULT_GAS = 300_000_000_000_000n;
 /** Attached to register_agent / create_vault / bind_coverage; the unused part is refunded. */
 export const STORAGE_DEPOSIT = 100_000_000_000_000_000_000_000n; // 0.1 NEAR
+/** Contract's BID_COMMIT_DEPOSIT (0.05 NEAR), refunded on a valid reveal. */
+export const BID_COMMIT_DEPOSIT = 50_000_000_000_000_000_000_000n;
+/** Attached to commit_bid: the deposit plus storage for the bid; the unused storage part is refunded. */
+export const BID_COMMIT_ATTACH = BID_COMMIT_DEPOSIT + STORAGE_DEPOSIT;
 /** Attached to an Intents execute_payout: 0.00125 NEAR token registration + record storage; the rest is refunded. */
 export const INTENTS_EXECUTE_DEPOSIT = 10_000_000_000_000_000_000_000n; // 0.01 NEAR
 
@@ -85,6 +91,10 @@ export const METHODS = {
   list_payouts: { kind: "view", args: ["from_index", "limit"] },
   storage_balance_of: { kind: "view", args: ["account_id"] },
   storage_balance_bounds: { kind: "view", args: [] },
+  get_round: { kind: "view", args: ["round_id"] },
+  get_open_round: { kind: "view", args: ["agent"] },
+  get_pending_limit: { kind: "view", args: ["vault"] },
+  get_bid_capacity: { kind: "view", args: ["vault", "agent"] },
   // calls
   new: { kind: "call", args: ["config", "owner"] },
   pause: { kind: "call", args: [] },
@@ -126,6 +136,10 @@ export const METHODS = {
   storage_deposit: { kind: "call", args: ["account_id", "registration_only"] },
   storage_withdraw: { kind: "call", args: ["amount"] },
   ft_on_transfer: { kind: "call", args: ["sender_id", "amount", "msg"] },
+  open_bond_request: { kind: "call", args: ["limit"] },
+  commit_bid: { kind: "call", args: ["round", "commitment"] },
+  reveal_bid: { kind: "call", args: ["round", "premium_bps", "salt"] },
+  settle_round: { kind: "call", args: ["round"] },
 } as const satisfies Record<string, { kind: "view" | "call"; args: readonly string[] }>;
 
 export type MethodName = keyof typeof METHODS;
@@ -336,6 +350,23 @@ export class RecourseClient {
   getFtInFlight = () => this.view<U128>("get_ft_in_flight");
   storageBalanceOf = (account_id: AccountId) => this.view<StorageBalance | null>("storage_balance_of", { account_id });
   storageBalanceBounds = () => this.view<StorageBalanceBounds>("storage_balance_bounds");
+  // ----- underwriting market ------------------------------------------------
+
+  getRound = (round_id: RoundId) => this.view<BidRound | null>("get_round", { round_id });
+  getOpenRound = (agent: AccountId) => this.view<RoundId | null>("get_open_round", { agent });
+  getPendingLimit = (vault: AccountId) => this.view<U128>("get_pending_limit", { vault });
+  getBidCapacity = (vault: AccountId, agent: AccountId) =>
+    this.view<U128>("get_bid_capacity", { vault, agent });
+  /** Agent: ask underwriters to bid for coverage up to `limit` (attaches storage; rest refunded). */
+  openBondRequest = (limit: U128) => this.call<RoundId>("open_bond_request", { limit }, STORAGE_DEPOSIT);
+  /** Underwriter: sealed bid; attaches the commit deposit plus storage (rest refunded). */
+  commitBid = (round: RoundId, commitment: Hash) =>
+    this.call<void>("commit_bid", { round, commitment }, BID_COMMIT_ATTACH);
+  revealBid = (round: RoundId, premium_bps: number, salt: Hash) =>
+    this.call<void>("reveal_bid", { round, premium_bps, salt });
+  /** Anyone, after the reveal deadline. */
+  settleRound = (round: RoundId) => this.call<BidRound>("settle_round", { round });
+
   /** Token mode: prepay NEAR storage for USDC operations (NEP-145). */
   storageDeposit = (amount: bigint, account_id?: AccountId) =>
     this.call<StorageBalance>("storage_deposit", { account_id: account_id ?? null, registration_only: null }, amount);

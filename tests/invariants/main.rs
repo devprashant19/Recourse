@@ -169,6 +169,8 @@ struct World {
     refunds: u128,
     /// When a read last caught a transient deposit.
     last_transient: Option<u64>,
+    /// Sealed bids the model knows: (round, vault) -> (premium, salt).
+    sealed: HashMap<(RoundId, String), (u32, [u8; 32])>,
     /// NEAR the contract holds, by the model: deposits in, transfers out.
     held: u128,
     worker: TeeKey,
@@ -296,6 +298,7 @@ impl World {
             ft_in_flight: VecDeque::new(),
             refunds: 0,
             last_transient: None,
+            sealed: HashMap::new(),
             held: 0,
             worker: TeeKey::new(7),
             judge: TeeKey::new(9),
@@ -436,6 +439,13 @@ enum Op {
     ConfirmPayout(usize, u8),
     /// A keeper read that catches a rejected deposit still on the balance.
     TransientSync(u128),
+    /// Underwriting market: agent opens a round for a fraction of 30 NEAR.
+    OpenRound(usize, u16),
+    /// Vault bids on an agent's open round at floor + extra bps.
+    CommitBid(usize, usize, u16),
+    /// Vault reveals (true) or deliberately never reveals (false).
+    RevealBid(usize, usize, bool),
+    SettleRound(usize),
 }
 
 fn op() -> impl Strategy<Value = Op> {
@@ -467,6 +477,10 @@ fn op() -> impl Strategy<Value = Op> {
         1 => (0usize..6).prop_map(Op::ClaimOwed),
         3 => (pick.clone(), 0u8..3).prop_map(|(p, o)| Op::ConfirmPayout(p, o)),
         2 => (1u128..50).prop_map(|n| Op::TransientSync(n * NEAR)),
+        1 => (i.clone(), frac.clone()).prop_map(|(a, f)| Op::OpenRound(a, f)),
+        2 => (i.clone(), i.clone(), 0u16..500).prop_map(|(v, a, x)| Op::CommitBid(v, a, x)),
+        2 => (i.clone(), i.clone(), any::<bool>()).prop_map(|(v, a, h)| Op::RevealBid(v, a, h)),
+        2 => i.clone().prop_map(Op::SettleRound),
     ]
 }
 
@@ -799,6 +813,90 @@ impl World {
                     self.call(&who, 0, |c| c.claim_owed());
                 }
             }
+            Op::OpenRound(a, f) => {
+                let agent = acc(AGENTS[a]);
+                let bonded = self.view(|c| c.get_bond(agent.clone())).unwrap().amount.0 >= 5 * NEAR;
+                if bonded && self.view(|c| c.get_open_round(agent.clone())).is_none() {
+                    let limit = 1 + bps(30 * NEAR, f);
+                    self.call(&agent, STORAGE, |c| c.open_bond_request(U128(limit)));
+                }
+            }
+            Op::CommitBid(v, a, extra) => {
+                let vault = acc(VAULTS[v]);
+                let agent = acc(AGENTS[a]);
+                let Some(r) = self.view(|c| c.get_open_round(agent.clone())) else {
+                    return;
+                };
+                let round = self.view(|c| c.get_round(r)).unwrap();
+                let fresh = round.bids.iter().all(|b| b.underwriter != vault);
+                if round.phase(now) == RoundPhase::Committing && fresh {
+                    let floor = self
+                        .view(|c| c.get_agent_score(agent.clone()))
+                        .unwrap()
+                        .premium_floor_bps;
+                    let premium = floor + u32::from(extra);
+                    self.nonce += 1;
+                    let mut salt = [0u8; 32];
+                    salt[..8].copy_from_slice(&self.nonce.to_le_bytes());
+                    let h =
+                        recourse::underwriting::bid_commitment(premium, &HexBytes(salt), &vault);
+                    self.sealed
+                        .insert((r, VAULTS[v].to_string()), (premium, salt));
+                    self.call(
+                        &vault,
+                        recourse::underwriting::BID_COMMIT_DEPOSIT + STORAGE,
+                        |c| c.commit_bid(r, h),
+                    );
+                }
+            }
+            Op::RevealBid(v, a, honest) => {
+                let vault = acc(VAULTS[v]);
+                let agent = acc(AGENTS[a]);
+                let Some(r) = self.view(|c| c.get_open_round(agent.clone())) else {
+                    return;
+                };
+                let round = self.view(|c| c.get_round(r)).unwrap();
+                let Some(&(premium, salt)) = self.sealed.get(&(r, VAULTS[v].to_string())) else {
+                    return;
+                };
+                let unrevealed = round
+                    .bids
+                    .iter()
+                    .any(|b| b.underwriter == vault && b.premium_bps.is_none());
+                let floor = self
+                    .view(|c| c.get_agent_score(agent.clone()))
+                    .unwrap()
+                    .premium_floor_bps;
+                let cap = self
+                    .view(|c| c.get_bid_capacity(vault.clone(), agent.clone()))
+                    .0;
+                let valid = premium >= floor && round.requested_limit.0 <= cap;
+                if honest && unrevealed && valid && round.phase(now) == RoundPhase::Revealing {
+                    self.call(&vault, 0, |c| c.reveal_bid(r, premium, HexBytes(salt)));
+                }
+            }
+            Op::SettleRound(a) => {
+                let agent = acc(AGENTS[a]);
+                let Some(r) = self.view(|c| c.get_open_round(agent.clone())) else {
+                    return;
+                };
+                let round = self.view(|c| c.get_round(r)).unwrap();
+                if round.phase(now) == RoundPhase::Settleable {
+                    let done = self.call(&acc("anyone.near"), 0, |c| c.settle_round(r));
+                    if let Some(w) = done.winner {
+                        let cov = self.view(|c| c.get_coverage(agent.clone())).unwrap();
+                        assert_eq!(cov.vault, w.vault, "winner's coverage bound");
+                        assert_eq!(cov.premium_bps, w.premium_bps);
+                        let lowest = done
+                            .bids
+                            .iter()
+                            .filter_map(|b| b.premium_bps)
+                            .min()
+                            .unwrap();
+                        assert!(w.premium_bps >= lowest);
+                    }
+                }
+            }
             Op::TransientSync(_) if !self.ft => {}
             Op::TransientSync(x) => {
                 // What the contract guarantees: one read that catches a
@@ -1029,6 +1127,35 @@ impl World {
                 );
             }
         }
+        // Underwriting: deposits held and capital promised, from the rounds.
+        let mut pending: BTreeMap<String, u128> = BTreeMap::new();
+        for r in 0..c.get_counters().round {
+            let round = c.get_round(r).unwrap();
+            t.bid_deposits.0 += round.bids.iter().map(|b| b.deposit.0).sum::<u128>();
+            if round.status == RoundStatus::Open {
+                assert_eq!(
+                    c.get_open_round(round.agent.clone()),
+                    Some(r),
+                    "open round index"
+                );
+                for b in round.bids.iter().filter(|b| b.premium_bps.is_some()) {
+                    *pending.entry(b.underwriter.to_string()).or_default() +=
+                        round.requested_limit.0;
+                }
+            } else {
+                assert!(
+                    round.bids.iter().all(|b| b.deposit.0 == 0),
+                    "settled round holds no deposit"
+                );
+            }
+        }
+        for v in VAULTS {
+            assert_eq!(
+                c.get_pending_limit(acc(v)).0,
+                pending.get(v).copied().unwrap_or(0),
+                "pending limits of {v}"
+            );
+        }
         assert_eq!(c.get_totals(), t, "running totals drifted from the records");
 
         // I1: what the contract holds covers every liability. Money in flight
@@ -1163,6 +1290,11 @@ fn reach_every_path(ft: bool) {
         "claim_finalized",
         "slashed",
         "claim_timed_out",
+        "bond_request_opened",
+        "bid_committed",
+        "bid_revealed",
+        "round_settled",
+        "bid_deposit_forfeited",
     ]
     .iter()
     .chain(payouts)

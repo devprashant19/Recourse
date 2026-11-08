@@ -33,7 +33,7 @@ describe("SDK vs contract ABI", () => {
   }
 
   it("covers every public contract method except internals", () => {
-    const internal = new Set(["on_payout_transfer", "on_ft_paid", "on_ft_balance", "contract_source_metadata", "get_round", "remove_arbiter", "remove_keeper", "remove_signer", "is_arbiter", "is_keeper"]);
+    const internal = new Set(["on_payout_transfer", "on_ft_paid", "on_ft_balance", "contract_source_metadata", "remove_arbiter", "remove_keeper", "remove_signer", "is_arbiter", "is_keeper"]);
     const missing = [...byName.keys()].filter((n) => !(n in METHODS) && !internal.has(n));
     expect(missing).toEqual([]);
   });

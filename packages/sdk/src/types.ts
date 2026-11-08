@@ -23,6 +23,7 @@ export type Signature65 = string;
 export type AccountId = string;
 export type EngagementId = number;
 export type ClaimId = number;
+export type RoundId = number;
 
 export type BondAsset = "Native" | { Ft: AccountId };
 export type SignatureKind = "ProviderTee" | "Gateway";

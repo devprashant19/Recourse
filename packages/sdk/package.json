@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "near-api-js": "7.4.0"
+    "near-api-js": "7.4.0",
+    "@noble/hashes": "2.2.0"
   }
 }
