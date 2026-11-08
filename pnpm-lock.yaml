@@ -52,7 +52,11 @@ importers:
 
   packages/config: {}
 
-  packages/intents: {}
+  packages/intents:
+    dependencies:
+      '@noble/hashes':
+        specifier: 2.2.0
+        version: 2.2.0
 
   packages/jobs:
     dependencies:
