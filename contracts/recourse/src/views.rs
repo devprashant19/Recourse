@@ -159,6 +159,9 @@ impl Recourse {
             self.unattributed,
             self.owed_total,
             if ft { 0 } else { self.storage_balance_total },
+            // Commit deposits are NEAR: a liability of the money above only
+            // in native mode; in token mode `storage_ok` covers them.
+            if ft { 0 } else { t.bid_deposits.0 },
         ]
         .into_iter()
         .fold(0, |acc, x| add(acc, x, "liabilities"));
@@ -168,7 +171,8 @@ impl Recourse {
         // already part of the check above).
         let near_needed = u128::from(env::storage_usage())
             .saturating_mul(env::storage_byte_cost().as_yoctonear())
-            .saturating_add(self.storage_balance_total);
+            .saturating_add(self.storage_balance_total)
+            .saturating_add(t.bid_deposits.0);
         let storage_ok = env::account_balance().as_yoctonear() >= near_needed;
         Solvency {
             held: U128(held),
@@ -178,6 +182,7 @@ impl Recourse {
             escrow: t.escrow,
             claim_stakes: t.claim_stakes,
             pending_payouts: t.pending_payouts,
+            bid_deposits: t.bid_deposits,
             unattributed: U128(self.unattributed),
             owed: U128(self.owed_total),
             liabilities: U128(liabilities),

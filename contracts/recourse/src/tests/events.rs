@@ -50,6 +50,12 @@ fn event_names_are_snake_case_and_unique() {
         Event::StorageDeposit,
         Event::PaymentFailed,
         Event::OwedClaimed,
+        Event::UnattributedSynced,
+        Event::BondRequestOpened,
+        Event::BidCommitted,
+        Event::BidRevealed,
+        Event::RoundSettled,
+        Event::BidDepositForfeited,
     ];
     let mut names: Vec<_> = all.iter().map(|e| e.name()).collect();
     for n in &names {

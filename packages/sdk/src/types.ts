@@ -219,6 +219,32 @@ export interface Totals {
   escrow: U128;
   claim_stakes: U128;
   pending_payouts: U128;
+  /** Underwriting commit deposits held (yoctoNEAR). */
+  bid_deposits: U128;
+}
+
+export type RoundStatus = "Open" | "Settled" | "Failed";
+export type RoundPhase = "Committing" | "Revealing" | "Settleable" | "Closed";
+
+/** One sealed bid; `premium_bps` is set once revealed. */
+export interface Bid {
+  underwriter: AccountId;
+  commitment: Hash;
+  committed_at: U64;
+  deposit: U128;
+  premium_bps: number | null;
+}
+
+/** A sealed-bid underwriting round (`open_bond_request`). */
+export interface BidRound {
+  agent: AccountId;
+  requested_limit: U128;
+  opened_at: U64;
+  commit_deadline: U64;
+  reveal_deadline: U64;
+  bids: Bid[];
+  status: RoundStatus;
+  winner: { vault: AccountId; premium_bps: number } | null;
 }
 
 export interface Solvency extends Totals {

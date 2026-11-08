@@ -52,6 +52,11 @@ pub enum Event {
     PaymentFailed,
     OwedClaimed,
     UnattributedSynced,
+    BondRequestOpened,
+    BidCommitted,
+    BidRevealed,
+    RoundSettled,
+    BidDepositForfeited,
 }
 
 impl Event {
@@ -89,6 +94,11 @@ impl Event {
             Event::PaymentFailed => "payment_failed",
             Event::OwedClaimed => "owed_claimed",
             Event::UnattributedSynced => "unattributed_synced",
+            Event::BondRequestOpened => "bond_request_opened",
+            Event::BidCommitted => "bid_committed",
+            Event::BidRevealed => "bid_revealed",
+            Event::RoundSettled => "round_settled",
+            Event::BidDepositForfeited => "bid_deposit_forfeited",
         }
     }
 

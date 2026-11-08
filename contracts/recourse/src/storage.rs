@@ -84,6 +84,8 @@ impl Recourse {
         self.agent_exposure.flush();
         self.storage_balances.flush();
         self.owed.flush();
+        self.open_rounds.flush();
+        self.pending_limits.flush();
     }
 
     /// Charges the storage used since `before` against `available` and returns

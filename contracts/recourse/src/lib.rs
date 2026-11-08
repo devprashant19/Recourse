@@ -72,6 +72,8 @@ enum StorageKey {
     StorageBalances,
     Owed,
     UsedQuotes,
+    OpenRounds,
+    PendingLimits,
 }
 
 #[near(contract_state)]
@@ -139,6 +141,11 @@ pub struct Recourse {
     /// Block time of the first read that backs the current `unattributed`.
     /// A refund only matches a payout sent before it.
     unattributed_at: u64,
+    /// agent -> its open (unsettled) underwriting round; one at a time.
+    open_rounds: LookupMap<AccountId, RoundId>,
+    /// vault -> sum of the limits of its revealed bids in unsettled rounds,
+    /// so concurrent rounds cannot promise the same capital twice.
+    pending_limits: LookupMap<AccountId, u128>,
 }
 
 #[near]
@@ -184,6 +191,8 @@ impl Recourse {
             ft_epoch: 0,
             unattributed_obs: None,
             unattributed_at: 0,
+            open_rounds: LookupMap::new(StorageKey::OpenRounds),
+            pending_limits: LookupMap::new(StorageKey::PendingLimits),
         }
     }
 

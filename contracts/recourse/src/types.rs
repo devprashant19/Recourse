@@ -200,28 +200,83 @@ pub struct Coverage {
     pub expires_at: U64,
 }
 
+/// Stored state of a round. Whether it is committing, revealing or ready to
+/// settle follows from the block time (`BidRound::phase`).
 #[near(serializers = [json, borsh])]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RoundStatus {
-    Committing,
-    Revealing,
+    /// Accepting commits, then reveals, until settled.
+    Open,
+    /// A winner's coverage was written.
     Settled,
+    /// Settled with no valid, coverable bid.
     Failed,
 }
 
-/// Sealed-bid round for coverage. Defined now so the state layout is final;
-/// the methods that use it arrive in Phase 4.
+/// Where a round stands at a given time.
+#[near(serializers = [json])]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RoundPhase {
+    /// `now <= commit_deadline`: sealed bids accepted.
+    Committing,
+    /// `commit_deadline < now <= reveal_deadline`: bids revealed.
+    Revealing,
+    /// After the reveal deadline, not yet settled: anyone may settle.
+    Settleable,
+    /// Settled or failed.
+    Closed,
+}
+
+/// One underwriter's sealed bid in a round.
+#[near(serializers = [json, borsh])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Bid {
+    /// The vault's underwriter (vaults are keyed by their underwriter).
+    pub underwriter: AccountId,
+    /// `sha256(premium_bps (u32 BE) || salt (32 B) || underwriter)` (T12).
+    pub commitment: Hash,
+    pub committed_at: U64,
+    /// Commit deposit (yoctoNEAR) still held: refunded on a valid reveal,
+    /// forfeited to the round's agent if never revealed. 0 once returned.
+    pub deposit: U128,
+    /// Set by a valid reveal.
+    pub premium_bps: Option<u32>,
+}
+
+#[near(serializers = [json, borsh])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RoundWinner {
+    pub vault: AccountId,
+    pub premium_bps: u32,
+}
+
+/// Sealed-bid round for an agent's coverage (`open_bond_request`).
 #[near(serializers = [json, borsh])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BidRound {
     pub agent: AccountId,
     pub requested_limit: U128,
+    pub opened_at: U64,
     pub commit_deadline: U64,
     pub reveal_deadline: U64,
-    /// sha256(premium_bps || salt || underwriter) — commit-reveal blocks bid copying (T12).
-    pub commits: Vec<(AccountId, Hash)>,
-    pub reveals: Vec<(AccountId, u32)>,
+    /// In commit order, which is the tie-break (earliest wins).
+    pub bids: Vec<Bid>,
     pub status: RoundStatus,
+    pub winner: Option<RoundWinner>,
+}
+
+impl BidRound {
+    pub fn phase(&self, now: u64) -> RoundPhase {
+        if self.status != RoundStatus::Open {
+            RoundPhase::Closed
+        } else if now <= self.commit_deadline.0 {
+            RoundPhase::Committing
+        } else if now <= self.reveal_deadline.0 {
+            RoundPhase::Revealing
+        } else {
+            RoundPhase::Settleable
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -553,6 +608,9 @@ pub struct Totals {
     pub claim_stakes: U128,
     /// Payouts owed but not yet sent (status `Pending`).
     pub pending_payouts: U128,
+    /// Underwriting commit deposits held (always yoctoNEAR, whatever the
+    /// bond asset): refunded on reveal or forfeited to the round's agent.
+    pub bid_deposits: U128,
 }
 
 /// Both sides of invariant I1, as returned by `solvency()`.
@@ -568,6 +626,8 @@ pub struct Solvency {
     pub escrow: U128,
     pub claim_stakes: U128,
     pub pending_payouts: U128,
+    /// Underwriting commit deposits held (yoctoNEAR).
+    pub bid_deposits: U128,
     pub unattributed: U128,
     /// Owed after refused token transfers (`claim_owed`).
     pub owed: U128,

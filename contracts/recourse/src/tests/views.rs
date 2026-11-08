@@ -44,14 +44,15 @@ fn solvency_sums_every_bucket_and_flags_a_shortfall() {
         escrow: U128(3),
         claim_stakes: U128(4),
         pending_payouts: U128(5),
+        bid_deposits: U128(7),
     };
     c.unattributed = 6;
     let s = c.solvency();
-    assert_eq!(s.liabilities, U128(21));
+    assert_eq!(s.liabilities, U128(28));
     assert!(s.ok);
 
     ctx_with_balance(&stranger(), 0, T0, 20);
     let s = c.solvency();
-    assert!(!s.ok, "20 yocto cannot cover 21 yocto of liabilities");
+    assert!(!s.ok, "20 yocto cannot cover 28 yocto of liabilities");
     assert_eq!(s.surplus, U128(0));
 }
