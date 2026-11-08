@@ -50,7 +50,8 @@
     "spike:c": "tsx spikes/spike-c-sandbox/hello.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r typecheck",
     "lint": "eslint .",
-    "demo:keep": "tsx demo/run-demo.ts --mode sandbox --keep"
+    "demo:keep": "tsx demo/run-demo.ts --mode sandbox --keep",
+    "export-receipts": "tsx scripts/export-receipts.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.49.1",

@@ -159,8 +159,11 @@ export async function executePendingPayout(
   );
 
   // Strictly validate the returned quote against the request and floors
+  // Judge the deposit deadline against chain time, the clock the contract and
+  // every other check uses — not this machine's wall clock.
   checkQuote(quoteReq, received, {
     minAmountOutFloor: options.minAmountOutFloor ?? 1n,
+    now: new Date(Number((await chain.now()) / 1_000_000n)),
   });
 
   const depositAddress = received.response.quote.depositAddress;

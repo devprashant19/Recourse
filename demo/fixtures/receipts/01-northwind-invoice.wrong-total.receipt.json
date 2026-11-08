@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "engagement_id": 1005,
+  "model_id": "deepseek-ai/DeepSeek-V3.1",
+  "request_hash": "2b039f39f67c4c967233e4060cdf61537384eef81a9ef32ca91d2ec8fb10d896",
+  "response_hash": "5b66a8aa4c7a2f0e05297c8ff9bebeb2e111cd63b224da1a10df89f94b531d46",
+  "signature": "0xc238ce029a2d47954bc4e751b0cd2dcf06e73d6ad1d52d27300a32963948308f0ba22db30c33621027e14a9200901ba2843e3e73c09753169da6b9c1018d62a11b",
+  "signing_address": "0xa8559cb8cf1603c3d43d75c9cf9b449e54115b61",
+  "signature_kind": "provider_tee",
+  "attestation": {
+    "nonce": "27b2f195415c72e6572e6910b3cf827e0595cd894c8f0ca281b8230aaae7c567",
+    "report_hash": "428c04e6091b2469490176eb697336173c9df286420258820e6f8b634058dace",
+    "verified_at": "2026-11-08T13:10:41.574Z",
+    "verifier": "dev-fixture: no Intel signature, no TEE"
+  },
+  "artifacts": {
+    "request_uri": "artifact://sha256/2b039f39f67c4c967233e4060cdf61537384eef81a9ef32ca91d2ec8fb10d896",
+    "response_uri": "artifact://sha256/5b66a8aa4c7a2f0e05297c8ff9bebeb2e111cd63b224da1a10df89f94b531d46"
+  }
+}

@@ -4,6 +4,7 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { buildTerms, type JobTerms, type Weights } from "./terms.js";
 import type { Extraction } from "./extraction.js";
@@ -23,7 +24,7 @@ export interface Catalog {
   documents: CatalogEntry[];
 }
 
-export const DEFAULT_DOCUMENTS_DIR = new URL("../../../demo/documents/", import.meta.url).pathname;
+export const DEFAULT_DOCUMENTS_DIR = fileURLToPath(new URL("../../../demo/documents/", import.meta.url));
 
 export function loadCatalog(dir: string = DEFAULT_DOCUMENTS_DIR): Catalog {
   const read = (f: string) => new Uint8Array(readFileSync(join(dir, f)));

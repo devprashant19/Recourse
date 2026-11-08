@@ -4,6 +4,7 @@
  * With only the dev set present this runs on DEV fixtures (no TEE) — see
  * demo/fixtures/README.md.
  */
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { selectBackend } from "@recourse/adapters";
@@ -21,7 +22,7 @@ import { AGENT, engagement, FakeChain } from "../../worker-agent/test/fakes.js";
 import { Arbiter, MemoryArbiterState } from "../src/arbiter.js";
 import { FakeArbiterChain } from "./fixtures.js";
 
-const FIXTURES = new URL("../../../demo/fixtures/", import.meta.url).pathname;
+const FIXTURES = fileURLToPath(new URL("../../../demo/fixtures/", import.meta.url));
 const documents = new CatalogDocumentSource();
 
 function backend() {
