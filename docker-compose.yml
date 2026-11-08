@@ -22,7 +22,7 @@ services:
       HOSTED_RESET_MINUTES: ${HOSTED_RESET_MINUTES:-60}
       HOSTED_SEED: ${HOSTED_SEED:-1}
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8080}:8080"
     volumes:
       - stack-data:/w/.data
     restart: unless-stopped
@@ -37,7 +37,7 @@ services:
       NEXT_PUBLIC_EXPLORER_TX: ${EXPLORER_TX:-}
       NEXT_TELEMETRY_DISABLED: "1"
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     restart: unless-stopped
 
   # ----- live testnet (profile: testnet) ---------------------------------------

@@ -117,7 +117,15 @@ export class Ingester {
     const txs: { hash: string; signer_id: string }[] = [];
     for (const ch of b.chunks) {
       if (ch.height_included !== b.header.height) continue; // chunk carried over, already seen
-      const chunk = await this.o.rpc.chunk(ch.chunk_hash);
+      let chunk: RpcChunk;
+      try {
+        chunk = await this.o.rpc.chunk(ch.chunk_hash);
+      } catch (e) {
+        // Genesis and the blocks the sandbox synthesises for `fast_forward` have no
+        // stored chunk (and no transactions). Anything else is a real error.
+        if (/UNKNOWN_CHUNK|UNKNOWN_BLOCK|DB Not Found|chunk producer/i.test(String(e))) continue;
+        throw e;
+      }
       for (const t of chunk.transactions) if (this.watch.has(t.receiver_id)) txs.push(t);
     }
     const found: { receipt_id: string; tx_hash: string; logs: string[] }[] = [];

@@ -58,6 +58,8 @@ function fakeRpc() {
       return { header: { height: b.height, hash: b.hash, prev_hash: b.prev, timestamp_nanosec: String(b.height * 1e9) }, chunks: [{ chunk_hash: `c-${b.hash}`, height_included: b.height }] };
     },
     async chunk(id: string) {
+      // Like genesis or a fast_forward block on the real sandbox: the chunk is not stored.
+      if (id === "c-h1") throw new Error('chunk: UNKNOWN_BLOCK "DB Not Found Error: chunk producer for block h1 shard 0"');
       const b = byHash.get(id.slice(2))!;
       return { transactions: b.txs.map((t) => ({ hash: t, signer_id: "signer.near", receiver_id: txs[t]!.receiver })) };
     },
