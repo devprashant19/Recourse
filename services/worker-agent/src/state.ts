@@ -7,7 +7,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-export type JobStatus = "accepted" | "submitted" | "skipped" | "failed";
+export type JobStatus = "accepted" | "submitted" | "closed" | "skipped" | "failed";
 
 export interface JobRecord {
   status: JobStatus;

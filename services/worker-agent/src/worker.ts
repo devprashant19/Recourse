@@ -82,8 +82,10 @@ export class Worker {
       } else if (e.status === "Open" && prior?.status === "accepted") {
         await this.work(id, e);
       } else if (e.status !== "Open" || prior) {
-        // Delivered by a previous run, cancelled, expired or claimed: nothing left to do.
-        if (prior?.status === "accepted") this.record(id, { status: "submitted", reason: `on-chain status ${e.status}` });
+        // Delivered by a previous run, or the job ended without us: nothing left to do.
+        if (prior?.status === "accepted") {
+          this.record(id, { status: e.status === "Delivered" ? "submitted" : "closed", reason: `on-chain status ${e.status}` });
+        }
       }
     } catch (err) {
       this.record(id, { status: "failed", reason: (err as Error).message });

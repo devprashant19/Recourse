@@ -205,7 +205,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 9. `feat(worker): implement TEE-backed extraction and receipt submission`
 
-- **Commit:** (this commit)
+- **Commit:** `184606e`
 - **Did:** `performExtraction`: builds the request once (system prompt + schema and document as quoted
   data, `temperature: 0`, `response_format: json_object`), runs the full `attestedCompletion` flow
   (fresh-nonce attestation, raw bytes, signature checked against verified signers), stores request,
@@ -224,6 +224,26 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 - **Ran:** `vitest run services/worker-agent packages/receipts` (80 passed), `tsc --noEmit`, `eslint` — clean.
 - **Evidence:** unit-tested. The live path (`SdkWorkerChain` + NEAR AI Cloud) is exercised in the
   sandbox scenarios and the testnet step.
+
+### 10. `feat(worker): add configurable sabotage modes and admin controls`
+
+- **Commit:** (this commit)
+- **Did:** `SabotageController` with the five modes; `wrong_total` and `hallucinate` append an
+  instruction to the **model prompt**, so the TEE honestly signs the bad instruction into the request
+  bytes (the receipt shows it — nothing is forged); `late` only works once the deadline has passed (the
+  worker then declines to submit, as the contract would refuse); `silent` never calls the model. Mode
+  changes are refused in mainnet and for unknown names. Admin server: `GET|POST /admin/sabotage`,
+  `GET /health`; **bound to 127.0.0.1**, bearer token compared in constant time (SHA-256 both sides,
+  `timingSafeEqual`), 1 KB body cap, generic errors, `Cache-Control: no-store`; config already refuses
+  to enable it in mainnet and requires a ≥32-char token. Job records gain a `closed` status for jobs
+  that ended on-chain without delivery.
+- **Files:** `services/worker-agent/src/{sabotage,admin,main,worker,state,index}.ts`, `test/sabotage.test.ts`
+- **Tests:** 12 (each of the five modes end to end through the worker — output, signed request text,
+  submission or not; only two modes alter the prompt; mainnet refusal; unknown names; loopback-only
+  bind; no/wrong token → 401; set/read with token, bad name / bad JSON / oversized body → 400, wrong
+  method → 405; constant-time token check).
+- **Ran:** `vitest run services/worker-agent` (31 passed), `tsc --noEmit`, `eslint` — clean.
+- **Evidence:** unit-tested (TEE double obeys the injected instruction, as a real model is expected to).
 
 ---
 

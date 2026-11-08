@@ -17,6 +17,7 @@ import { FileArtifactStore } from "@recourse/receipts/file-store";
 import type { WorkerConfig } from "./config.js";
 import { CatalogDocumentSource } from "./documents.js";
 import { performExtraction } from "./extract.js";
+import { SabotageController, shouldWorkNow } from "./sabotage.js";
 import { jsonLogger } from "./log.js";
 import { FileReceiptRegistry } from "./registry.js";
 import { SdkWorkerChain } from "./sdk-chain.js";
@@ -34,7 +35,7 @@ export function liveBackend(cfg: WorkerConfig): ModelBackend {
   return { client: new LiveNearAiClient({ apiKey: cfg.nearAiKey }), verifier: new DcapQuoteVerifier() };
 }
 
-export function buildWorker(cfg: WorkerConfig, backend: ModelBackend, instruction?: () => string | undefined) {
+export function buildWorker(cfg: WorkerConfig, backend: ModelBackend, sabotage: SabotageController = new SabotageController(cfg.mode)) {
   const log = jsonLogger("worker-agent");
   const chain = new SdkWorkerChain(cfg);
   const store = new FileArtifactStore(cfg.artifactDir);
@@ -45,8 +46,10 @@ export function buildWorker(cfg: WorkerConfig, backend: ModelBackend, instructio
     state: new FileStateStore(cfg.stateFile),
     log,
     agentId: cfg.agentAccountId,
-    perform: (id, e, inputs) =>
-      performExtraction({ ...backend, store, registry, chain, log, model: cfg.model, ...(instruction ? { instruction } : {}) }, id, e, inputs),
+    perform: async (id, e, inputs) => {
+      if (!shouldWorkNow(sabotage.value, await chain.now(), BigInt(e.deadline))) return null;
+      return performExtraction({ ...backend, store, registry, chain, log, model: cfg.model, instruction: () => sabotage.instruction() }, id, e, inputs);
+    },
   });
-  return { worker, log };
+  return { worker, log, sabotage };
 }

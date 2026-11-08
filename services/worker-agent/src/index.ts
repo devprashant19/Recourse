@@ -14,3 +14,5 @@ export * from "./extract.js";
 export * from "./registry.js";
 export * from "./sdk-chain.js";
 export * from "./main.js";
+export * from "./sabotage.js";
+export * from "./admin.js";
