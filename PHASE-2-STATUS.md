@@ -26,7 +26,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 1. `feat(receipts): establish receipt package and core interfaces`
 
-- **Commit:** (this commit)
+- **Commit:** `7d8e95a`
 - **Did:** the receipt data model exactly as spec section 2 lists it (`version, engagement_id,
   model_id, request_hash, response_hash, signature, signing_address, signature_kind, attestation {
   nonce, report_hash, verified_at, verifier }, artifacts { request_uri, response_uri }`), plus the
@@ -43,6 +43,25 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   byte equality).
 - **Ran:** `vitest run packages/receipts` (6 passed), `tsc --noEmit`, `tsc` build, `eslint` — clean.
 - **Evidence:** unit-tested.
+
+### 2. `feat(receipts): implement nonce-bound TEE attestation`
+
+- **Commit:** (this commit)
+- **Did:** `newNonce()` — 32 bytes from the platform CSPRNG (`crypto.getRandomValues`), 64 lowercase
+  hex chars; `fetchAttestation()` generates the nonce *before* calling, keeps the exact report bytes
+  and their SHA-256; `LiveNearAiClient.attestationReport` sends `model`, `provider=near`,
+  `signing_algo=ecdsa`, `nonce` and `x-no-aliasing: true`; non-2xx becomes `NearAiHttpError` with a
+  truncated body and never the key. `parseAttestationReport` is strict: UTF-8 JSON object, non-empty
+  `model_attestations`, `0x` 40-hex signer (lowercased), `ecdsa` only, hex quote. `checkReportData`
+  ports NEAR's binding rule (`report_data[0..32]` = zero-padded signer, `[32..64]` = raw nonce;
+  `nearai-cloud-verifier` `checkReportData`, Apache-2.0). The live client also covers the completion
+  (raw bytes, `Accept-Encoding: identity`) and signature endpoints used next.
+- **Files:** `packages/receipts/src/{attestation,client,index}.ts`, `test/{attestation.test,helpers}.ts`
+- **Tests:** 11 (nonce freshness/format over 200 draws; exact query params and header; HTTP error
+  without key leakage; key required; nonce-before-call and byte/hash retention; six malformed-report
+  rejections; signer normalisation; binding accepted, wrong nonce, wrong signer, short report_data).
+- **Ran:** `vitest run packages/receipts` (17 passed), `tsc --noEmit`, `eslint` — clean.
+- **Evidence:** unit-tested (HTTP mocked). Not yet run against the live endpoint (no key).
 
 ---
 

@@ -16,3 +16,5 @@
 
 export * from "./types.js";
 export * from "./bytes.js";
+export * from "./attestation.js";
+export * from "./client.js";
