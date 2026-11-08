@@ -72,7 +72,20 @@ export interface SeededAccount {
   privateKey: string;
 }
 
-export type SeededAccounts = Record<"agent" | "underwriter" | "lp" | "client" | "keeper" | "arbiter" | "stranger", SeededAccount>;
+export type SeededRole =
+  | "agent"
+  /** Bonded, registered, no coverage and no history — for the market scenario and adversarial tests. */
+  | "agent2"
+  | "underwriter"
+  | "underwriter2"
+  | "underwriter3"
+  | "lp"
+  | "client"
+  | "keeper"
+  | "arbiter"
+  | "stranger";
+
+export type SeededAccounts = Record<SeededRole, SeededAccount>;
 
 function path(net: Network, what: string): string {
   return join(DATA_DIR, `${net}-${what}.json`);
@@ -120,8 +133,8 @@ export async function fastForward(net: Network, blocks: number): Promise<void> {
  * final block can lag the new head by more than that, so skip in small steps
  * and wait for finality to catch up before returning.
  */
-export async function skipPast(net: Network, p: JsonRpcProvider, targetNs: bigint): Promise<void> {
-  while ((await chainNow(p)) <= targetNs) await fastForward(net, 50);
+export async function skipPast(net: Network, p: JsonRpcProvider, targetNs: bigint, stepBlocks = 50): Promise<void> {
+  while ((await chainNow(p)) <= targetNs) await fastForward(net, stepBlocks);
   for (let i = 0; i < 60; i++) {
     const [head, fin] = await Promise.all([
       p.viewBlock({ finality: "optimistic" }),

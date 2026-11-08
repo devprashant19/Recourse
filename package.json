@@ -38,6 +38,8 @@
     "scenario:03": "tsx demo/scenarios/03-no-delivery.ts",
     "scenario:04": "tsx demo/scenarios/04-bogus-claim.ts",
     "scenario:05": "tsx demo/scenarios/05-appeal.ts",
+    "scenario:06": "tsx demo/scenarios/06-attacks.ts",
+    "scenario:07": "tsx demo/scenarios/07-underwriting-market.ts",
     "record-fixtures": "tsx scripts/record-fixtures.ts",
     "verify-receipt": "tsx scripts/verify-receipt.ts",
     "rerun-verdict": "tsx services/arbiter/src/rerun-verdict.ts",
@@ -47,7 +49,8 @@
     "spike:b": "tsx spikes/spike-b-oneclick/quote.ts",
     "spike:c": "tsx spikes/spike-c-sandbox/hello.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r typecheck",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "demo:keep": "tsx demo/run-demo.ts --mode sandbox --keep"
   },
   "devDependencies": {
     "@playwright/test": "1.49.1",

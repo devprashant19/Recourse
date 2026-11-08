@@ -2,7 +2,7 @@
  * Deploys and initialises the contract in ONE transaction, so no one can call
  * `new()` in between and make themselves owner.
  *
- *   pnpm build:contract:dev
+ *   pnpm build:contract:dev                # or use the prebuilt contracts/recourse/res/recourse.wasm
  *   pnpm run deploy --network sandbox      # NEAR_SANDBOX_HOME=<sandbox home>
  *   pnpm run deploy --network testnet      # OWNER_ACCOUNT_ID / OWNER_PRIVATE_KEY
  *
@@ -11,86 +11,39 @@
  * The contract goes to `recourse.<owner>` (or --contract-id, a sub-account of
  * the owner) with NO access key: once deployed, nobody — including the owner —
  * can redeploy it or move its funds outside the contract's own methods (T16).
- * The config is the spec's sandbox/testnet column.
+ * The config is the spec's column for the network.
  *
  * Built in: Phase 1. Spec: phases/phase-01-contract-core.md section 2.
+ * The logic lives in scripts/lib/setup.ts, shared with `pnpm demo` and the judge.
  */
 
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-
-import { actions } from "near-api-js";
-
-import { RecourseClient } from "../packages/sdk/src/index.js";
-import { getRecourseConfig } from "../packages/config/src/index.js";
-import { arg, network, ONE_NEAR, ownerAccount, provider, save } from "./lib/near.js";
-
-const DEFAULT_WASM = "target/near/recourse/recourse.wasm";
-/** Covers the code's storage (~0.4 MB at 1e19 yocto/byte) plus a buffer for contract-paid records. */
-const CONTRACT_FUNDING = 8n * ONE_NEAR;
-const INIT_GAS = 100_000_000_000_000n;
+import { arg, network, ownerAccount, provider } from "./lib/near.js";
+import { deployContract } from "./lib/setup.js";
 
 async function main() {
   const net = network();
   const p = provider(net);
   const owner = ownerAccount(net, p);
-  const contractId = arg("contract-id") ?? `recourse.${owner.accountId}`;
-  if (!contractId.endsWith(`.${owner.accountId}`)) {
-    throw new Error(`contract id must be a sub-account of the owner (${owner.accountId})`);
-  }
-  const wasmPath = arg("wasm") ?? DEFAULT_WASM;
-  const wasm = readFileSync(wasmPath);
-  const sha = createHash("sha256").update(wasm).digest("hex");
-
   const assetArg = arg("asset") ?? process.env.RECOURSE_BOND_ASSET;
   const bondAsset = assetArg === "ft" || assetArg === "usdc" ? "Ft" : assetArg === "native" ? "Native" : undefined;
-  const usdcTokenId = arg("usdc-id") ?? process.env.USDC_TOKEN_ID;
-  const councilId = arg("council-id") ?? process.env.COUNCIL_DAO_ID;
-
-  const cfg = getRecourseConfig({
-    network: net,
-    bondAsset,
-    usdcContractId: usdcTokenId,
-    councilDaoId: councilId,
-  });
 
   console.log(`network   ${net}`);
   console.log(`owner     ${owner.accountId}`);
-  console.log(`contract  ${contractId}`);
-  console.log(`bond_asset ${JSON.stringify(cfg.bond_asset)}`);
-  console.log(`council   ${cfg.council ?? "none"}`);
-  console.log(`wasm      ${wasmPath} (${wasm.length} bytes, sha256 ${sha})`);
-
-  await owner.signAndSendTransaction({
-    receiverId: contractId,
-    actions: [
-      actions.createAccount(),
-      actions.transfer(CONTRACT_FUNDING),
-      actions.deployContract(new Uint8Array(wasm)),
-      actions.functionCall(
-        "new",
-        { config: cfg, owner: owner.accountId },
-        INIT_GAS,
-        0n,
-      ),
-    ],
+  const dep = await deployContract({
+    net,
+    p,
+    owner,
+    contractId: arg("contract-id"),
+    wasmPath: arg("wasm"),
+    bondAsset,
+    usdcContractId: arg("usdc-id") ?? process.env.USDC_TOKEN_ID,
+    councilId: arg("council-id") ?? process.env.COUNCIL_DAO_ID ?? null,
+    log: console.log,
   });
-
-  const c = new RecourseClient(contractId, p);
-  const onChainCfg = await c.getConfig();
-  const roles = await c.getRoles();
-  if (roles.owner !== owner.accountId) throw new Error("owner mismatch after init");
-  const s = await c.solvency();
-  console.log(`initialised: min_bond ${onChainCfg.min_bond}, claim_window ${onChainCfg.claim_window} ns, solvency ok=${s.ok}`);
-
-  save(net, "deployment", {
-    network: net,
-    contractId,
-    owner: owner.accountId,
-    wasmSha256: sha,
-    config: onChainCfg,
-    deployedAt: new Date().toISOString(),
-  });
+  const cfg = dep.config as { min_bond: string; claim_window: string; council: string | null; bond_asset: unknown };
+  console.log(`contract  ${dep.contractId}`);
+  console.log(`bond_asset ${JSON.stringify(cfg.bond_asset)}  council ${cfg.council ?? "none"}`);
+  console.log(`initialised: min_bond ${cfg.min_bond}, claim_window ${cfg.claim_window} ns, wasm sha256 ${dep.wasmSha256}`);
   console.log(`wrote .data/${net}-deployment.json`);
 }
 
