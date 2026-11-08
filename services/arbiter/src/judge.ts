@@ -88,7 +88,7 @@ export async function judge(d: JudgeDeps, c: CaseFile): Promise<Judgement> {
     engagementId: c.claimId,
     request: verdictRequest(d.model, c),
   });
-  const verdict = checkVerdict(out.completion.content, { weights: c.inputs.terms.weights, documentText: c.documentText });
+  const verdict = checkVerdict(out.completion.content, { weights: c.inputs.terms.weights, documentText: c.documentText, agentOutput: c.agentOutput });
   const award = verdict.upheld ? awardAmount(BigInt(c.engagement.liability_cap), verdict.award_bps, BigInt(c.claim.amount)) : 0n;
   if (verdict.upheld && award === 0n) throw new Error("upheld verdict rounds to a zero award; the contract would refuse it");
 

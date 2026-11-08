@@ -35,7 +35,19 @@ const schema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8")) as object;
 const validateShape = new Ajv({ allErrors: true, strict: true }).compile(schema);
 
 /** Parses and checks a verdict; throws listing every problem. */
-export function checkVerdict(raw: unknown, ctx: { weights: Weights; documentText: string }): Verdict {
+export interface VerdictContext {
+  weights: Weights;
+  documentText: string;
+  /** The agent's delivered JSON, from the signed response. */
+  agentOutput: string;
+}
+
+/** Case- and separator-insensitive form used to check a value is in the document. */
+export function normalise(s: string): string {
+  return s.toLowerCase().replace(/,/g, "").replace(/\s+/g, " ");
+}
+
+export function checkVerdict(raw: unknown, ctx: VerdictContext): Verdict {
   const v = typeof raw === "string" ? parseJson(raw) : raw;
   if (!validateShape(v)) {
     const msg = (validateShape.errors ?? []).map((e) => `${e.instancePath || "/"} ${e.message}`).join("; ");
@@ -48,6 +60,28 @@ export function checkVerdict(raw: unknown, ctx: { weights: Weights; documentText
   const expected = Object.keys(ctx.weights).sort();
   if (new Set(fields).size !== fields.length) problems.push("a field has more than one finding");
   if ([...fields].sort().join(",") !== expected.join(",")) problems.push(`findings must cover exactly: ${expected.join(", ")}`);
+
+  // Facts the code knows, so the model cannot be talked out of them:
+  //  - what the agent said is in its signed output;
+  //  - "correct" means the agent said what the document says;
+  //  - anything the model claims the document says must be in the document.
+  let agent: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = JSON.parse(ctx.agentOutput);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) agent = parsed as Record<string, unknown>;
+  } catch {
+    // An agent output that is not JSON leaves every field unstated (null).
+  }
+  const doc = normalise(ctx.documentText);
+  for (const f of verdict.findings) {
+    const said = agent[f.field];
+    const actual = typeof said === "string" ? said : said === null || said === undefined ? null : JSON.stringify(said);
+    if (f.agent_said !== actual) problems.push(`finding for ${f.field} misstates what the agent said`);
+    if (f.correct !== (f.agent_said === f.document_says)) problems.push(`finding for ${f.field} marks correct inconsistently`);
+    if (f.document_says !== null && !doc.includes(normalise(f.document_says))) {
+      problems.push(`finding for ${f.field} claims the document says something it does not`);
+    }
+  }
 
   const wrong = verdict.findings.filter((f) => !f.correct);
   for (const f of wrong) {

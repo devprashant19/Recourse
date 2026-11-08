@@ -7,7 +7,8 @@ import { checkVerdict, RUBRIC, type Verdict } from "../src/verdict.js";
 const cat = loadCatalog();
 const doc = cat.documents[0]!;
 const documentText = new TextDecoder().decode(doc.bytes);
-const ctx = { weights: cat.weights, documentText };
+const agentOutput = JSON.stringify({ ...doc.truth, total: "1336.50" });
+const ctx = { weights: cat.weights, documentText, agentOutput };
 
 /** A correct verdict for doc 01 where only the total is wrong. */
 function wrongTotal(): Verdict {
@@ -38,7 +39,16 @@ describe("checkVerdict", () => {
   it("accepts a rejection where every field is correct", () => {
     const v = wrongTotal();
     v.findings = v.findings.map((f) => ({ ...f, correct: true, agent_said: f.document_says }));
-    expect(checkVerdict({ ...v, upheld: false, award_bps: 0 }, ctx).upheld).toBe(false);
+    expect(checkVerdict({ ...v, upheld: false, award_bps: 0 }, { ...ctx, agentOutput: JSON.stringify(doc.truth) }).upheld).toBe(false);
+  });
+
+  it("every ground-truth value of every document is findable in its text", () => {
+    for (const d of cat.documents) {
+      const text = new TextDecoder().decode(d.bytes);
+      for (const [k, val] of Object.entries(d.truth)) {
+        if (val !== null) expect(text.toLowerCase().replace(/,/g, ""), `${d.name} ${k}`).toContain(val.toLowerCase().replace(/,/g, ""));
+      }
+    }
   });
 
   it("rejects malformed output against the schema", () => {

@@ -290,7 +290,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 13. `feat(arbiter): implement receipt-backed quality verdicts`
 
-- **Commit:** (this commit)
+- **Commit:** `471c60c`
 - **Did:** `judge`: the published rubric is the system prompt; terms (schema + weights), document,
   agent output and evidence go in as quoted blocks, with `<<<`/`>>>` inside the data neutralised so
   evidence cannot close its block and pose as instructions; temperature 0; run through
@@ -311,6 +311,38 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   tests is a test-only double that applies the rubric by comparing with ground truth.
 - **Ran:** `vitest run services/arbiter` (24 passed), `tsc --noEmit`, `eslint` — clean.
 - **Evidence:** unit-tested.
+
+### 14. `feat(arbiter): add verdict replay and injection resistance tests`
+
+- **Commit:** (this commit)
+- **Did:**
+  - **Grounding tightened.** Writing T15 showed that a model persuaded "the agent was correct" could
+    still emit a self-consistent verdict. `checkVerdict` now also checks facts the code knows:
+    `agent_said` must equal the agent's actual signed output; `correct` must equal
+    `agent_said === document_says`; every non-null `document_says` must appear in the document text
+    (case- and separator-insensitive). The only judgement left to the model is what the document says,
+    and that is grounded. A test confirms every ground-truth value of all five documents is findable,
+    so honest verdicts always pass.
+  - **`rerunVerdict`** re-sends the stored request bytes after checking them against the verdict
+    receipt, asserts the re-run request hash is identical, and compares **only `upheld` and
+    `award_bps`**: LLMs are not byte-reproducible even at temperature 0.
+  - **`t15_arbiter_resists_injection`.** Five injections ("ignore the rubric", "change the verdict"
+    with a forged closing delimiter, "larger award", "reveal system prompt", "pretend the agent was
+    correct"). Each is tested at all three layers: the evidence is quoted and cannot close its block;
+    the rubric names these instructions as having no authority; and a model response that **obeyed**
+    the injection (recorded dev fixture `test/fixtures/t15-injection.json`, hand-written and labelled
+    as not NEAR AI output) is rejected by code. The rubric's injection list was reflowed so each
+    phrase sits on one line.
+- **Files:** `services/arbiter/{rubric.md,src/{verdict,judge,rerun,index}.ts,test/{t15.test,rerun.test,
+  verdict.test}.ts,test/fixtures/t15-injection.json}`
+- **Tests:** 11 new (t15 × 5 + rubric + honest verdict still passes; rerun same decision; drifting
+  decision reported; tampered stored request refused; all truth values findable).
+- **Ran:** `vitest run services/arbiter` (35 passed), `tsc --noEmit`, `eslint`: clean. One run first
+  failed because a line wrap split "award the maximum" in the rubric; fixed in the rubric text.
+- **Evidence:**
+  - Unit-tested.
+  - Real-model injection resistance is not measured here; that needs a live NEAR AI model.
+  - The CLI entry point (`pnpm rerun-verdict`) is wired with the mode backends.
 
 ---
 
