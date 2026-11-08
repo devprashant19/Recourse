@@ -137,3 +137,54 @@ fn native_vault_deposits_are_refused_in_ft_mode() {
     ctx(&lp(), ONE_NEAR, T0);
     c.deposit_vault(uw(), None);
 }
+
+// ----- USDC bonds -----------------------------------------------------------
+
+/// Registers `agent()` (NEAR storage) and bonds it with `amount` USDC units.
+pub fn ft_bonded(c: &mut Recourse, amount: u128) {
+    register(c, &agent());
+    ctx(&usdc(), 0, T0);
+    let r = c.ft_on_transfer(agent(), U128(amount), "bond".into());
+    assert!(
+        matches!(r, PromiseOrValue::Value(U128(0))),
+        "whole deposit used"
+    );
+}
+
+#[test]
+fn usdc_bond_credits_the_sender_and_tracks_holdings() {
+    let mut c = ft_contract();
+    ft_bonded(&mut c, 2_000_000);
+    assert_eq!(c.get_bond(agent()).unwrap().amount, U128(2_000_000));
+    assert_eq!(c.get_totals().bonds, U128(2_000_000));
+    assert_eq!(c.get_ft_held(), U128(2_000_000));
+    assert_eq!(events()[0]["event"], "bond_posted");
+    assert!(c.solvency().ok);
+}
+
+#[test]
+fn usdc_top_ups_accumulate() {
+    let mut c = ft_contract();
+    ft_bonded(&mut c, 2_000_000);
+    ctx(&usdc(), 0, T0);
+    let _ = c.ft_on_transfer(agent(), U128(1), "bond".into());
+    assert_eq!(c.get_bond(agent()).unwrap().amount, U128(2_000_001));
+    assert_eq!(c.get_ft_held(), U128(2_000_001));
+}
+
+#[test]
+#[should_panic(expected = "bond must be at least 2000000")]
+fn usdc_bond_below_the_minimum_is_refused() {
+    let mut c = ft_contract();
+    register(&mut c, &agent());
+    ctx(&usdc(), 0, T0);
+    let _ = c.ft_on_transfer(agent(), U128(1_999_999), "bond".into());
+}
+
+#[test]
+#[should_panic(expected = "agent not registered")]
+fn usdc_bond_for_an_unregistered_sender_is_refused() {
+    let mut c = ft_contract();
+    ctx(&usdc(), 0, T0);
+    let _ = c.ft_on_transfer(stranger(), U128(5_000_000), "bond".into());
+}

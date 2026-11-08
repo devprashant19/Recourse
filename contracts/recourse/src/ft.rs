@@ -158,7 +158,13 @@ impl Recourse {
     }
 
     /// Routes a token deposit; returns how much of `amount` was used.
-    fn apply_ft_deposit(&mut self, _sender: &AccountId, _amount: u128, action: FtAction) -> u128 {
-        env::panic_str(&format!("deposit type not supported yet: {action:?}"))
+    fn apply_ft_deposit(&mut self, sender: &AccountId, amount: u128, action: FtAction) -> u128 {
+        match action {
+            FtAction::Bond => {
+                self.add_to_bond(sender, amount);
+                amount
+            }
+            other => env::panic_str(&format!("deposit type not supported yet: {other:?}")),
+        }
     }
 }

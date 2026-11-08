@@ -29,25 +29,9 @@ impl Recourse {
     pub fn post_bond(&mut self) -> Bond {
         self.assert_native_mode();
         let agent_id = env::predecessor_account_id();
-        self.assert_registered(&agent_id);
         let posted = env::attached_deposit().as_yoctonear();
         require!(posted > 0, "attach the bond amount");
-
-        let mut bond = self.bond_of(&agent_id);
-        bond.amount = U128(add(bond.amount.0, posted, "bond"));
-        require!(
-            bond.amount.0 >= self.config.min_bond.0,
-            format!("bond must be at least {} yocto", self.config.min_bond.0)
-        );
-        self.bonds.insert(agent_id.clone(), bond.clone());
-        self.totals.bonds = U128(add(self.totals.bonds.0, posted, "total bonds"));
-
-        Event::BondPosted.emit(json!({
-            "agent": agent_id,
-            "amount": U128(posted),
-            "total": bond.amount,
-        }));
-        bond
+        self.add_to_bond(&agent_id, posted)
     }
 
     /// Starts the cooldown for withdrawing `amount` of unlocked bond. A new
@@ -123,6 +107,26 @@ impl Recourse {
 }
 
 impl Recourse {
+    /// Adds `amount` to a registered agent's bond, enforcing the minimum on the
+    /// resulting total. Shared by `post_bond` (NEAR) and `ft_on_transfer("bond")`.
+    pub(crate) fn add_to_bond(&mut self, agent_id: &AccountId, amount: u128) -> Bond {
+        self.assert_registered(agent_id);
+        let mut bond = self.bond_of(agent_id);
+        bond.amount = U128(add(bond.amount.0, amount, "bond"));
+        require!(
+            bond.amount.0 >= self.config.min_bond.0,
+            format!(
+                "bond must be at least {} in the bond asset's smallest unit",
+                self.config.min_bond.0
+            )
+        );
+        self.bonds.insert(agent_id.clone(), bond.clone());
+        self.totals.bonds = U128(add(self.totals.bonds.0, amount, "total bonds"));
+        Event::BondPosted
+            .emit(json!({ "agent": agent_id, "amount": U128(amount), "total": bond.amount }));
+        bond
+    }
+
     pub(crate) fn assert_registered(&self, agent: &AccountId) {
         require!(self.agents.contains_key(agent), "agent not registered");
     }
