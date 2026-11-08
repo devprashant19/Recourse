@@ -16,9 +16,14 @@
 //! and its unlocked capital net of what its other revealed, unsettled bids
 //! already promise (`pending_limits`).
 
-use near_sdk::{env, AccountId};
+use near_sdk::json_types::{U128, U64};
+use near_sdk::serde_json::json;
+use near_sdk::{env, near, require, AccountId};
 
+use crate::events::Event;
+use crate::storage::refund;
 use crate::types::*;
+use crate::{Recourse, RecourseExt};
 
 /// NEAR an underwriter attaches to `commit_bid` on top of the commit's
 /// storage; refunded on a valid reveal, forfeited if never revealed.
@@ -38,4 +43,66 @@ pub fn bid_commitment(premium_bps: u32, salt: &Hash, underwriter: &AccountId) ->
     bytes.extend_from_slice(&salt.0);
     bytes.extend_from_slice(underwriter.as_bytes());
     HexBytes(env::sha256_array(&bytes))
+}
+
+#[near]
+impl Recourse {
+    /// The caller, a registered and bonded agent, asks underwriters to bid
+    /// for its coverage up to `limit`. Commits are taken until
+    /// `now + bid_commit_window`, reveals for `bid_reveal_window` after
+    /// that. Attach storage for the round (the rest is refunded). One open
+    /// round per agent; none while paused.
+    #[payable]
+    pub fn open_bond_request(&mut self, limit: U128) -> RoundId {
+        self.assert_not_paused();
+        let agent = env::predecessor_account_id();
+        self.agent_of(&agent);
+        let bond = self.bond_of(&agent);
+        require!(
+            bond.amount.0 >= self.config.min_bond.0,
+            "agent is not bonded"
+        );
+        require!(limit.0 > 0, "limit must be positive");
+        require!(
+            self.open_rounds.get(&agent).is_none(),
+            "agent already has an open round; settle it first"
+        );
+
+        let now = env::block_timestamp();
+        let commit_deadline = now.saturating_add(self.config.bid_commit_window.0);
+        let reveal_deadline = commit_deadline.saturating_add(self.config.bid_reveal_window.0);
+        let before = env::storage_usage();
+        let id = self.next_ids.round;
+        self.next_ids.round += 1;
+        self.rounds.insert(
+            id,
+            BidRound {
+                agent: agent.clone(),
+                requested_limit: limit,
+                opened_at: U64(now),
+                commit_deadline: U64(commit_deadline),
+                reveal_deadline: U64(reveal_deadline),
+                bids: Vec::new(),
+                status: RoundStatus::Open,
+                winner: None,
+            },
+        );
+        self.open_rounds.insert(agent.clone(), id);
+        let unused = self.charge_storage(before, env::attached_deposit().as_yoctonear());
+
+        Event::BondRequestOpened.emit(json!({
+            "round": U64(id),
+            "agent": agent,
+            "limit": limit,
+            "commit_deadline": U64(commit_deadline),
+            "reveal_deadline": U64(reveal_deadline),
+        }));
+        refund(unused);
+        id
+    }
+
+    /// The agent's open (unsettled) round, if any.
+    pub fn get_open_round(&self, agent: AccountId) -> Option<RoundId> {
+        self.open_rounds.get(&agent).copied()
+    }
 }
