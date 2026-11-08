@@ -300,6 +300,8 @@ fn a_refused_usdc_transfer_becomes_owed_and_can_be_claimed() {
 #[test]
 fn a_successful_usdc_transfer_changes_nothing() {
     let mut c = ft_ready();
+    ctx(&client(), 0, T0);
+    c.pay(&client(), 5);
     let held = c.get_ft_held().0;
     assert!(paid_callback(
         &mut c,
@@ -478,6 +480,8 @@ fn deposits_of_every_kind_add_up_in_ft_held_and_totals() {
 #[test]
 fn a_successful_transfer_that_returns_data_is_not_credited_back() {
     let mut c = ft_ready();
+    ctx(&client(), 0, T0);
+    c.pay(&client(), 5);
     let held = c.get_ft_held().0;
     assert!(paid_callback(
         &mut c,
@@ -492,7 +496,9 @@ fn a_successful_transfer_that_returns_data_is_not_credited_back() {
 #[test]
 fn a_claim_owed_that_fails_again_is_owed_again() {
     let mut c = ft_ready();
-    let held = c.get_ft_held().0;
+    ctx(&client(), 0, T0);
+    c.pay(&client(), 7);
+    let held = c.get_ft_held().0 + 7;
     paid_callback(&mut c, &client(), 7, PromiseResult::Failed);
     ctx(&client(), 0, T0);
     c.claim_owed();
@@ -501,8 +507,8 @@ fn a_claim_owed_that_fails_again_is_owed_again() {
     assert_eq!(c.get_owed(client()), U128(7));
     assert_eq!(
         c.get_ft_held(),
-        U128(held + 7),
-        "sent once by claim_owed, returned once"
+        U128(held),
+        "both sends came back; the tokens never left"
     );
 }
 

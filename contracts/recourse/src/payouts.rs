@@ -115,6 +115,7 @@ impl Recourse {
         };
         self.set_payout_status(claim_id, &mut p, PayoutStatus::Sent);
         p.attempts = p.attempts.saturating_add(1);
+        p.dest_tx = None;
         p.sent_at = Some(U64(env::block_timestamp()));
         p.final_status = None;
         self.payouts.insert(claim_id, p.clone());
@@ -154,6 +155,9 @@ impl Recourse {
             .get(&claim_id)
             .cloned()
             .unwrap_or_else(|| env::panic_str("payout not found"));
+        if self.is_ft_mode() {
+            self.ft_in_flight = sub(self.ft_in_flight, p.amount.0, "ft in flight");
+        }
         if p.status != PayoutStatus::Sent {
             // Nothing in flight for this claim; never double-settle.
             return p.status;
@@ -161,6 +165,8 @@ impl Recourse {
         if ok && p.mode == PayoutMode::Intents {
             // Delivered to the 1Click deposit address; the outcome on the
             // destination chain arrives with `confirm_payout`.
+            p.final_status = Some(DELIVERED.into());
+            self.payouts.insert(claim_id, p.clone());
             return p.status;
         }
         if ok {
@@ -200,6 +206,15 @@ pub struct IntentsQuote {
     pub quote_hash: Hash,
 }
 
+/// `final_status` of an Intents payout whose token transfer to the deposit
+/// address succeeded; only then can the keeper report 1Click's outcome.
+pub const DELIVERED: &str = "DELIVERED";
+/// Longest destination transaction id `confirm_payout` records.
+pub const MAX_DEST_TX_LEN: usize = 128;
+/// Gas for the token's `ft_balance_of` and for `on_ft_balance`.
+pub const FT_BALANCE_GAS: Gas = Gas::from_tgas(5);
+pub const FT_BALANCE_CALLBACK_GAS: Gas = Gas::from_tgas(10);
+
 /// Longest 1Click quote id accepted.
 pub const MAX_QUOTE_ID_LEN: usize = 128;
 
@@ -236,6 +251,124 @@ impl IntentsQuote {
 
 #[near]
 impl Recourse {
+    /// The keeper reports 1Click's final outcome for a delivered Intents
+    /// payout (`status` is `SUCCESS`, `REFUNDED` or `FAILED`, `quote_id` must
+    /// be the one it was sent with):
+    ///
+    /// * `SUCCESS` — final; `dest_tx` is recorded.
+    /// * `FAILED`  — recorded; a later `REFUNDED` can still recover it.
+    /// * `REFUNDED` — the award came back to this contract. It is matched
+    ///   from `unattributed` (tokens `sync_unattributed` has seen on the
+    ///   balance and nobody owns), so a report alone creates nothing; the
+    ///   payout is `Pending` again for a new quote.
+    pub fn confirm_payout(
+        &mut self,
+        claim_id: ClaimId,
+        quote_id: String,
+        status: String,
+        dest_tx: Option<String>,
+    ) -> PayoutStatus {
+        self.assert_keeper();
+        let mut p = self
+            .payouts
+            .get(&claim_id)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("payout not found"));
+        require!(
+            p.mode == PayoutMode::Intents,
+            "only Intents payouts are confirmed"
+        );
+        require!(
+            p.quote_id.as_deref() == Some(quote_id.as_str()),
+            "quote id does not match the payout"
+        );
+        if let Some(tx) = &dest_tx {
+            require!(
+                !tx.is_empty() && tx.len() <= MAX_DEST_TX_LEN,
+                "bad destination tx"
+            );
+        }
+        let delivered =
+            p.status == PayoutStatus::Sent && p.final_status.as_deref() == Some(DELIVERED);
+        match status.as_str() {
+            "SUCCESS" => {
+                require!(delivered, "payout is not delivered to 1Click");
+                self.set_payout_status(claim_id, &mut p, PayoutStatus::Success);
+                p.dest_tx = dest_tx;
+            }
+            "FAILED" => {
+                require!(delivered, "payout is not delivered to 1Click");
+                self.set_payout_status(claim_id, &mut p, PayoutStatus::Failed);
+            }
+            "REFUNDED" => {
+                require!(
+                    delivered || p.status == PayoutStatus::Failed,
+                    "payout is not delivered to 1Click"
+                );
+                require!(
+                    self.unattributed >= p.amount.0,
+                    "refund not seen on the balance yet; call sync_unattributed"
+                );
+                self.unattributed -= p.amount.0;
+                self.ft_held = add(self.ft_held, p.amount.0, "ft held");
+                self.totals.pending_payouts = U128(add(
+                    self.totals.pending_payouts.0,
+                    p.amount.0,
+                    "pending payouts",
+                ));
+                self.set_payout_status(claim_id, &mut p, PayoutStatus::Refunded);
+                self.set_payout_status(claim_id, &mut p, PayoutStatus::Pending);
+            }
+            _ => env::panic_str("status must be SUCCESS, REFUNDED or FAILED"),
+        }
+        p.final_status = Some(status.clone());
+        self.payouts.insert(claim_id, p.clone());
+        Event::PayoutConfirmed.emit(json!({
+            "claim_id": U64(claim_id),
+            "status": status,
+            "quote_id": quote_id,
+            "dest_tx": p.dest_tx,
+            "amount": p.amount,
+            "by": env::predecessor_account_id(),
+        }));
+        p.status
+    }
+
+    /// Reads this contract's real token balance and sets `unattributed` to
+    /// what it holds beyond its own accounting (`ft_held`) and transfers
+    /// still in flight: tokens that arrived by plain `ft_transfer`, such as
+    /// 1Click refunds. Anyone may call it.
+    pub fn sync_unattributed(&mut self) -> Promise {
+        let token = self
+            .ft_token()
+            .unwrap_or_else(|| env::panic_str("only token deployments hold unattributed tokens"));
+        ext_ft::ext(token)
+            .with_static_gas(FT_BALANCE_GAS)
+            .ft_balance_of(env::current_account_id())
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(FT_BALANCE_CALLBACK_GAS)
+                    .on_ft_balance(),
+            )
+    }
+
+    #[private]
+    pub fn on_ft_balance(&mut self) -> U128 {
+        let raw = env::promise_result_checked(0, 64)
+            .unwrap_or_else(|_| env::panic_str("ft_balance_of failed"));
+        let balance: U128 = near_sdk::serde_json::from_slice(&raw)
+            .unwrap_or_else(|_| env::panic_str("bad ft_balance_of result"));
+        let accounted = add(self.ft_held, self.ft_in_flight, "accounted tokens");
+        self.unattributed = balance.0.saturating_sub(accounted);
+        Event::UnattributedSynced.emit(json!({
+            "balance": balance,
+            "ft_held": U128(self.ft_held),
+            "in_flight": U128(self.ft_in_flight),
+            "unattributed": U128(self.unattributed),
+        }));
+        U128(self.unattributed)
+    }
+
     /// Payouts by claim id, from `from_index` (default 0), `limit` capped at
     /// `MAX_PAGE`. Claims without a payout are skipped. For keepers scanning
     /// for `Pending` work.
@@ -289,6 +422,7 @@ impl Recourse {
                 .then(callback);
         };
         self.ft_held = sub(self.ft_held, p.amount.0, "ft held");
+        self.ft_in_flight = add(self.ft_in_flight, p.amount.0, "ft in flight");
         let transfer = |to: AccountId, memo: Option<String>| {
             ext_ft::ext(token.clone())
                 .with_attached_deposit(NearToken::from_yoctonear(1))

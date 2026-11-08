@@ -49,6 +49,7 @@ pub enum Event {
     StorageDeposit,
     PaymentFailed,
     OwedClaimed,
+    UnattributedSynced,
 }
 
 impl Event {
@@ -83,6 +84,7 @@ impl Event {
             Event::StorageDeposit => "storage_deposit",
             Event::PaymentFailed => "payment_failed",
             Event::OwedClaimed => "owed_claimed",
+            Event::UnattributedSynced => "unattributed_synced",
         }
     }
 

@@ -118,6 +118,11 @@ impl Recourse {
         U128(self.ft_held)
     }
 
+    /// Token units sent whose transfer callback has not run yet.
+    pub fn get_ft_in_flight(&self) -> U128 {
+        U128(self.ft_in_flight)
+    }
+
     /// Both sides of invariant I1. `ok` holds when what the contract holds,
     /// less what the runtime reserves for storage, covers every liability.
     pub fn solvency(&self) -> Solvency {
@@ -127,7 +132,10 @@ impl Recourse {
         // locks, and prepaid NEP-145 storage balances are owed back too.
         let ft = self.is_ft_mode();
         let held = if ft {
-            self.ft_held
+            // Unattributed tokens were seen on the real balance by
+            // `sync_unattributed`; they are held and owed (to whoever a
+            // refund is matched to).
+            self.ft_held.saturating_add(self.unattributed)
         } else {
             env::account_balance().as_yoctonear()
         };

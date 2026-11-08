@@ -125,6 +125,10 @@ pub struct Recourse {
     /// sha256 of every 1Click quote id and deposit address a payout has been
     /// sent with; neither can be used twice (replay protection).
     used_quotes: LookupSet<Hash>,
+    /// Token units sent with `ft_transfer` whose callback has not run yet.
+    /// They may or may not have left the token balance, so a balance sync
+    /// never counts them as unattributed.
+    ft_in_flight: u128,
 }
 
 #[near]
@@ -166,6 +170,7 @@ impl Recourse {
             owed: LookupMap::new(StorageKey::Owed),
             owed_total: 0,
             used_quotes: LookupSet::new(StorageKey::UsedQuotes),
+            ft_in_flight: 0,
         }
     }
 

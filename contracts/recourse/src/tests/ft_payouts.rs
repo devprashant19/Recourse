@@ -343,3 +343,189 @@ fn direct_payout_takes_no_deposit() {
     ctx(&keeper(), 1, NOW);
     let _ = c.execute_payout(cid, None, None, None);
 }
+
+// ----- confirmation and refunds ---------------------------------------------
+
+fn as_contract(outcome: PromiseResult) {
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(contract_id())
+        .predecessor_account_id(contract_id())
+        .account_balance(NearToken::from_near(1_000_000))
+        .block_timestamp(NOW);
+    testing_env!(
+        b.build(),
+        near_sdk::test_vm_config(),
+        near_parameters::RuntimeFeesConfig::test(),
+        Default::default(),
+        vec![outcome],
+    );
+}
+
+/// Runs `sync_unattributed` as if the token reported `balance`.
+fn sync(c: &mut Recourse, balance: u128) -> u128 {
+    ctx(&stranger(), 0, NOW);
+    let _ = c.sync_unattributed();
+    as_contract(PromiseResult::Successful(
+        format!("\"{balance}\"").into_bytes(),
+    ));
+    c.on_ft_balance().0
+}
+
+fn confirm(c: &mut Recourse, cid: u64, quote: &str, status: &str) -> PayoutStatus {
+    ctx(&keeper(), 0, NOW);
+    c.confirm_payout(cid, quote.into(), status.into(), Some("0xdesttx".into()))
+}
+
+/// What the token balance shows with no refund: the books plus transfers
+/// still in flight (the stake refunded at resolution, for one).
+fn books(c: &Recourse) -> u128 {
+    c.get_ft_held().0 + c.get_ft_in_flight().0
+}
+
+/// An Intents payout sent with quote `q-1` and delivered to 1Click.
+fn delivered() -> (Recourse, u64) {
+    let (mut c, cid) = with_keeper(base_usdc());
+    execute(&mut c, cid, Some(deposit_address()), Some("q-1"));
+    callback(&mut c, cid, PromiseResult::Successful(vec![]));
+    (c, cid)
+}
+
+#[test]
+fn success_is_final_and_records_the_destination_tx() {
+    let (mut c, cid) = delivered();
+    assert_eq!(
+        confirm(&mut c, cid, "q-1", "SUCCESS"),
+        PayoutStatus::Success
+    );
+    let p = c.get_payout(cid).unwrap();
+    assert_eq!(p.final_status.as_deref(), Some("SUCCESS"));
+    assert_eq!(p.dest_tx.as_deref(), Some("0xdesttx"));
+    assert_eq!(events()[0]["event"], "payout_confirmed");
+    assert!(c.solvency().ok);
+}
+
+#[test]
+#[should_panic(expected = "payout is not delivered to 1Click")]
+fn nothing_is_confirmed_before_the_token_transfer_settles() {
+    let (mut c, cid) = with_keeper(base_usdc());
+    execute(&mut c, cid, Some(deposit_address()), Some("q-1"));
+    confirm(&mut c, cid, "q-1", "SUCCESS");
+}
+
+#[test]
+#[should_panic(expected = "quote id does not match the payout")]
+fn confirmation_must_name_the_quote_it_was_sent_with() {
+    let (mut c, cid) = delivered();
+    confirm(&mut c, cid, "q-other", "SUCCESS");
+}
+
+#[test]
+#[should_panic(expected = "keeper only")]
+fn only_a_keeper_confirms() {
+    let (mut c, cid) = delivered();
+    ctx(&stranger(), 0, NOW);
+    c.confirm_payout(cid, "q-1".into(), "REFUNDED".into(), None);
+}
+
+#[test]
+#[should_panic(expected = "status must be SUCCESS, REFUNDED or FAILED")]
+fn unknown_statuses_are_refused() {
+    let (mut c, cid) = delivered();
+    confirm(&mut c, cid, "q-1", "PROCESSING");
+}
+
+#[test]
+#[should_panic(expected = "only Intents payouts are confirmed")]
+fn direct_payouts_are_not_confirmed_by_the_keeper() {
+    let (mut c, cid) = with_keeper(near_usdc_to_client());
+    execute(&mut c, cid, None, None);
+    confirm(&mut c, cid, "q-1", "SUCCESS");
+}
+
+#[test]
+#[should_panic(expected = "refund not seen on the balance yet")]
+fn a_refund_report_alone_creates_nothing() {
+    let (mut c, cid) = delivered();
+    confirm(&mut c, cid, "q-1", "REFUNDED");
+}
+
+#[test]
+fn a_seen_refund_returns_the_payout_to_pending() {
+    let (mut c, cid) = delivered();
+    let held = c.get_ft_held().0;
+    // 1Click refunded the award by plain ft_transfer.
+    let balance = books(&c) + AWARD;
+    assert_eq!(sync(&mut c, balance), AWARD);
+    assert_eq!(events()[0]["event"], "unattributed_synced");
+    assert!(c.solvency().ok);
+    assert_eq!(
+        confirm(&mut c, cid, "q-1", "REFUNDED"),
+        PayoutStatus::Pending
+    );
+    assert_eq!(c.solvency().unattributed, U128(0));
+    assert_eq!(c.get_ft_held(), U128(held + AWARD));
+    assert_eq!(c.get_totals().pending_payouts, U128(AWARD));
+    let p = c.get_payout(cid).unwrap();
+    assert_eq!(p.final_status.as_deref(), Some("REFUNDED"));
+    assert!(c.solvency().ok);
+    // and it can go again with a fresh quote
+    execute(&mut c, cid, Some("b2".repeat(32)), Some("q-2"));
+    assert_eq!(c.get_payout(cid).unwrap().status, PayoutStatus::Sent);
+}
+
+#[test]
+#[should_panic(expected = "payout is not delivered to 1Click")]
+fn a_refund_cannot_be_matched_twice() {
+    let (mut c, cid) = delivered();
+    let balance = books(&c) + 2 * AWARD;
+    sync(&mut c, balance);
+    confirm(&mut c, cid, "q-1", "REFUNDED");
+    confirm(&mut c, cid, "q-1", "REFUNDED");
+}
+
+#[test]
+fn a_failed_payout_can_be_refunded_later() {
+    let (mut c, cid) = delivered();
+    assert_eq!(confirm(&mut c, cid, "q-1", "FAILED"), PayoutStatus::Failed);
+    let balance = books(&c) + AWARD;
+    sync(&mut c, balance);
+    assert_eq!(
+        confirm(&mut c, cid, "q-1", "REFUNDED"),
+        PayoutStatus::Pending
+    );
+}
+
+#[test]
+fn tokens_in_flight_are_never_counted_as_unattributed() {
+    let (mut c, cid) = with_keeper(base_usdc());
+    let before = books(&c);
+    let flying = c.get_ft_in_flight().0;
+    execute(&mut c, cid, Some(deposit_address()), Some("q-1"));
+    assert_eq!(c.get_ft_in_flight(), U128(flying + AWARD));
+    // The token has not moved yet: the balance still includes the award.
+    assert_eq!(sync(&mut c, before), 0);
+    callback(&mut c, cid, PromiseResult::Successful(vec![]));
+    assert_eq!(c.get_ft_in_flight(), U128(flying));
+}
+
+#[test]
+fn a_balance_below_the_books_syncs_to_zero() {
+    let (mut c, _) = delivered();
+    assert_eq!(sync(&mut c, 0), 0);
+}
+
+#[test]
+#[should_panic(expected = "only token deployments hold unattributed tokens")]
+fn native_deployments_have_nothing_to_sync() {
+    let mut c = new_contract();
+    ctx(&stranger(), 0, T0);
+    let _ = c.sync_unattributed();
+}
+
+#[test]
+#[should_panic(expected = "ft_balance_of failed")]
+fn a_failed_balance_read_changes_nothing() {
+    let (mut c, _) = delivered();
+    as_contract(PromiseResult::Failed);
+    c.on_ft_balance();
+}
