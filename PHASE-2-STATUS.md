@@ -65,7 +65,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 3. `feat(receipts): integrate attestation quote verification`
 
-- **Commit:** (this commit)
+- **Commit:** `6c47131`
 - **Did:** `DcapQuoteVerifier` (entry `@recourse/receipts/dcap`) uses `@phala/dcap-qvl-node` 0.3.3 —
   the library NEAR's own TypeScript verifier uses — to fetch Intel PCS collateral for the quote and
   verify it, accepting only `UpToDate` / `OutOfDate` (NEAR's rule) and a 64-byte `report_data`; any
@@ -87,6 +87,23 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 - **Evidence:** unit-tested. **A genuine TDX quote has not been verified** (needs a NEAR AI Cloud key
   for the report and network access to Intel PCS); that happens in the live recording / testnet steps.
 
+### 4. `feat(receipts): capture raw model request and response bytes`
+
+- **Commit:** (this commit)
+- **Did:** `buildChatRequest` serialises a non-streaming, temperature-0 request **once**; those bytes
+  are what `LiveNearAiClient.chatCompletion` POSTs (with `x-no-aliasing: true` and
+  `Accept-Encoding: identity`) and what is hashed. `runCompletion` returns the exact request and
+  response bytes with their SHA-256; the response is parsed only to read the chat id and content
+  (`readCompletion` rejects truncated, id-less or content-less bodies). Content-addressed artifacts:
+  `artifact://sha256/<hash>` URIs, and `MemoryArtifactStore.get` re-hashes on every read, so tampered
+  bytes cannot be served under a receipt's URI.
+- **Files:** `packages/receipts/src/{completion,index}.ts`, `test/completion.test.ts`
+- **Tests:** 7 (request shape; the exact request object is the fetch body, headers present, exact
+  response bytes and hashes kept; raw-vs-re-serialised hash differs on an oddly formatted response;
+  HTTP error; three malformed responses; artifact round-trip; tampered artifact and non-content URI).
+- **Ran:** `vitest run packages/receipts` (30 passed), `tsc --noEmit`, `eslint` — clean.
+- **Evidence:** unit-tested (HTTP mocked).
+
 ---
 
 ## Deviations from the spec
@@ -98,5 +115,6 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   open. Format agreement was established from NEAR's own verifier source
   (`github.com/nearai/nearai-cloud-verifier`): `{text, signature, signing_address}`, text
   `model:sha256(req):sha256(resp)` or `req:resp`, plain EIP-191 — exactly what the contract checks.
-- `PHASE-1-STATUS.md` appeared as deleted in the working tree during this phase. That was not done
-  by these commits and is left untouched.
+- The maintainer untracked `PHASE-1-STATUS.md` (working-tree deletion plus a `.gitignore` entry)
+  while this phase was being built. Those are the maintainer's own changes; these commits leave them
+  unstaged and untouched.
