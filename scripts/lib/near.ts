@@ -48,7 +48,9 @@ export function ownerAccount(net: Network, p: JsonRpcProvider): Account {
   const key = process.env.OWNER_PRIVATE_KEY;
   if (id && key) return new Account(id, p, key as KeyPairString);
   if (net === "sandbox") {
-    const home = process.env.NEAR_SANDBOX_HOME;
+    // `pnpm demo` records the running sandbox's home so later processes (tests, indexer) can sign as the owner.
+    const recorded = join(DATA_DIR, "sandbox-home.json");
+    const home = process.env.NEAR_SANDBOX_HOME ?? (existsSync(recorded) ? (JSON.parse(readFileSync(recorded, "utf8")) as { home: string }).home : undefined);
     if (!home) throw new Error("set NEAR_SANDBOX_HOME (the sandbox --home dir) or OWNER_ACCOUNT_ID/OWNER_PRIVATE_KEY");
     const k = JSON.parse(readFileSync(join(home, "validator_key.json"), "utf8")) as {
       account_id: string;

@@ -10,6 +10,7 @@
  */
 
 import { Wallet } from "ethers";
+import { actions } from "near-api-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { bidCommitment, newBidSalt, type Claim } from "../../packages/sdk/src/index.js";
@@ -27,29 +28,37 @@ const T = 240_000;
 
 describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeout: T, sequential: true }, () => {
   let c: Cast;
+  /** The suite's own agent: fresh record, a large bond and coverage, so earlier scenarios' slashes don't leak in. */
+  let A: Awaited<ReturnType<typeof freshAccount>>;
   const price = (2n * ONE_NEAR).toString();
   const dest = () => ({ asset_id: "near", recipient: c.accounts.client.accountId });
+  const agentC = () => A.client;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     c = loadCast();
-  });
+    A = await freshAccount(c, "advagent", 60n);
+    await A.client.registerAgent("ipfs://recourse/agents/adversarial", A.accountId);
+    await A.client.postBond(40n * ONE_NEAR);
+    const expires = (await chainNow(c.p)) + 120n * MINUTE_NS;
+    await c.as("underwriter2").bindCoverage(A.accountId, (10n * ONE_NEAR).toString(), 150, expires.toString());
+  }, T);
 
   /** Proposes a job for `agent`, accepted by `agentRole`. */
-  async function job(agent: string, agentRole: "agent" | "agent2" = "agent", cap = price, p = price, terms = "ad") {
+  async function job(cap = price, p = price, terms = "ad") {
     const id = await c.as("client").openEngagement({
-      agent,
+      agent: A.accountId,
       termsHash: terms.repeat(32),
       liabilityCap: cap,
       deadline: ((await chainNow(c.p)) + 10n * MINUTE_NS).toString(),
       price: p,
     });
-    await c.as(agentRole).acceptEngagement(id);
+    await agentC().acceptEngagement(id);
     return id;
   }
 
   /** A silent agent, a no-delivery claim, upheld objectively. Returns the claim id (payout Pending). */
   async function silentSlash(): Promise<number> {
-    const id = await job(c.accounts.agent.accountId);
+    const id = await job();
     await skipPast(c.net, c.p, BigInt((await c.view.getEngagement(id))!.deadline));
     const claimId = await c.as("client").fileClaim({ id, kind: "NoDelivery", amount: price, evidenceHash: "00".repeat(32), evidenceUri: "ipfs://no-receipt", destination: dest() });
     await c.as("stranger").resolveObjective(claimId);
@@ -57,40 +66,40 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
   }
 
   it("t01_forged_signature_rejected", async () => {
-    const id = await job(c.accounts.agent.accountId);
+    const id = await job();
     const good = await signedReceipt(`t01-${id}`);
     const i = 70;
     const flipped = good.signature.slice(0, i) + (good.signature[i] === "0" ? "1" : "0") + good.signature.slice(i + 1);
-    await expectRevert("flipped signature byte", () => c.as("agent").submitReceipt(id, { ...good, signature: flipped }), /bad signature|signer not allow-listed/);
-    await c.as("agent").submitReceipt(id, good);
+    await expectRevert("flipped signature byte", () => agentC().submitReceipt(id, { ...good, signature: flipped }), /bad signature|signer not allow-listed/);
+    await agentC().submitReceipt(id, good);
     expect((await c.view.getEngagement(id))!.status).toBe("Delivered");
   });
 
   it("t02_unlisted_signer_rejected", async () => {
-    const id = await job(c.accounts.agent.accountId);
+    const id = await job();
     const r = await signedReceipt(`t02-${id}`);
     const rogue = Wallet.createRandom();
     const sig = (await rogue.signMessage(`${TEE_MODEL}:${r.request_hash}:${r.response_hash}`)).slice(2);
-    await expectRevert("real signature, non-TEE key", () => c.as("agent").submitReceipt(id, { ...r, signature: sig }), "signer not allow-listed");
-    await c.as("agent").submitReceipt(id, r);
+    await expectRevert("real signature, non-TEE key", () => agentC().submitReceipt(id, { ...r, signature: sig }), "signer not allow-listed");
+    await agentC().submitReceipt(id, r);
   });
 
   it("t03_receipt_replay_rejected", async () => {
-    const a = await job(c.accounts.agent.accountId);
+    const a = await job();
     const r = await signedReceipt(`t03-${a}`);
-    await c.as("agent").submitReceipt(a, r);
+    await agentC().submitReceipt(a, r);
     expect(await c.view.isReceiptUsed(r.response_hash)).toBe(true);
-    const b = await job(c.accounts.agent.accountId);
-    await expectRevert("same receipt on a second job", () => c.as("agent").submitReceipt(b, r), "receipt already used");
-    await c.as("agent").submitReceipt(b, await signedReceipt(`t03-${b}`));
+    const b = await job();
+    await expectRevert("same receipt on a second job", () => agentC().submitReceipt(b, r), "receipt already used");
+    await agentC().submitReceipt(b, await signedReceipt(`t03-${b}`));
   });
 
   it("t04_withdraw_during_claim_blocked", async () => {
-    const id = await job(c.accounts.agent.accountId);
+    const id = await job();
     await skipPast(c.net, c.p, BigInt((await c.view.getEngagement(id))!.deadline));
     const claimId = await c.as("client").fileClaim({ id, kind: "NoDelivery", amount: price, evidenceHash: "00".repeat(32), evidenceUri: "ipfs://no-receipt", destination: dest() });
-    await expectRevert("request_withdrawal with an open claim", () => c.as("agent").requestWithdrawal(ONE_NEAR.toString()), "cannot withdraw while a claim is open");
-    expect((await c.view.getBond(c.accounts.agent.accountId))!.open_claims).toBeGreaterThan(0);
+    await expectRevert("request_withdrawal with an open claim", () => agentC().requestWithdrawal(ONE_NEAR.toString()), "cannot withdraw while a claim is open");
+    expect((await c.view.getBond(A.accountId))!.open_claims).toBeGreaterThan(0);
     await c.as("stranger").resolveObjective(claimId);
     await c.as("keeper").executePayout(claimId);
   });
@@ -110,7 +119,7 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
     const owner = ownerClient(c);
     await expectRevert(
       "open_engagement beyond the agent's bond share",
-      () => owner.call("open_engagement", { agent: a.accountId, terms_hash: "05".repeat(32), liability_cap: cap, deadline: ((Date.now() + 600_000) * 1_000_000).toString(), price: cap }, 13n * ONE_NEAR + fee),
+      async () => owner.call("open_engagement", { agent: a.accountId, terms_hash: "05".repeat(32), liability_cap: cap, deadline: ((await chainNow(c.p)) + 10n * MINUTE_NS).toString(), price: cap }, 13n * ONE_NEAR + fee),
       "bond does not cover the required share",
     );
   });
@@ -151,8 +160,8 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
     const dao = loadDao(c.net);
     const cfg = await c.view.getConfig();
     if (!dao || !cfg.council) throw new Error("the council DAO is missing; pnpm demo deploys it");
-    const id = await job(c.accounts.agent.accountId);
-    await c.as("agent").submitReceipt(id, await signedReceipt(`t07-${id}`));
+    const id = await job();
+    await agentC().submitReceipt(id, await signedReceipt(`t07-${id}`));
     const claimId = await c.as("client").fileClaim({ id, kind: "Quality", amount: price, evidenceHash: "07".repeat(32), evidenceUri: "ipfs://t07", destination: dest() });
     await c.as("arbiter").resolveClaim(claimId, false, "0", "17".repeat(32), await signedReceipt(`t07-verdict-${claimId}`));
     await c.as("client").appeal(claimId);
@@ -203,9 +212,9 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
   });
 
   it("t11_frivolous_claim_costs_stake", async () => {
-    const agentId = c.accounts.agent.accountId;
-    const id = await job(agentId);
-    await c.as("agent").submitReceipt(id, await signedReceipt(`t11-${id}`));
+    const agentId = A.accountId;
+    const id = await job();
+    await agentC().submitReceipt(id, await signedReceipt(`t11-${id}`));
     const claimId = await c.as("client").fileClaim({ id, kind: "Quality", amount: ONE_NEAR.toString(), evidenceHash: "11".repeat(32), evidenceUri: "ipfs://meh", destination: dest() });
     const stake = BigInt((await c.view.getClaim(claimId))!.stake);
     await c.as("arbiter").resolveClaim(claimId, false, "0", "21".repeat(32), await signedReceipt(`t11-verdict-${claimId}`));
@@ -217,8 +226,8 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
     expect(after - before).toBe(BigInt(price) + stake);
     expect((await c.view.getClaim(claimId))!.status).toBe("Rejected");
     // A stake under 5% is refused up front.
-    const id2 = await job(agentId);
-    await c.as("agent").submitReceipt(id2, await signedReceipt(`t11b-${id2}`));
+    const id2 = await job();
+    await agentC().submitReceipt(id2, await signedReceipt(`t11b-${id2}`));
     await expectRevert(
       "claim without its stake",
       () => c.as("client").call("file_claim", { id: id2, kind: "Quality", amount: price, evidence_hash: "12".repeat(32), evidence_uri: "ipfs://x", destination: dest() }, 1n),
@@ -227,11 +236,13 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
   });
 
   it("t12_bid_copying_impossible", async () => {
-    const agentId = c.accounts.agent.accountId;
+    const agentId = A.accountId;
     if ((await c.view.getOpenRound(agentId)) !== null) throw new Error("agent already has an open round");
-    const round = await c.as("agent").openBondRequest((2n * ONE_NEAR).toString());
+    // The winner's coverage replaces the agent's, so ask for enough to keep later tests unconstrained.
+    const round = await agentC().openBondRequest((8n * ONE_NEAR).toString());
     const salt = newBidSalt();
-    const premium = 300;
+    // Any valid bid: just above the agent's current floor (its record from earlier tests raises it).
+    const premium = (await c.view.getAgentScore(A.accountId))!.premium_floor_bps + 50;
     const honest = c.accounts.underwriter2.accountId;
     const copycat = c.accounts.underwriter3.accountId;
     const commitment = bidCommitment(premium, salt, honest);
@@ -256,33 +267,33 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
     await expectRevert("register_agent with no deposit", () => a.client.call("register_agent", { metadata_uri: "ipfs://x", operator: a.accountId }, 0n), /attach a storage deposit|attach at least/);
     await expectRevert("create_vault with no deposit", () => a.client.call("create_vault", {}, 0n), /attach|storage|deposit/i);
     const fee = BigInt((await c.view.getStorageFees()).engagement);
-    const q = (await c.view.quoteJob(c.accounts.agent.accountId, price, price))!;
+    const q = (await c.view.quoteJob(A.accountId, price, price))!;
     expect(BigInt(q.storage_fee)).toBe(fee);
     await expectRevert(
       "open_engagement without the storage fee",
-      async () => c.as("client").call("open_engagement", { agent: c.accounts.agent.accountId, terms_hash: "13".repeat(32), liability_cap: price, deadline: ((await chainNow(c.p)) + 10n * MINUTE_NS).toString(), price }, BigInt(q.total_deposit!) - fee),
+      async () => c.as("client").call("open_engagement", { agent: A.accountId, terms_hash: "13".repeat(32), liability_cap: price, deadline: ((await chainNow(c.p)) + 10n * MINUTE_NS).toString(), price }, BigInt(q.total_deposit!) - fee),
       /attach .* storage/,
     );
   });
 
   it("t14_ft_transfer_failure_restores", async () => {
-    // Native twin of the USDC test `usdc_failed_transfers_restore_pending_and_owed_on_the_sandbox`:
-    // a payout to a recipient that does not exist fails in the callback and must not be lost.
-    const owner = ownerAccount(c.net, c.p);
-    const ghost = `ghost-${Date.now().toString(36)}.${owner.accountId}`;
-    const id = await job(c.accounts.agent.accountId);
+    // Native twin of the USDC test `usdc_failed_transfers_restore_pending_and_owed_on_the_sandbox`.
+    // A Direct payout goes to the claimant's account; the claimant deletes that account before the
+    // keeper pays, so the transfer genuinely fails and the callback must put the money back.
+    const claimant = await freshAccount(c, "t14client", 8n);
+    const id = await claimant.client.openEngagement({ agent: A.accountId, termsHash: "14".repeat(32), liabilityCap: price, deadline: ((await chainNow(c.p)) + 10n * MINUTE_NS).toString(), price });
+    await agentC().acceptEngagement(id);
     await skipPast(c.net, c.p, BigInt((await c.view.getEngagement(id))!.deadline));
-    const claimId = await c.as("client").fileClaim({ id, kind: "NoDelivery", amount: price, evidenceHash: "00".repeat(32), evidenceUri: "ipfs://no-receipt", destination: { asset_id: "near", recipient: ghost } });
+    const claimId = await claimant.client.fileClaim({ id, kind: "NoDelivery", amount: price, evidenceHash: "00".repeat(32), evidenceUri: "ipfs://no-receipt", destination: { asset_id: "near", recipient: claimant.accountId } });
     await c.as("stranger").resolveObjective(claimId);
-    const totalsBefore = await c.view.getTotals();
+    const pendingBefore = BigInt((await c.view.getTotals()).pending_payouts);
+    await claimant.account.signAndSendTransaction({ receiverId: claimant.accountId, actions: [actions.deleteAccount(c.accounts.stranger.accountId)] });
     await c.as("keeper").executePayout(claimId);
     const p = (await c.view.getPayout(claimId))!;
-    const owed = BigInt(await c.view.getOwed(ghost));
-    expect(p.status === "Pending" || owed > 0n).toBe(true);
-    expect(p.status).not.toBe("Success");
-    const s = await c.view.solvency();
-    expect(s.ok).toBe(true);
-    expect(BigInt(s.pending_payouts) + BigInt(s.owed)).toBe(BigInt(totalsBefore.pending_payouts));
+    expect(p.status).toBe("Pending");
+    expect(p.attempts).toBe(1);
+    expect(BigInt((await c.view.getTotals()).pending_payouts)).toBe(pendingBefore);
+    expect((await c.view.solvency()).ok).toBe(true);
   });
 
   it("t15_arbiter_resists_injection", async () => {
@@ -317,7 +328,7 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
     const totalsBefore = await c.view.getTotals();
     // Every owner method, exercised.
     await owner.pause();
-    await expectRevert("open_engagement while paused", () => job(c.accounts.agent.accountId), "contract is paused");
+    await expectRevert("open_engagement while paused", () => job(), "contract is paused");
     await owner.unpause();
     await owner.addArbiter(c.accounts.stranger.accountId);
     await owner.addKeeper(c.accounts.stranger.accountId);

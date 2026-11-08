@@ -24,7 +24,7 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { arg, DATA_DIR, network, ownerAccount, provider, type Network } from "../scripts/lib/near.js";
+import { arg, DATA_DIR, network, ownerAccount, provider, save, type Network } from "../scripts/lib/near.js";
 import { startSandbox, type SandboxHandle } from "../scripts/lib/sandbox.js";
 import { cast, type Scenario } from "../scripts/lib/scenario.js";
 import { deployContract, deployDao, seed } from "../scripts/lib/setup.js";
@@ -75,7 +75,7 @@ export async function setupNetwork(net: Network, log: (s: string) => void): Prom
     }
     // A fresh chain for a fresh run: fixtures replay byte-for-byte, and the
     // contract accepts each response hash exactly once.
-    for (const f of ["deployment", "accounts", "dao", "rationales.jsonl"]) rmSync(join(DATA_DIR, `sandbox-${f}${f.endsWith(".jsonl") ? "" : ".json"}`), { force: true });
+    for (const f of ["deployment", "accounts", "dao", "home", "rationales.jsonl"]) rmSync(join(DATA_DIR, `sandbox-${f}${f.endsWith(".jsonl") ? "" : ".json"}`), { force: true });
     // Published receipts are keyed by engagement id, which restarts at 0 on a new chain.
     rmSync(process.env.ARTIFACT_DIR ?? join(DATA_DIR, "artifacts"), { recursive: true, force: true });
     rmSync(join(DATA_DIR, "sandbox-indexer.sqlite"), { force: true });
@@ -83,6 +83,7 @@ export async function setupNetwork(net: Network, log: (s: string) => void): Prom
     sandbox = await startSandbox({ log });
     process.env.RECOURSE_RPC_URL = sandbox.rpcUrl;
     process.env.NEAR_SANDBOX_HOME = sandbox.homeDir;
+    save("sandbox", "home", { home: sandbox.homeDir, rpcUrl: sandbox.rpcUrl });
     process.env.RECOURSE_MODE = "sandbox";
   }
   const p = provider(net);

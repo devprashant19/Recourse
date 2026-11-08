@@ -200,16 +200,18 @@ async function main() {
       record("11", "solvency() OK after the demo", demo.solvencyOk ? "PASS" : "FAIL", demo.solvencyOk ? "assets held ≥ every liability, storage covered" : "BROKEN");
 
       await check("7", "Adversarial tests (one per threat)", () => {
-        const r = sh("pnpm", ["vitest", "run", "tests/adversarial", "--reporter=verbose"], { env: { RECOURSE_MODE: "sandbox" } });
-        const lines = r.out.split("\n");
-        const ids = [...new Set(lines.map((l) => l.match(/(t(0[1-9]|1[0-6])_[a-z0-9_]+)/)?.[1]).filter((x): x is string => !!x))].sort();
-        for (const id of ids) {
-          const line = lines.find((l) => l.includes(id))!;
-          const ok = /✓|√|passed/.test(line) && !/×|✗|failed/.test(line);
-          rows.push({ n: `7.${id.slice(1, 3)}`, check: id, status: ok ? "PASS" : "FAIL", detail: ok ? "attack refused" : tail(line, 120) });
+        const report = join(".data", "adversarial-report.json");
+        const r = sh("pnpm", ["vitest", "run", "tests/adversarial", "--reporter=json", `--outputFile=${report}`], { env: { RECOURSE_MODE: "sandbox" } });
+        if (!existsSync(report)) return { status: "FAIL", detail: `no report: ${tail(r.out, 200)}` };
+        const json = JSON.parse(readFileSync(report, "utf8")) as { testResults: { assertionResults: { title: string; status: string; failureMessages: string[] }[] }[] };
+        const tests = json.testResults.flatMap((f) => f.assertionResults).filter((t) => /^t\d\d_/.test(t.title));
+        for (const t of tests.sort((a, b) => a.title.localeCompare(b.title))) {
+          const ok = t.status === "passed";
+          const why = (t.failureMessages[0] ?? "").split("\n")[0]!;
+          rows.push({ n: `7.${t.title.slice(1, 3)}`, check: t.title, status: ok ? "PASS" : t.status === "skipped" ? "SKIP" : "FAIL", detail: ok ? "attack refused" : tail(why, 160) });
         }
-        const c = vitestCounts(r.out);
-        return { status: r.status === 0 && c.passed === 16 ? "PASS" : "FAIL", detail: `${c.passed}/16 threats refused, ${c.failed} failed, ${c.skipped} skipped` };
+        const passed = tests.filter((t) => t.status === "passed").length;
+        return { status: r.status === 0 && passed === 16 ? "PASS" : "FAIL", detail: `${passed}/16 threats refused, ${tests.length - passed} not` };
       });
     } catch (e) {
       record("10", "All seven demo scenarios PASS in the sandbox", "FAIL", tail((e as Error).message, 300));
