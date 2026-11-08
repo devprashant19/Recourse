@@ -89,7 +89,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 4. `feat(receipts): capture raw model request and response bytes`
 
-- **Commit:** (this commit)
+- **Commit:** `0fbcd11`
 - **Did:** `buildChatRequest` serialises a non-streaming, temperature-0 request **once**; those bytes
   are what `LiveNearAiClient.chatCompletion` POSTs (with `x-no-aliasing: true` and
   `Accept-Encoding: identity`) and what is hashed. `runCompletion` returns the exact request and
@@ -103,6 +103,32 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   HTTP error; three malformed responses; artifact round-trip; tampered artifact and non-content URI).
 - **Ran:** `vitest run packages/receipts` (30 passed), `tsc --noEmit`, `eslint` — clean.
 - **Evidence:** unit-tested (HTTP mocked).
+
+### 5. `feat(receipts): implement EIP-191 signature retrieval and verification`
+
+- **Commit:** (this commit)
+- **Did:** `signedText` (the two documented forms only), `eip191Digest` (keccak256 of
+  `"\x19Ethereum Signed Message:\n" + byteLength + text`), `recoverSigner` (`@noble/curves` secp256k1;
+  65-byte `r||s||v`, v 27/28 or 0/1, high-s refused — the same rules as the contract's `tee.rs`),
+  `checkSignature`: the text must equal one of the two forms **for the exact hashes we computed and
+  this model**, the recovered address must equal the API's `signing_address`, and it must match
+  **exactly one** signer whose attestation verified for this nonce. Signature endpoint
+  `GET /v1/signature/<chat_id>?model=…&signing_algo=ecdsa` (NEAR's verifier also passes `model`);
+  the body must carry `text`, `signature`, `signing_address`.
+- **Spike A investigation:** NEAR's verifier source (`nearai-cloud-verifier` `chat_verifier.ts`)
+  confirms the payload shape, both text forms (split on `:`, 2 or 3 parts), lowercase-hex SHA-256 of
+  the UTF-8 bodies and plain EIP-191 recovery (`ethers.verifyMessage`). One divergence noted: its
+  non-streaming example hashes `JSON.stringify(response)` — a re-serialisation; this library hashes
+  the raw bytes, as the spec requires, and treats any mismatch as a failure. **Still not checked
+  against a live NEAR AI Cloud signature.**
+- **Files:** `packages/receipts/src/{signature,index}.ts`, `test/{signature.test,vectors}.ts`
+- **Tests:** 15, on the **same vectors the contract is tested with** (texts identical to the
+  contract's; known `hashMessage("hello")` digest; recovery for both forms; v 27/28 and 0/1; high-s,
+  bad recovery byte, wrong length refused; accept both forms; altered response hash; mismatched model;
+  other text format; tampered signature; reported-address mismatch; unattested signer; ambiguous
+  signer list; endpoint URL and body validation).
+- **Ran:** `vitest run packages/receipts` (45 passed), `tsc --noEmit`, `eslint` — clean.
+- **Evidence:** unit-tested; TypeScript and on-chain Rust recovery agree on shared vectors.
 
 ---
 

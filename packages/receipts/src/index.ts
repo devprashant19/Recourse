@@ -19,3 +19,4 @@ export * from "./bytes.js";
 export * from "./attestation.js";
 export * from "./client.js";
 export * from "./completion.js";
+export * from "./signature.js";
