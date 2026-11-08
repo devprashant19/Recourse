@@ -401,7 +401,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 17. `feat(demo): enable deterministic keyless sandbox execution`
 
-- **Commit:** (this commit)
+- **Commit:** `1dc857d`
 - **Did:**
   - **Dev fixture set.** Generated and committed `demo/fixtures/dev/fixtures.json` with
     `pnpm record-fixtures --dev`: 8 interactions (5 correct extractions, 1 `wrong_total`, 2 verdicts),
@@ -427,6 +427,36 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 - **Ran:** `pnpm test:services` (20 files, 210 passed), `pnpm typecheck`, `pnpm lint`: clean.
 - **Evidence:** dev-fixture. No genuine set exists yet.
 
+### 18. `test(integration): validate quality claim slashing and payout flow`
+
+- **Commit:** (this commit)
+- **Did:** `demo/scenarios/02-wrong-work-is-fined.ts` (`pnpm scenario:02`) on a **real local NEAR
+  sandbox** (nearcore 2.14, the Phase 1 contract), with the **real worker and arbiter code** in-process
+  (`scripts/lib/services.ts`), each signing as its own seeded account, on the keyless fixture backend.
+  Flow:
+  1. The client proposes a job on document 01.
+  2. The worker (sabotage `wrong_total`) validates the terms, accepts, extracts and submits. **The
+     contract verifies the receipt on-chain.**
+  3. The client stores evidence content-addressed and files a quality claim for the full cap.
+  4. The arbiter verifies the agent's receipt against the on-chain record, judges by the rubric and
+     calls `resolve_claim`. **The contract verifies the verdict receipt on-chain**; upheld at 3000 bps.
+  5. After the appeal window a stranger finalizes, and the keeper pays out.
+- **Asserted:**
+  - The award is exactly cap × 30%.
+  - The bond is slashed first. This award (0.6 NEAR) fits inside the new agent's 1 NEAR bond share, so
+    the vault pays 0; the split into the vault is covered by Phase 1's tests.
+  - The engagement is `Slashed`, the escrowed price stays with the vault (Phase 1 rule), and the payout
+    reaches `Success`.
+  - The client's on-chain balance rises by exactly award + stake.
+  - `solvency().ok`.
+- **Files:** `demo/scenarios/02-wrong-work-is-fined.ts`, `scripts/lib/services.ts`, `package.json`
+- **Ran:** `pnpm run deploy --network sandbox --contract-id recourse3.test.near`,
+  `pnpm run seed --network sandbox`, `pnpm scenario:02` against a local nearcore 2.14 sandbox:
+  **PASS** (11 checks). `tsc --noEmit`, `eslint`: clean.
+- **Evidence:** sandbox-tested on dev fixtures.
+- **Note:** fixture replay is deterministic, and the contract accepts each response hash once, so run
+  the scenarios on a fresh deployment.
+
 ---
 
 ## Deviations from the spec
@@ -446,6 +476,11 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   verified with `requireAttestation: false`, in sandbox only. A genuine set (`demo/fixtures/near-ai/`)
   takes precedence automatically once recorded.
 - **Intents adapters** (spec section 5 mentions `intents/`) arrive with Phase 3, where 1Click exists.
+- **Scenario 02's expected end state vs Phase 1.** The phase spec says the client gets
+  "award + price + stake back". Phase 1 (approved by the maintainer, see PHASE-1 deviations) changed
+  upheld claims so the **price stays with the vault** and the award is the compensation; otherwise a
+  client and agent who are the same person profit from the vault (T6). Scenario 02 asserts the
+  implemented Phase 1 rule: client receives award + stake.
 
 ## Open items
 

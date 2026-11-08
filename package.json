@@ -28,6 +28,7 @@
     "deploy": "tsx scripts/deploy.ts",
     "seed": "tsx scripts/seed.ts",
     "scenario:01": "tsx demo/scenarios/01-happy-path.ts",
+    "scenario:02": "tsx demo/scenarios/02-wrong-work-is-fined.ts",
     "scenario:03": "tsx demo/scenarios/03-no-delivery.ts",
     "record-fixtures": "tsx scripts/record-fixtures.ts",
     "verify-receipt": "tsx scripts/verify-receipt.ts",
