@@ -346,7 +346,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 15. `feat(adapters): introduce live and fixture service adapters`
 
-- **Commit:** (this commit)
+- **Commit:** `79c343c`
 - **Did:** `@recourse/adapters`: fixture-set format (`demo/fixtures/<set>/fixtures.json`; `kind`
   `genuine` or `dev`; per model the recorded nonce, report and Intel verdicts by quote hash; per
   interaction the request hash, chat id, raw response and signature payload) with strict validation;
@@ -367,6 +367,37 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   keyless; testnet/mainnet live-only and key required; sandbox without fixtures fails clearly).
 - **Ran:** `vitest run packages` (136 passed), `tsc --noEmit` (packages), `eslint` — clean.
 - **Evidence:** unit-tested.
+
+### 16. `feat(fixtures): record verified NEAR AI Cloud responses and signatures`
+
+- **Commit:** (this commit)
+- **Did:**
+  - **`scripts/record-fixtures.ts`.**
+    - `--live` needs `NEARAI_API_KEY`, `NEARAI_MODEL_WORKER` and `NEARAI_MODEL_ARBITER`. It wraps the
+      live client in a `RecordingClient`, verifies every TDX quote with dcap-qvl, and records Intel's
+      verdict. It writes `demo/fixtures/near-ai/` as `kind: "genuine"`.
+    - `--dev` runs the same plan against a `DevModelClient`: deterministic answers from ground truth,
+      signed by the throwaway key, quotes without an Intel signature. It writes `demo/fixtures/dev/`
+      as `kind: "dev"`.
+    - Both run the recording plan (`demo/fixtures/plan.ts`) through the worker's own
+      `extractionRequest` and the arbiter's own `verdictRequest`, so the recorded requests are
+      byte-identical to what the services send.
+    - Before writing, the set is replayed through the fixture client and **every receipt is verified**.
+      Nothing is written on failure, an existing set is never overwritten without `--force`, and only
+      bytes, signatures and reports are stored, never the key.
+  - **Arbiter prompt.** It no longer embeds claim/engagement ids. The case content identifies the
+    claim and the receipt carries the id, so verdicts are a pure function of the case and replayable.
+  - **Worker.** Exports `extractionRequest`, the single source of its request bytes.
+- **Files:** `scripts/record-fixtures.ts`, `demo/fixtures/plan.ts`,
+  `packages/adapters/{src/{recorder,dev-model,index}.ts,test/recorder.test.ts,package.json}`,
+  `services/worker-agent/src/extract.ts`, `services/arbiter/src/judge.ts`, `pnpm-lock.yaml`
+- **Tests:** 3 new (record → replay gives identical bytes and verifying receipts; one nonce per model;
+  dev reports flagged and the dev key equals the Phase 1 test-vector signer that `seed.ts` allow-lists).
+  CLI preconditions checked by running it: `--live` without credentials refuses, and so does no flag.
+- **Ran:** `vitest run packages/adapters` (13 passed), root `tsc --noEmit`, `eslint`: clean.
+- **Evidence:**
+  - Unit-tested.
+  - **`--live` has not been run** (no NEAR AI Cloud key); no genuine fixtures exist yet.
 
 ---
 

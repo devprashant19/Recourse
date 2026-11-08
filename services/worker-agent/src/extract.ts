@@ -44,6 +44,11 @@ export function extractionMessages(inputs: JobInputs, extraInstruction?: string)
   ];
 }
 
+/** The exact request bytes the worker sends for a job (also used to record fixtures). */
+export function extractionRequest(model: string, inputs: JobInputs, extraInstruction?: string): Uint8Array {
+  return buildChatRequest(model, extractionMessages(inputs, extraInstruction), { temperature: 0, response_format: { type: "json_object" } });
+}
+
 export interface PerformDeps {
   client: NearAiClient;
   verifier: QuoteVerifier;
@@ -58,10 +63,7 @@ export interface PerformDeps {
 
 /** Runs one job and submits its receipt; returns the receipt hash, or null if not submitted. */
 export async function performExtraction(d: PerformDeps, id: number, e: Engagement, inputs: JobInputs): Promise<string | null> {
-  const request = buildChatRequest(d.model, extractionMessages(inputs, d.instruction?.()), {
-    temperature: 0,
-    response_format: { type: "json_object" },
-  });
+  const request = extractionRequest(d.model, inputs, d.instruction?.());
   const out = await attestedCompletion({ client: d.client, verifier: d.verifier, store: d.store, modelId: d.model, engagementId: id, request });
 
   const outputUri = await d.store.put("output", new TextEncoder().encode(out.completion.content));

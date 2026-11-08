@@ -9,3 +9,5 @@
 export * from "./fixtures.js";
 export * from "./verifiers.js";
 export * from "./select.js";
+export * from "./recorder.js";
+export * from "./dev-model.js";

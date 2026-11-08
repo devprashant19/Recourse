@@ -42,7 +42,9 @@ export function verdictMessages(c: CaseFile): ChatMessage[] {
     {
       role: "user",
       content: [
-        `Claim ${c.claimId} on engagement ${c.claim.engagement_id}. Judge it by the rubric. Return only the JSON verdict.`,
+        // No claim/engagement ids here: the verdict receipt carries the claim id, and keeping the
+        // request a pure function of the case content makes verdicts replayable from fixtures.
+        "Judge this claim by the rubric. Return only the JSON verdict.",
         block("TERMS", `schema:\n${terms}\nweights (bps):\n${canonicalJson(c.inputs.terms.weights)}`),
         block("DOCUMENT", c.documentText),
         block("AGENT_OUTPUT", c.agentOutput),
