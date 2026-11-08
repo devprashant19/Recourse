@@ -11,6 +11,8 @@ import type {
   Payout,
   PayoutOutcome,
   PayoutStatus,
+  SignatureKind,
+  Signer,
 } from "@recourse/sdk";
 
 export interface KeeperChain {
@@ -32,6 +34,12 @@ export interface KeeperChain {
     destTx?: string,
   ): Promise<PayoutStatus>;
   syncUnattributed(): Promise<string>;
-  registerSigner(modelId: string, signerAddress: string): Promise<void>;
+  getSigner(address: string): Promise<Signer | null>;
+  registerSigner(
+    modelId: string,
+    signerAddress: string,
+    attestationHash?: Hash,
+    kind?: SignatureKind,
+  ): Promise<void>;
   now(): Promise<bigint>;
 }

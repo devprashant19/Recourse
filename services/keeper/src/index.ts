@@ -10,4 +10,5 @@ export * from "./payout.js";
 export * from "./tracker.js";
 export * from "./polling.js";
 export * from "./reconcile.js";
+export * from "./registrar.js";
 export * from "./service.js";

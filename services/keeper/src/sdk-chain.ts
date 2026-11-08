@@ -76,14 +76,20 @@ export class SdkKeeperChain implements KeeperChain {
     return this.client.syncUnattributed();
   }
 
+  async getSigner(address: string) {
+    const clean = address.startsWith("0x") ? address.slice(2) : address;
+    return this.client.getSigner(clean as EvmAddress);
+  }
+
   async registerSigner(
     modelId: string,
     signerAddress: string,
-    attestationHash: Hash = "0x" + "00".repeat(32),
+    attestationHash: Hash = ("0x" + "00".repeat(32)) as Hash,
     kind: SignatureKind = "ProviderTee",
   ): Promise<void> {
+    const clean = signerAddress.startsWith("0x") ? signerAddress.slice(2) : signerAddress;
     await this.client.registerSigner(
-      signerAddress as EvmAddress,
+      clean as EvmAddress,
       modelId,
       attestationHash,
       kind,

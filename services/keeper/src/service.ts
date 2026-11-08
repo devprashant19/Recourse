@@ -10,6 +10,8 @@ import {
   type TokenInfo,
 } from "@recourse/intents";
 
+import { LiveNearAiClient } from "@recourse/receipts";
+
 import type { KeeperChain } from "./chain.js";
 import type { KeeperConfig } from "./config.js";
 import { KeeperLogger } from "./logger.js";
@@ -25,6 +27,7 @@ import {
   type PollResult,
 } from "./polling.js";
 import { PayoutReconciler, type ReconcileResult } from "./reconcile.js";
+import { SignerRegistrar } from "./registrar.js";
 import { PayoutTracker } from "./tracker.js";
 
 export class KeeperService {
@@ -34,6 +37,7 @@ export class KeeperService {
   readonly log: KeeperLogger;
   readonly tracker: PayoutTracker;
   readonly reconciler: PayoutReconciler;
+  readonly registrar?: SignerRegistrar;
 
   constructor(
     readonly config: KeeperConfig,
@@ -42,11 +46,23 @@ export class KeeperService {
     logger?: KeeperLogger,
     tracker?: PayoutTracker,
     reconciler?: PayoutReconciler,
+    registrar?: SignerRegistrar,
   ) {
     this.log = logger ?? new KeeperLogger("keeper");
     this.tracker = tracker ?? new PayoutTracker(config.stateFile);
     this.reconciler =
       reconciler ?? new PayoutReconciler(this.chain, this.tracker, this.log);
+    this.registrar =
+      registrar ??
+      (config.nearAiKey
+        ? new SignerRegistrar(
+            this.chain,
+            new LiveNearAiClient({ apiKey: config.nearAiKey }),
+            config.models,
+            config.signerRegistrationIntervalMs,
+            this.log,
+          )
+        : undefined);
   }
 
   /**
@@ -186,6 +202,14 @@ export class KeeperService {
 
     this.log.info("keeper_loop_started", { pollMs: this.config.pollMs });
 
+    if (this.registrar) {
+      this.registrar.start().catch((err) => {
+        this.log.warn("signer_registrar_loop_error", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+
     const loop = async () => {
       if (!this.running) return;
       await this.tick();
@@ -203,6 +227,9 @@ export class KeeperService {
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = undefined;
+    }
+    if (this.registrar) {
+      this.registrar.stop();
     }
     this.log.info("keeper_stopped");
   }

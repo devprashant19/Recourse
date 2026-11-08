@@ -14,6 +14,9 @@ export interface KeeperConfig {
   pollMs: number;
   stateFile: string;
   dryQuote: boolean;
+  nearAiKey?: string;
+  models: string[];
+  signerRegistrationIntervalMs: number;
 }
 
 const RPC: Record<Mode, string> = {
@@ -58,6 +61,17 @@ export function loadKeeperConfig(
     throw new Error("KEEPER_POLL_MS must be an integer >= 200");
   }
 
+  const models = (
+    env.NEARAI_MODELS?.split(",").map((s) => s.trim()).filter(Boolean) ?? [
+      env.NEARAI_MODEL_WORKER,
+      env.NEARAI_MODEL_ARBITER,
+    ].filter((s): s is string => Boolean(s))
+  );
+
+  const signerIntervalMs = Number(
+    env.KEEPER_SIGNER_INTERVAL_MS ?? 30 * 60 * 1000,
+  );
+
   const cfg: KeeperConfig = {
     mode,
     rpcUrl: env.RECOURSE_RPC_URL ?? RPC[mode],
@@ -69,6 +83,9 @@ export function loadKeeperConfig(
     pollMs,
     stateFile: env.KEEPER_STATE_FILE ?? `.data/${mode}-keeper-state.json`,
     dryQuote: env.KEEPER_DRY_QUOTE === "true" || mode === "testnet",
+    nearAiKey: env.NEARAI_API_KEY,
+    models,
+    signerRegistrationIntervalMs: signerIntervalMs,
   };
 
   if (mode === "sandbox") {
