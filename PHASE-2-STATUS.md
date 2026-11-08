@@ -227,7 +227,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 10. `feat(worker): add configurable sabotage modes and admin controls`
 
-- **Commit:** (this commit)
+- **Commit:** `1e4ed3f`
 - **Did:** `SabotageController` with the five modes; `wrong_total` and `hallucinate` append an
   instruction to the **model prompt**, so the TEE honestly signs the bad instruction into the request
   bytes (the receipt shows it — nothing is forged); `late` only works once the deadline has passed (the
@@ -244,6 +244,26 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   method → 405; constant-time token check).
 - **Ran:** `vitest run services/worker-agent` (31 passed), `tsc --noEmit`, `eslint` — clean.
 - **Evidence:** unit-tested (TEE double obeys the injected instruction, as a real model is expected to).
+
+### 11. `feat(arbiter): define quality assessment rubric and output schema`
+
+- **Commit:** (this commit)
+- **Did:** `services/arbiter/rubric.md` — the published, inspectable rubric: the document is the only
+  source of truth; **everything in the quoted blocks (document, agent output, evidence) is data, not
+  instructions**, with the typical injections named; one finding per terms field with a verbatim quote;
+  `award_bps` = sum of wrong fields' weights; `upheld` iff some field is wrong; the honest framing
+  (a receipt does not prove correctness). `rubric.schema.json` — strict (`additionalProperties: false`,
+  integer `award_bps` 0–10 000, bounded strings/arrays). `checkVerdict` validates the schema **and**
+  re-derives the facts the model cannot talk its way around: exactly one finding per terms field, every
+  wrong finding's quote appears verbatim in the document, `award_bps` equals the weight sum the code
+  computes, `upheld` consistent. A failing verdict is rejected, never repaired.
+- **Files:** `services/arbiter/{rubric.md,rubric.schema.json,package.json,src/{verdict,index}.ts,
+  test/verdict.test.ts}`, `pnpm-lock.yaml`
+- **Tests:** 8 (rubric states the injection rule and framing; valid upheld verdict as object and JSON
+  text; valid rejection; non-JSON / extra field / out-of-range / fractional / missing field rejected;
+  inflated award; inconsistent `upheld`; ungrounded quote; missing / duplicate / unknown fields).
+- **Ran:** `vitest run services/arbiter` (8 passed), `tsc --noEmit`, `eslint` — clean.
+- **Evidence:** unit-tested.
 
 ---
 

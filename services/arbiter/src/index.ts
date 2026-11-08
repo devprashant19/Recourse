@@ -1,11 +1,8 @@
 /**
- * @recourse/arbiter
+ * @recourse/arbiter — judges quality claims with a published rubric on a TEE
+ * model at temperature 0; the verdict is itself a receipt. Evidence is
+ * quoted data, never instructions (T15).
  *
- * Rubric runner. Verdict is itself a TEE receipt. Resists prompt injection in evidence (T15).
- *
- * Built in: Phase 2
- * Spec: phases/phase-02-receipts-worker-arbiter.md
+ * Spec: phases/phase-02-receipts-worker-arbiter.md section 4.
  */
-
-export const PLACEHOLDER = true;
-// TODO(Phase 2): implement.
+export * from "./verdict.js";

@@ -1,0 +1,29 @@
+{
+  "$id": "recourse/arbiter-verdict/v1",
+  "title": "Arbiter verdict",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["upheld", "findings", "award_bps", "reasons"],
+  "properties": {
+    "upheld": { "type": "boolean" },
+    "findings": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "document_says", "agent_said", "correct", "quote_from_document"],
+        "properties": {
+          "field": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+          "document_says": { "type": ["string", "null"], "maxLength": 500 },
+          "agent_said": { "type": ["string", "null"], "maxLength": 500 },
+          "correct": { "type": "boolean" },
+          "quote_from_document": { "type": "string", "maxLength": 500 }
+        }
+      }
+    },
+    "award_bps": { "type": "integer", "minimum": 0, "maximum": 10000 },
+    "reasons": { "type": "string", "minLength": 1, "maxLength": 600 }
+  }
+}

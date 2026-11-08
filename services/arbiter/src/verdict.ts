@@ -1,0 +1,73 @@
+/**
+ * The arbiter's verdict format and the checks every verdict must pass
+ * (rubric.md, "How the output is checked"). A verdict that fails is
+ * rejected, never repaired: a model that goes off-script — or is talked
+ * off-script by injected evidence — produces an invalid verdict, not a
+ * wrong one.
+ */
+
+import { readFileSync } from "node:fs";
+
+import { Ajv } from "ajv";
+
+import { awardBps, type Weights } from "@recourse/jobs";
+
+export interface Finding {
+  field: string;
+  document_says: string | null;
+  agent_said: string | null;
+  correct: boolean;
+  quote_from_document: string;
+}
+
+export interface Verdict {
+  upheld: boolean;
+  findings: Finding[];
+  award_bps: number;
+  reasons: string;
+}
+
+export const RUBRIC_PATH = new URL("../rubric.md", import.meta.url);
+export const SCHEMA_PATH = new URL("../rubric.schema.json", import.meta.url);
+
+export const RUBRIC = readFileSync(RUBRIC_PATH, "utf8");
+const schema = JSON.parse(readFileSync(SCHEMA_PATH, "utf8")) as object;
+const validateShape = new Ajv({ allErrors: true, strict: true }).compile(schema);
+
+/** Parses and checks a verdict; throws listing every problem. */
+export function checkVerdict(raw: unknown, ctx: { weights: Weights; documentText: string }): Verdict {
+  const v = typeof raw === "string" ? parseJson(raw) : raw;
+  if (!validateShape(v)) {
+    const msg = (validateShape.errors ?? []).map((e) => `${e.instancePath || "/"} ${e.message}`).join("; ");
+    throw new Error(`verdict does not match rubric.schema.json: ${msg}`);
+  }
+  const verdict = v as Verdict;
+  const problems: string[] = [];
+
+  const fields = verdict.findings.map((f) => f.field);
+  const expected = Object.keys(ctx.weights).sort();
+  if (new Set(fields).size !== fields.length) problems.push("a field has more than one finding");
+  if ([...fields].sort().join(",") !== expected.join(",")) problems.push(`findings must cover exactly: ${expected.join(", ")}`);
+
+  const wrong = verdict.findings.filter((f) => !f.correct);
+  for (const f of wrong) {
+    if (!f.quote_from_document || !ctx.documentText.includes(f.quote_from_document)) {
+      problems.push(`finding for ${f.field} quotes text that is not in the document`);
+    }
+  }
+  const knownWrong = wrong.map((f) => f.field).filter((f) => f in ctx.weights);
+  const bps = knownWrong.length === wrong.length ? awardBps(knownWrong, ctx.weights) : -1;
+  if (verdict.award_bps !== bps) problems.push(`award_bps ${verdict.award_bps} is not the sum of wrong fields' weights (${bps})`);
+  if (verdict.upheld !== wrong.length > 0) problems.push("upheld must be true exactly when some finding is incorrect");
+
+  if (problems.length) throw new Error(`invalid verdict: ${problems.join("; ")}`);
+  return verdict;
+}
+
+function parseJson(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    throw new Error("verdict is not JSON");
+  }
+}

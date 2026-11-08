@@ -77,7 +77,23 @@ importers:
         specifier: 7.4.0
         version: 7.4.0
 
-  services/arbiter: {}
+  services/arbiter:
+    dependencies:
+      '@recourse/jobs':
+        specifier: workspace:^
+        version: link:../../packages/jobs
+      '@recourse/receipts':
+        specifier: workspace:^
+        version: link:../../packages/receipts
+      '@recourse/sdk':
+        specifier: workspace:^
+        version: link:../../packages/sdk
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
+      near-api-js:
+        specifier: 7.4.0
+        version: 7.4.0
 
   services/indexer: {}
 
