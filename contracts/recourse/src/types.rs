@@ -403,6 +403,33 @@ impl ClaimStatus {
     }
 }
 
+/// The terms of a new engagement: `open_engagement`'s arguments, and the JSON
+/// after `engagement:` in a USDC deposit message.
+#[near(serializers = [json])]
+#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EngagementRequest {
+    pub agent: AccountId,
+    pub terms_hash: Hash,
+    pub liability_cap: U128,
+    pub deadline: U64,
+    pub price: U128,
+}
+
+/// A new claim: `file_claim`'s arguments, and the JSON after `claim:` in a
+/// USDC deposit message.
+#[near(serializers = [json])]
+#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClaimRequest {
+    pub engagement_id: U64,
+    pub kind: ClaimKind,
+    pub amount: U128,
+    pub evidence_hash: Hash,
+    pub evidence_uri: String,
+    pub destination: Destination,
+}
+
 /// Fixed by the claimant when filing, so the keeper cannot redirect a payout (T8).
 #[near(serializers = [json, borsh])]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -539,7 +566,9 @@ pub struct Solvency {
     pub claim_stakes: U128,
     pub pending_payouts: U128,
     pub unattributed: U128,
-    /// Sum of the six buckets above.
+    /// Owed after refused token transfers (`claim_owed`).
+    pub owed: U128,
+    /// Sum of the buckets above, plus prepaid NEP-145 storage in native mode.
     pub liabilities: U128,
     /// `held - storage_reserved - liabilities`, or 0 if that would be negative.
     pub surplus: U128,

@@ -47,6 +47,8 @@ pub enum Event {
     PayoutRetry,
     Paused,
     StorageDeposit,
+    PaymentFailed,
+    OwedClaimed,
 }
 
 impl Event {
@@ -79,6 +81,8 @@ impl Event {
             Event::PayoutRetry => "payout_retry",
             Event::Paused => "paused",
             Event::StorageDeposit => "storage_deposit",
+            Event::PaymentFailed => "payment_failed",
+            Event::OwedClaimed => "owed_claimed",
         }
     }
 

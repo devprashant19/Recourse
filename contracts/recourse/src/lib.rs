@@ -37,6 +37,7 @@ pub mod claims;
 pub mod engagements;
 pub mod events;
 pub mod ft;
+pub mod pay;
 pub mod payouts;
 pub mod pool;
 pub mod pricing;
@@ -69,6 +70,7 @@ enum StorageKey {
     UsedReceipts,
     AgentExposure,
     StorageBalances,
+    Owed,
 }
 
 #[near(contract_state)]
@@ -114,6 +116,11 @@ pub struct Recourse {
     storage_balances: LookupMap<AccountId, u128>,
     /// Sum of `storage_balances`; owed back in NEAR, so a native-mode liability.
     storage_balance_total: u128,
+    /// Bond-asset units owed after a refused Ft transfer, pulled with
+    /// `claim_owed`.
+    owed: LookupMap<AccountId, u128>,
+    /// Sum of `owed`; a liability.
+    owed_total: u128,
 }
 
 #[near]
@@ -152,6 +159,8 @@ impl Recourse {
             ft_held: 0,
             storage_balances: LookupMap::new(StorageKey::StorageBalances),
             storage_balance_total: 0,
+            owed: LookupMap::new(StorageKey::Owed),
+            owed_total: 0,
         }
     }
 

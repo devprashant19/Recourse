@@ -19,7 +19,7 @@ use near_sdk::{env, near, require, AccountId, NearToken, Promise, PromiseOrValue
 
 use crate::events::Event;
 use crate::math::{add, sub};
-use crate::storage::storage_cost;
+use crate::storage::{claim_storage_fee, engagement_storage_fee, storage_cost};
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
 
@@ -172,6 +172,30 @@ impl Recourse {
                 self.mint_vault_shares(&vault, sender, held, amount, None);
                 amount
             }
+            FtAction::Engagement(json) => {
+                let request: EngagementRequest = near_sdk::serde_json::from_str(&json)
+                    .unwrap_or_else(|_| env::panic_str("bad engagement message"));
+                let before = env::storage_usage();
+                let (_, escrow) = self.propose_engagement(sender, request);
+                require!(
+                    amount >= escrow,
+                    format!("send at least {escrow}: price + premium")
+                );
+                self.prepay_storage_from_balance(sender, before, engagement_storage_fee());
+                escrow
+            }
+            FtAction::Claim(json) => {
+                let request: ClaimRequest = near_sdk::serde_json::from_str(&json)
+                    .unwrap_or_else(|_| env::panic_str("bad claim message"));
+                let before = env::storage_usage();
+                let (_, stake) = self.record_claim(sender, request);
+                require!(
+                    amount >= stake,
+                    format!("send at least {stake}: the claim stake")
+                );
+                self.prepay_storage_from_balance(sender, before, claim_storage_fee());
+                stake
+            }
             other => env::panic_str(&format!("deposit type not supported yet: {other:?}")),
         }
     }
@@ -180,6 +204,19 @@ impl Recourse {
     pub(crate) fn charge_storage_balance(&mut self, who: &AccountId, before: u64) {
         self.flush();
         let cost = storage_cost(env::storage_usage().saturating_sub(before));
+        self.debit_storage_balance(who, cost);
+    }
+
+    /// Takes a record's fixed storage fee from `who`'s NEP-145 balance, as the
+    /// native path takes it from the attached deposit: it must cover what was
+    /// written since `before`, and the rest stays prepaid for later writes to
+    /// the same record (receipt, verdict, payout).
+    fn prepay_storage_from_balance(&mut self, who: &AccountId, before: u64, fee: u128) {
+        self.charge_storage(before, fee);
+        self.debit_storage_balance(who, fee);
+    }
+
+    fn debit_storage_balance(&mut self, who: &AccountId, cost: u128) {
         if cost == 0 {
             return;
         }

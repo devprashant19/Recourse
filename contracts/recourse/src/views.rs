@@ -143,6 +143,7 @@ impl Recourse {
             t.claim_stakes.0,
             t.pending_payouts.0,
             self.unattributed,
+            self.owed_total,
             if ft { 0 } else { self.storage_balance_total },
         ]
         .into_iter()
@@ -157,6 +158,7 @@ impl Recourse {
             claim_stakes: t.claim_stakes,
             pending_payouts: t.pending_payouts,
             unattributed: U128(self.unattributed),
+            owed: U128(self.owed_total),
             liabilities: U128(liabilities),
             surplus: U128(free.saturating_sub(liabilities)),
             ok: free >= liabilities,

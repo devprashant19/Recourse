@@ -11,7 +11,7 @@
 
 use near_sdk::json_types::{U128, U64};
 use near_sdk::serde_json::json;
-use near_sdk::{env, near, require, AccountId, NearToken, Promise};
+use near_sdk::{env, near, require, AccountId};
 
 use crate::events::Event;
 use crate::math::{add, mul_div_floor, sub};
@@ -122,9 +122,7 @@ impl Recourse {
             "capital": v.capital,
             "total_shares": v.total_shares,
         }));
-        Promise::new(lp)
-            .transfer(NearToken::from_yoctonear(assets))
-            .detach();
+        self.pay(&lp, assets);
         U128(assets)
     }
 }

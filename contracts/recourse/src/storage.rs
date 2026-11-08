@@ -83,6 +83,7 @@ impl Recourse {
         // `used_receipts` (LookupSet) writes through immediately; no cache to flush.
         self.agent_exposure.flush();
         self.storage_balances.flush();
+        self.owed.flush();
     }
 
     /// Charges the storage used since `before` against `available` and returns

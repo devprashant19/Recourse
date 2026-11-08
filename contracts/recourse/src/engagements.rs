@@ -12,7 +12,7 @@
 
 use near_sdk::json_types::{U128, U64};
 use near_sdk::serde_json::json;
-use near_sdk::{env, near, require, AccountId, NearToken, Promise};
+use near_sdk::{env, near, require, AccountId};
 
 use crate::events::Event;
 use crate::math::{add, sub};
@@ -38,67 +38,29 @@ impl Recourse {
         deadline: U64,
         price: U128,
     ) -> EngagementId {
-        self.assert_not_paused();
         self.assert_native_mode();
         let client = env::predecessor_account_id();
-        require!(client != agent, "an agent cannot hire itself");
-        let now = env::block_timestamp();
-        require!(deadline.0 > now, "deadline must be in the future");
-        let plan = self
-            .plan_job(&agent, liability_cap.0, price.0)
-            .unwrap_or_else(|e| env::panic_str(&e));
-
-        let escrow = add(price.0, plan.premium, "escrow");
+        let before = env::storage_usage();
+        let (id, escrow) = self.propose_engagement(
+            &client,
+            EngagementRequest {
+                agent,
+                terms_hash,
+                liability_cap,
+                deadline,
+                price,
+            },
+        );
         let fee = engagement_storage_fee();
         let required = add(escrow, fee, "deposit");
         let attached = env::attached_deposit().as_yoctonear();
         require!(
             attached >= required,
-            format!(
-                "attach {required} yocto: price + premium {} + storage {fee}",
-                plan.premium
-            )
+            format!("attach {required} yocto: price + premium {escrow} + storage {fee}")
         );
-
-        let before = env::storage_usage();
-        let id = self.next_ids.engagement;
-        self.next_ids.engagement += 1;
-        let engagement = Engagement {
-            client: client.clone(),
-            agent: agent.clone(),
-            terms_hash,
-            price,
-            liability_cap,
-            premium: U128(plan.premium),
-            bond_locked: U128(plan.bond_locked),
-            vault_locked: U128(plan.vault_locked),
-            vault: plan.vault.clone(),
-            created_at: now.into(),
-            deadline,
-            receipt: None,
-            delivered_at: None,
-            claim_id: None,
-            status: EngagementStatus::Proposed,
-        };
-        self.engagements.insert(id, engagement);
-        self.totals.escrow = U128(add(self.totals.escrow.0, escrow, "total escrow"));
         // The fee must cover what was written now; the rest stays prepaid
         // for the receipt `submit_receipt` will add.
         self.charge_storage(before, fee);
-
-        Event::EngagementOpened.emit(json!({
-            "id": U64(id),
-            "client": client,
-            "agent": agent,
-            "vault": plan.vault,
-            "terms_hash": terms_hash,
-            "price": price,
-            "premium": U128(plan.premium),
-            "liability_cap": liability_cap,
-            "bond_locked": U128(plan.bond_locked),
-            "vault_locked": U128(plan.vault_locked),
-            "deadline": deadline,
-        }));
         refund(attached - required);
         id
     }
@@ -174,9 +136,7 @@ impl Recourse {
             "refunded": U128(refund_amt),
             "by": caller,
         }));
-        Promise::new(e.client.clone())
-            .transfer(NearToken::from_yoctonear(refund_amt))
-            .detach();
+        self.pay(&e.client, refund_amt);
     }
 
     /// The agent proves delivery with a TEE-signed receipt, checked on-chain
@@ -254,9 +214,7 @@ impl Recourse {
             "premium_to_vault": e.premium,
             "vault": e.vault,
         }));
-        Promise::new(e.agent.clone())
-            .transfer(NearToken::from_yoctonear(e.price.0))
-            .detach();
+        self.pay(&e.agent, e.price.0);
     }
 
     /// Closes an engagement that was never delivered and never claimed, once
@@ -287,13 +245,66 @@ impl Recourse {
             "price_refunded": e.price,
             "premium_to_vault": e.premium,
         }));
-        Promise::new(e.client.clone())
-            .transfer(NearToken::from_yoctonear(e.price.0))
-            .detach();
+        self.pay(&e.client, e.price.0);
     }
 }
 
 impl Recourse {
+    /// Records a proposed engagement for `client` and escrows its price and
+    /// premium in `totals.escrow`. Returns the id and the escrow the caller
+    /// must have paid; the caller charges storage and checks payment.
+    pub(crate) fn propose_engagement(
+        &mut self,
+        client: &AccountId,
+        r: EngagementRequest,
+    ) -> (EngagementId, u128) {
+        self.assert_not_paused();
+        require!(*client != r.agent, "an agent cannot hire itself");
+        let now = env::block_timestamp();
+        require!(r.deadline.0 > now, "deadline must be in the future");
+        let plan = self
+            .plan_job(&r.agent, r.liability_cap.0, r.price.0)
+            .unwrap_or_else(|e| env::panic_str(&e));
+        let escrow = add(r.price.0, plan.premium, "escrow");
+
+        let id = self.next_ids.engagement;
+        self.next_ids.engagement += 1;
+        let engagement = Engagement {
+            client: client.clone(),
+            agent: r.agent.clone(),
+            terms_hash: r.terms_hash,
+            price: r.price,
+            liability_cap: r.liability_cap,
+            premium: U128(plan.premium),
+            bond_locked: U128(plan.bond_locked),
+            vault_locked: U128(plan.vault_locked),
+            vault: plan.vault.clone(),
+            created_at: now.into(),
+            deadline: r.deadline,
+            receipt: None,
+            delivered_at: None,
+            claim_id: None,
+            status: EngagementStatus::Proposed,
+        };
+        self.engagements.insert(id, engagement);
+        self.totals.escrow = U128(add(self.totals.escrow.0, escrow, "total escrow"));
+
+        Event::EngagementOpened.emit(json!({
+            "id": U64(id),
+            "client": client,
+            "agent": r.agent,
+            "vault": plan.vault,
+            "terms_hash": r.terms_hash,
+            "price": r.price,
+            "premium": U128(plan.premium),
+            "liability_cap": r.liability_cap,
+            "bond_locked": U128(plan.bond_locked),
+            "vault_locked": U128(plan.vault_locked),
+            "deadline": r.deadline,
+        }));
+        (id, escrow)
+    }
+
     pub(crate) fn engagement_of(&self, id: EngagementId) -> Engagement {
         self.engagements
             .get(&id)

@@ -17,7 +17,7 @@
 
 use near_sdk::json_types::{U128, U64};
 use near_sdk::serde_json::json;
-use near_sdk::{env, near, require, NearToken, Promise};
+use near_sdk::{env, near, require, AccountId};
 
 use crate::events::Event;
 use crate::math::{add, bps_ceil, sub};
@@ -43,32 +43,19 @@ impl Recourse {
         destination: Destination,
     ) -> ClaimId {
         self.assert_native_mode();
-        let mut e = self.engagement_of(id);
         let claimant = env::predecessor_account_id();
-        require!(
-            claimant == e.client,
-            "only the engagement's client can claim"
+        let before = env::storage_usage();
+        let (claim_id, stake) = self.record_claim(
+            &claimant,
+            ClaimRequest {
+                engagement_id: U64(id),
+                kind,
+                amount,
+                evidence_hash,
+                evidence_uri,
+                destination,
+            },
         );
-        require!(e.claim_id.is_none(), "a claim was already filed");
-        self.require_inside_claim_window(&e, kind);
-        require!(amount.0 > 0, "amount must be positive");
-        require!(
-            amount.0 <= e.liability_cap.0,
-            "amount exceeds liability_cap"
-        );
-        require_len(&evidence_uri, MAX_URI_LEN, "evidence_uri");
-        require_len(
-            &destination.asset_id,
-            MAX_SHORT_STR_LEN,
-            "destination.asset_id",
-        );
-        require_len(
-            &destination.recipient,
-            MAX_SHORT_STR_LEN,
-            "destination.recipient",
-        );
-
-        let stake = bps_ceil(amount.0, self.config.claim_stake_bps);
         let fee = claim_storage_fee();
         let required = add(stake, fee, "claim deposit");
         let attached = env::attached_deposit().as_yoctonear();
@@ -76,55 +63,9 @@ impl Recourse {
             attached >= required,
             format!("attach {required} yocto: stake {stake} + storage {fee}")
         );
-
-        let now = env::block_timestamp();
-        let before = env::storage_usage();
-        let claim_id = self.next_ids.claim;
-        self.next_ids.claim += 1;
-        self.claims.insert(
-            claim_id,
-            Claim {
-                engagement_id: id,
-                claimant: claimant.clone(),
-                kind,
-                amount,
-                stake: U128(stake),
-                evidence_hash,
-                evidence_uri: evidence_uri.clone(),
-                destination: destination.clone(),
-                verdict: None,
-                status: ClaimStatus::Filed,
-                filed_at: U64(now),
-            },
-        );
-        e.claim_id = Some(claim_id);
-        self.set_engagement_status(id, &mut e, EngagementStatus::Claimed);
-
-        // Freeze the agent's exit: no withdrawal while this claim is open, and
-        // a cooldown already running starts again from now (T4).
-        let mut bond = self.bond_of(&e.agent);
-        bond.open_claims += 1;
-        if bond.withdrawal_requested_at.is_some() {
-            bond.withdrawal_requested_at = Some(U64(now));
-        }
-        self.bonds.insert(e.agent.clone(), bond);
-        self.totals.claim_stakes = U128(add(self.totals.claim_stakes.0, stake, "total stakes"));
         // The fee covers this write; the rest stays prepaid for the verdict
         // and the payout record.
         self.charge_storage(before, fee);
-
-        Event::ClaimFiled.emit(json!({
-            "claim_id": U64(claim_id),
-            "engagement_id": U64(id),
-            "claimant": claimant,
-            "agent": e.agent,
-            "kind": kind,
-            "amount": amount,
-            "stake": U128(stake),
-            "evidence_hash": evidence_hash,
-            "evidence_uri": evidence_uri,
-            "destination": destination,
-        }));
         refund(attached - required);
         claim_id
     }
@@ -321,9 +262,7 @@ impl Recourse {
             "refunded": U128(refund_amt),
             "claimant": claim.claimant,
         }));
-        Promise::new(claim.claimant.clone())
-            .transfer(NearToken::from_yoctonear(refund_amt))
-            .detach();
+        self.pay(&claim.claimant, refund_amt);
     }
 }
 
@@ -387,9 +326,7 @@ impl Recourse {
                 "stake_refunded": claim.stake,
                 "claimant": claim.claimant,
             }));
-            Promise::new(claim.claimant.clone())
-                .transfer(NearToken::from_yoctonear(stake))
-                .detach();
+            self.pay(&claim.claimant, stake);
         } else {
             self.settle_in_agents_favour(&e);
             let mut a = self.agent_of(&e.agent);
@@ -408,10 +345,89 @@ impl Recourse {
                 "stake_to_agent": claim.stake,
                 "agent": e.agent,
             }));
-            Promise::new(e.agent.clone())
-                .transfer(NearToken::from_yoctonear(to_agent))
-                .detach();
+            self.pay(&e.agent, to_agent);
         }
+    }
+
+    /// Records a claim by `claimant` and its stake in `totals.claim_stakes`.
+    /// Returns the id and the stake the caller must have paid; the caller
+    /// charges storage and checks payment.
+    pub(crate) fn record_claim(
+        &mut self,
+        claimant: &AccountId,
+        r: ClaimRequest,
+    ) -> (ClaimId, u128) {
+        let id = r.engagement_id.0;
+        let mut e = self.engagement_of(id);
+        require!(
+            *claimant == e.client,
+            "only the engagement's client can claim"
+        );
+        require!(e.claim_id.is_none(), "a claim was already filed");
+        self.require_inside_claim_window(&e, r.kind);
+        require!(r.amount.0 > 0, "amount must be positive");
+        require!(
+            r.amount.0 <= e.liability_cap.0,
+            "amount exceeds liability_cap"
+        );
+        require_len(&r.evidence_uri, MAX_URI_LEN, "evidence_uri");
+        require_len(
+            &r.destination.asset_id,
+            MAX_SHORT_STR_LEN,
+            "destination.asset_id",
+        );
+        require_len(
+            &r.destination.recipient,
+            MAX_SHORT_STR_LEN,
+            "destination.recipient",
+        );
+        let stake = bps_ceil(r.amount.0, self.config.claim_stake_bps);
+
+        let now = env::block_timestamp();
+        let claim_id = self.next_ids.claim;
+        self.next_ids.claim += 1;
+        self.claims.insert(
+            claim_id,
+            Claim {
+                engagement_id: id,
+                claimant: claimant.clone(),
+                kind: r.kind,
+                amount: r.amount,
+                stake: U128(stake),
+                evidence_hash: r.evidence_hash,
+                evidence_uri: r.evidence_uri.clone(),
+                destination: r.destination.clone(),
+                verdict: None,
+                status: ClaimStatus::Filed,
+                filed_at: U64(now),
+            },
+        );
+        e.claim_id = Some(claim_id);
+        self.set_engagement_status(id, &mut e, EngagementStatus::Claimed);
+
+        // Freeze the agent's exit: no withdrawal while this claim is open, and
+        // a cooldown already running starts again from now (T4).
+        let mut bond = self.bond_of(&e.agent);
+        bond.open_claims += 1;
+        if bond.withdrawal_requested_at.is_some() {
+            bond.withdrawal_requested_at = Some(U64(now));
+        }
+        self.bonds.insert(e.agent.clone(), bond);
+        self.totals.claim_stakes = U128(add(self.totals.claim_stakes.0, stake, "total stakes"));
+
+        Event::ClaimFiled.emit(json!({
+            "claim_id": U64(claim_id),
+            "engagement_id": U64(id),
+            "claimant": claimant,
+            "agent": e.agent,
+            "kind": r.kind,
+            "amount": r.amount,
+            "stake": U128(stake),
+            "evidence_hash": r.evidence_hash,
+            "evidence_uri": r.evidence_uri,
+            "destination": r.destination,
+        }));
+        (claim_id, stake)
     }
 
     pub(crate) fn claim_of(&self, id: ClaimId) -> Claim {
