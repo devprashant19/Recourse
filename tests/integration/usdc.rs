@@ -54,6 +54,18 @@ async fn ft_call(u: &Usdc, from: &Account, amount: u128, msg: String) -> anyhow:
 /// Recourse in USDC mode: agent bonded with 10 tUSDC, `uw`'s vault holding
 /// 100 tUSDC and covering it, client funded, keeper and TEE signer set.
 async fn setup_usdc() -> anyhow::Result<Usdc> {
+    let (u, _) = setup_usdc_internal(false).await?;
+    Ok(u)
+}
+
+async fn setup_usdc_with_dao() -> anyhow::Result<(Usdc, super::dao::SputnikDao)> {
+    let (u, dao) = setup_usdc_internal(true).await?;
+    Ok((u, dao.expect("dao")))
+}
+
+async fn setup_usdc_internal(
+    with_dao: bool,
+) -> anyhow::Result<(Usdc, Option<super::dao::SputnikDao>)> {
     let token_wasm = std::fs::read(TOKEN_WASM).map_err(|e| {
         anyhow::anyhow!("{TOKEN_WASM}: {e}. Build it: cargo near build non-reproducible-wasm --manifest-path contracts/test-token/Cargo.toml")
     })?;
@@ -61,6 +73,14 @@ async fn setup_usdc() -> anyhow::Result<Usdc> {
     let version =
         std::env::var("RECOURSE_SANDBOX_VERSION").unwrap_or_else(|_| SANDBOX_VERSION.into());
     let worker = near_workspaces::sandbox_with_version(&version).await?;
+
+    let dao = if with_dao {
+        let council_member = account(&worker, "council_member", 10).await?;
+        Some(super::dao::deploy_sputnik_dao(&worker, council_member).await?)
+    } else {
+        None
+    };
+
     let owner = account(&worker, "owner", 10).await?;
     let token = worker.dev_deploy(&token_wasm).await?;
     let init = token
@@ -81,6 +101,7 @@ async fn setup_usdc() -> anyhow::Result<Usdc> {
     let stranger = account(&worker, "stranger", 5).await?;
     let v: Value = serde_json::from_str(VECTORS)?;
 
+    let council_id = dao.as_ref().map(|d| d.contract.id().to_string());
     let config = json!({
         "bond_asset": { "Ft": token.id() },
         "min_bond": (2 * USDC).to_string(),
@@ -93,7 +114,7 @@ async fn setup_usdc() -> anyhow::Result<Usdc> {
         "base_bond_share_bps": 5000,
         "min_bond_share_bps": 2000,
         "max_vault_exposure_bps": 2500,
-        "council": null,
+        "council": council_id,
     });
     let init = contract
         .call("new")
@@ -172,7 +193,7 @@ async fn setup_usdc() -> anyhow::Result<Usdc> {
         storage,
     )
     .await?;
-    Ok(u)
+    Ok((u, dao))
 }
 
 /// The token balance equals the contract's books: held + in flight + unattributed.
@@ -487,4 +508,173 @@ async fn usdc_failed_transfers_restore_pending_and_owed_on_the_sandbox() -> anyh
         0
     );
     assert_books_match_the_token(&u).await
+}
+
+#[tokio::test]
+async fn usdc_appeal_dao_overturn_and_intents_payout_on_the_sandbox() -> anyhow::Result<()> {
+    let (u, dao) = setup_usdc_with_dao().await?;
+    let arbiter = account(&u.e.worker, "arbiter", 20).await?;
+    let storage = 10u128.pow(23);
+
+    // 1. Setup arbiter: mint USDC, add arbiter role, register arbiter TEE signer, storage deposit, post USDC bond
+    call(
+        &u.e.owner,
+        &u.token,
+        "mint",
+        json!({ "account_id": arbiter.id(), "amount": (20 * USDC).to_string() }),
+        0,
+    )
+    .await?;
+    call(
+        &u.e.owner,
+        &u.e.contract,
+        "add_arbiter",
+        json!({ "account_id": arbiter.id() }),
+        0,
+    )
+    .await?;
+    call(
+        &u.e.owner,
+        &u.e.contract,
+        "register_signer",
+        json!({
+            "address": u.e.v["arbiter_address"].as_str().unwrap().trim_start_matches("0x"),
+            "model_id": u.e.v["arbiter_model_id"],
+            "attestation_hash": format!("{:064x}", 4),
+            "kind": "ProviderTee",
+        }),
+        0,
+    )
+    .await?;
+    call(&arbiter, &u.e.contract, "storage_deposit", json!({}), storage).await?;
+    ft_call(&u, &arbiter, 10 * USDC, "bond".into()).await?;
+
+    let arb_bond = view(&u.e.contract, "get_bond", json!({ "agent": arbiter.id() })).await?;
+    assert_eq!(u128_of(&arb_bond["amount"]), 10 * USDC);
+
+    // 2. Open job, agent accepts and delivers work with TEE receipt
+    let (eid, _deadline) = usdc_job(&u).await?;
+    call(
+        &u.e.agent,
+        &u.e.contract,
+        "submit_receipt",
+        json!({
+            "id": eid,
+            "model_id": u.e.v["model_id"],
+            "request_hash": u.e.v["request_hash"],
+            "response_hash": u.e.v["response_hash"],
+            "signature": u.e.v["provider_tee_signature"],
+            "kind": "ProviderTee",
+        }),
+        0,
+    )
+    .await?;
+
+    // 3. Client files quality claim with Base USDC destination
+    let cap = 2 * USDC;
+    let claim_id = view(&u.e.contract, "get_counters", json!({})).await?["claim"]
+        .as_u64()
+        .unwrap();
+    let claim_msg = json!({
+        "engagement_id": eid.to_string(),
+        "kind": "Quality",
+        "amount": cap.to_string(),
+        "evidence_hash": "0a".repeat(32),
+        "evidence_uri": "ipfs://quality-evidence",
+        "destination": base_usdc(),
+    });
+    let claim_stake = cap * 500 / 10_000; // 0.1 USDC
+    ft_call(&u, &u.e.client, claim_stake, format!("claim:{claim_msg}")).await?;
+
+    // 4. Arbiter wrongly / maliciously rejects the claim with TEE verdict receipt
+    call(
+        &arbiter,
+        &u.e.contract,
+        "resolve_claim",
+        json!({
+            "claim_id": claim_id,
+            "upheld": false,
+            "award": "0",
+            "reasons_hash": "0b".repeat(32),
+            "verdict_receipt": {
+                "model_id": u.e.v["arbiter_model_id"],
+                "request_hash": u.e.v["verdict_request_hash"],
+                "response_hash": u.e.v["verdict_response_hash"],
+                "signature": u.e.v["verdict_signature"],
+                "kind": "ProviderTee",
+            }
+        }),
+        0,
+    )
+    .await?;
+
+    let claim_res = view(&u.e.contract, "get_claim", json!({ "claim_id": claim_id })).await?;
+    assert_eq!(claim_res["status"], "Resolved");
+    assert_eq!(claim_res["verdict"]["upheld"], false);
+
+    // 5. Client appeals in USDC inside the appeal window
+    ft_call(&u, &u.e.client, claim_stake, format!("appeal:{claim_id}")).await?;
+
+    let claim_app = view(&u.e.contract, "get_claim", json!({ "claim_id": claim_id })).await?;
+    assert_eq!(claim_app["status"], "Appealed");
+
+    // 6. Sputnik DAO council votes to overturn the arbiter's verdict with full award
+    let arb_bond_before = u128_of(&view(&u.e.contract, "get_bond", json!({ "agent": arbiter.id() })).await?["amount"]);
+    assert_eq!(arb_bond_before, 10 * USDC);
+
+    super::dao::propose_and_approve_council_decide(&dao, u.e.contract.id(), claim_id, true, cap).await?;
+
+    // 7. Verify post-overturn state:
+    // - Arbiter was fined min_bond (2 USDC)
+    let arb_bond_after = u128_of(&view(&u.e.contract, "get_bond", json!({ "agent": arbiter.id() })).await?["amount"]);
+    assert_eq!(arb_bond_before - arb_bond_after, 2 * USDC);
+
+    // - Claim finalized, engagement slashed
+    let claim_fin = view(&u.e.contract, "get_claim", json!({ "claim_id": claim_id })).await?;
+    assert_eq!(claim_fin["status"], "Finalized");
+    let eng_slashed = view(&u.e.contract, "get_engagement", json!({ "engagement_id": eid })).await?;
+    assert_eq!(eng_slashed["status"], "Slashed");
+
+    // - Payout in Intents mode is Pending for 2 USDC
+    let payout = view(&u.e.contract, "get_payout", json!({ "claim_id": claim_id })).await?;
+    assert_eq!(payout["mode"], "Intents");
+    assert_eq!(payout["status"], "Pending");
+    assert_eq!(u128_of(&payout["amount"]), cap);
+
+    // 8. Keeper executes intents payout: registers deposit address, transfers USDC
+    let deposit_addr = "e5".repeat(32);
+    let out = execute_intents(&u, claim_id, &deposit_addr, "quote-usdc-dao").await?;
+    assert!(out.is_success(), "{:?}", out.into_result().err());
+
+    let payout_sent = view(&u.e.contract, "get_payout", json!({ "claim_id": claim_id })).await?;
+    assert_eq!(payout_sent["status"], "Sent");
+    assert_eq!(payout_sent["final_status"], "DELIVERED");
+
+    let dep_id: near_workspaces::AccountId = deposit_addr.parse()?;
+    assert_eq!(ft_balance(&u.token, &dep_id).await?, cap);
+
+    // 9. Keeper confirms payout with SUCCESS and destination transaction on Base
+    let status = call(
+        &u.e.keeper,
+        &u.e.contract,
+        "confirm_payout",
+        json!({
+            "claim_id": claim_id,
+            "quote_id": "quote-usdc-dao",
+            "status": "SUCCESS",
+            "dest_tx": "0xbase_usdc_payout_tx",
+        }),
+        0,
+    )
+    .await?;
+    assert_eq!(status, "Success");
+
+    let payout_done = view(&u.e.contract, "get_payout", json!({ "claim_id": claim_id })).await?;
+    assert_eq!(payout_done["status"], "Success");
+    assert_eq!(payout_done["dest_tx"], "0xbase_usdc_payout_tx");
+
+    // 10. Solvency and accounting invariant hold
+    assert_books_match_the_token(&u).await?;
+
+    Ok(())
 }

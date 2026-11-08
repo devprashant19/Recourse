@@ -68,7 +68,7 @@ pub async fn propose_and_approve_council_decide(
                         "method_name": "council_decide",
                         "args": args,
                         "deposit": "0",
-                        "gas": "50000000000000"
+                        "gas": "100000000000000"
                     }
                 ]
             }
@@ -90,7 +90,7 @@ pub async fn propose_and_approve_council_decide(
         .council_member
         .call(dao.contract.id(), "act_proposal")
         .args_json(json!({ "id": proposal_id, "action": "VoteApprove" }))
-        .gas(Gas::from_tgas(150))
+        .gas(Gas::from_tgas(250))
         .transact()
         .await?;
     assert!(act.is_success(), "act_proposal: {:?}", act.into_result().err());
