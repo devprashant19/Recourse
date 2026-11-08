@@ -542,7 +542,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### Review fixes A. `fix(worker): harden job recovery, deadlines and receipt publication`
 
-- **Commit:** (this commit)
+- **Commit:** `a88e9d8`
 - **Why:** an independent TypeScript review (`ecc:typescript-reviewer`) and a security review
   (`ecc:security-reviewer`) of the whole Phase 2 code found no problems in exact-byte handling,
   signature recovery or award arithmetic. They did find real worker, config and file-safety issues,
@@ -576,6 +576,35 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   - `vitest run services packages`: 218 passed. `pnpm typecheck` and `pnpm lint`: clean.
   - Fresh sandbox deployment (`recourse4.test.near`): `scenario:02` PASS, `scenario:04` PASS,
     `testnet:verify-receipt --network sandbox` PASS (accepted / rejected with the signature error).
+
+### Review fixes B. `fix(arbiter): strengthen verdict grounding and claim retries`
+
+- **Commit:** (this commit)
+- **Did:**
+  1. **Grounding.** Both reviews showed `document_says` could be any substring of the document (a
+     subtotal, `""`, `"100"` inside `"1000"`), so injected evidence could flip a verdict. Now every
+     finding with a stated value needs a **verbatim quote from the document that shows the value as a
+     whole token** (`containsToken`), and empty values are refused. The model can no longer borrow a
+     number from elsewhere in the document.
+  2. **Retries.** A failed claim is retried up to 3 ticks (a re-run LLM may produce a valid verdict). A
+     claim that moved on (resolved elsewhere, or closed by the stale-claim timeout) is `skipped`, not
+     `failed`. The arbiter state file is validated on load.
+  3. **Agent output** over 16 KB is not judged. The claim then falls to Phase 1's stale-claim timeout:
+     the client is refunded and nobody is slashed.
+  4. **Intel check in live and genuine-fixture modes.** The arbiter re-runs the quote verifier on the
+     agent's TDX quote, so it no longer relies on `report_data` binding alone.
+  5. **`verifyReceipt`** rejects reports that list a signer twice. Its documentation now states plainly
+     that it checks binding, not Intel's signature.
+  6. **Fixtures.** Honest verdict producers (the test double and the dev fixture generator) quote a line
+     for every stated field. The dev fixture set was regenerated with `record-fixtures --dev --force`
+     (8 receipts verified on replay).
+- **Tests:** 4 new or changed (borrowed value / partial number / empty value / missing quote refused;
+  invalid verdict retried then failed after 3; moved claim skipped); existing verdict tests updated to
+  full quotes.
+- **Ran:**
+  - `vitest run services packages`: 220 passed. `pnpm typecheck` and `pnpm lint`: clean.
+  - Fresh sandbox deployment (`recourse5.test.near`): `scenario:02` PASS, `scenario:04` PASS,
+    `testnet:verify-receipt --network sandbox` PASS.
 
 ---
 

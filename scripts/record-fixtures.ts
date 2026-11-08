@@ -39,7 +39,7 @@ import {
   type QuoteVerifier,
 } from "../packages/receipts/src/index.js";
 import { DcapQuoteVerifier } from "../packages/receipts/src/dcap.js";
-import { verdictRequest, type CaseFile } from "../services/arbiter/src/index.js";
+import { containsToken, verdictRequest, type CaseFile } from "../services/arbiter/src/index.js";
 import { extractionRequest, SABOTAGE_INSTRUCTIONS } from "../services/worker-agent/src/index.js";
 import { CLAIMS, DEV_MODEL, WORKER_JOBS } from "../demo/fixtures/plan.js";
 
@@ -71,13 +71,13 @@ function devAnswer(request: Uint8Array): string {
     const doc = cat.documents.find((d) => user.includes(`<<<DOCUMENT\n${new TextDecoder().decode(d.bytes)}`))!;
     const text = new TextDecoder().decode(doc.bytes);
     const wrong = new Set(wrongFields(doc.truth, agent, cat.weights));
-    const quote = (v: string) => text.split("\n").find((l) => l.replace(/,/g, "").includes(v))!.trim();
+    const quote = (v: string) => text.split("\n").find((l) => containsToken(l, v))!.trim();
     const findings = Object.keys(cat.weights).map((field) => ({
       field,
       document_says: doc.truth[field] ?? null,
       agent_said: agent[field] ?? null,
       correct: !wrong.has(field),
-      quote_from_document: wrong.has(field) ? quote(doc.truth[field]!) : "",
+      quote_from_document: doc.truth[field] == null ? "" : quote(doc.truth[field]!),
     }));
     const award_bps = [...wrong].reduce((s, f) => s + cat.weights[f]!, 0);
     const reasons = wrong.size

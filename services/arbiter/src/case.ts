@@ -21,7 +21,10 @@ import {
   verifyReceipt,
   type ArtifactStore,
   type ReceiptRegistry,
+  type QuoteVerifier,
   type VerifyOptions,
+  fromHex,
+  parseAttestationReport,
 } from "@recourse/receipts";
 import type { Claim, Engagement } from "@recourse/sdk";
 
@@ -29,6 +32,12 @@ import type { ArbiterChain } from "./chain.js";
 
 /** Largest evidence accepted, so a claimant cannot flood the arbiter's prompt. */
 export const MAX_EVIDENCE_BYTES = 16 * 1024;
+/**
+ * Largest agent output judged. A bigger one is not sent to the model (it could
+ * crowd out the rubric); the claim then falls back to Phase 1's stale-claim
+ * timeout, which refunds the client without slashing anyone.
+ */
+export const MAX_AGENT_OUTPUT_BYTES = 16 * 1024;
 
 export interface CaseFile {
   claimId: number;
@@ -49,6 +58,11 @@ export interface CaseDeps {
   store: ArtifactStore;
   /** Receipt policy from the backend; dev fixtures carry no TEE attestation. Defaults to requiring it. */
   verifyOptions?: VerifyOptions;
+  /**
+   * When set (live and genuine-fixture modes), the agent's TDX quote is also
+   * checked against Intel's verdict, not just for its nonce/signer binding.
+   */
+  quoteVerifier?: QuoteVerifier;
 }
 
 /** Is this a claim the arbiter should rule on now? */
@@ -89,6 +103,15 @@ export async function gatherCase(d: CaseDeps, claimId: number): Promise<CaseFile
   };
   const v = verifyReceipt(r, bytes, { ...d.verifyOptions, allowedSigners: [r.signing_address] });
   if (!v.ok) throw new Error(`the agent's receipt does not verify: ${v.errors.join("; ")}`);
+  if (d.quoteVerifier) {
+    const tee = parseAttestationReport(bytes.report).model_attestations?.find((t) => t.signing_address === r.signing_address);
+    const q = tee?.intel_quote ? await d.quoteVerifier.verifyQuote(fromHex(tee.intel_quote)) : null;
+    if (!q?.verified) throw new Error(`the agent's TDX quote did not verify (${q?.status ?? "no quote"})`);
+  }
+  const agentOutput = readCompletion(bytes.response).content;
+  if (new TextEncoder().encode(agentOutput).length > MAX_AGENT_OUTPUT_BYTES) {
+    throw new Error(`agent output larger than ${MAX_AGENT_OUTPUT_BYTES} bytes; not judged`);
+  }
 
   return {
     claimId,
@@ -96,7 +119,7 @@ export async function gatherCase(d: CaseDeps, claimId: number): Promise<CaseFile
     engagement,
     inputs,
     documentText: new TextDecoder().decode(inputs.document),
-    agentOutput: readCompletion(bytes.response).content,
+    agentOutput,
     agentReceiptHash: v.receipt_hash!,
     evidence: await fetchEvidence(d.store, claim),
   };

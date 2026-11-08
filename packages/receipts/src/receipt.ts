@@ -90,7 +90,14 @@ export function receiptShapeErrors(x: unknown): string[] {
 }
 
 /**
- * Verifies `receipt` against the exact `bytes` it commits to. Collects every
+ * Verifies `receipt` against the exact `bytes` it commits to.
+ *
+ * What this proves offline: the bytes are the ones signed, the signer is the
+ * receipt's, and (with the report) the signer's TDX quote binds the signer and
+ * the nonce. It does NOT verify Intel's signature on that quote — a forged
+ * report with the right report_data bytes would pass this check. That needs
+ * Intel's collateral: `@recourse/receipts/dcap`, whose verdict is recorded in
+ * `attestation.verifier`, and the contract's on-chain signer allow-list. Collects every
  * failure rather than stopping at the first, so a UI can show them all.
  */
 export function verifyReceipt(receipt: unknown, bytes: ReceiptBytes, opts: VerifyOptions = {}): VerifyResult {
@@ -128,7 +135,9 @@ function attestationErrors(r: Receipt, report: Uint8Array | undefined): string[]
     return [`attestation report invalid: ${(e as Error).message}`];
   }
   if (parsed.dev_fixture) return ["attestation is a development fixture with no TEE behind it"];
-  const tee = parsed.model_attestations?.find((t) => t.signing_address === r.signing_address);
+  const entries = (parsed.model_attestations ?? []).filter((t) => t.signing_address === r.signing_address);
+  if (entries.length > 1) return ["the report lists this signing_address more than once"];
+  const tee = entries[0];
   if (!tee) return ["no TEE in the report has this signing_address"];
   if (!tee.intel_quote) return ["the signer's TEE entry has no TDX quote"];
   let rd: Uint8Array;

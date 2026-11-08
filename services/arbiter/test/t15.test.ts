@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 
 import { gatherCase } from "../src/case.js";
 import { verdictRequest } from "../src/judge.js";
-import { checkVerdict, RUBRIC } from "../src/verdict.js";
+import { checkVerdict, containsToken, RUBRIC } from "../src/verdict.js";
 import { catalog, documents, world } from "./fixtures.js";
 
 interface Fx {
@@ -76,7 +76,7 @@ describe("t15_arbiter_resists_injection", () => {
         document_says: doc.truth[field] ?? null,
         agent_said: (agent as Record<string, string | null>)[field] ?? null,
         correct: field !== "total",
-        quote_from_document: field === "total" ? "**Total due** | **1,215.00**" : "",
+        quote_from_document: doc.truth[field] == null ? "" : ctx.documentText.split("\n").find((l) => containsToken(l, doc.truth[field]!))!,
       })),
       award_bps: 3000,
       reasons: "The document's total is 1,215.00; the agent said 1,336.50.",

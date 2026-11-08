@@ -47,6 +47,14 @@ export function normalise(s: string): string {
   return s.toLowerCase().replace(/,/g, "").replace(/\s+/g, " ");
 }
 
+/** Does `value` occur in `text` as a whole token (not inside a longer number or word)? */
+export function containsToken(text: string, value: string): boolean {
+  const v = normalise(value).trim();
+  if (!v) return false;
+  const esc = v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`).test(normalise(text));
+}
+
 export function checkVerdict(raw: unknown, ctx: VerdictContext): Verdict {
   const v = typeof raw === "string" ? parseJson(raw) : raw;
   if (!validateShape(v)) {
@@ -78,8 +86,15 @@ export function checkVerdict(raw: unknown, ctx: VerdictContext): Verdict {
     const actual = typeof said === "string" ? said : said === null || said === undefined ? null : JSON.stringify(said);
     if (f.agent_said !== actual) problems.push(`finding for ${f.field} misstates what the agent said`);
     if (f.correct !== (f.agent_said === f.document_says)) problems.push(`finding for ${f.field} marks correct inconsistently`);
-    if (f.document_says !== null && !doc.includes(normalise(f.document_says))) {
-      problems.push(`finding for ${f.field} claims the document says something it does not`);
+    if (f.document_says !== null) {
+      // The value must be in a quoted line that really is in the document, as a whole token:
+      // the model cannot borrow another number from elsewhere, and "" or "100" inside "1000"
+      // do not match.
+      if (!f.quote_from_document || !doc.includes(normalise(f.quote_from_document))) {
+        problems.push(`finding for ${f.field} needs a verbatim quote from the document`);
+      } else if (!containsToken(f.quote_from_document, f.document_says)) {
+        problems.push(`finding for ${f.field} claims the document says something its quote does not show`);
+      }
     }
   }
 

@@ -2,13 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import { loadCatalog } from "@recourse/jobs/catalog";
 
-import { checkVerdict, RUBRIC, type Verdict } from "../src/verdict.js";
+import { checkVerdict, containsToken, RUBRIC, type Verdict } from "../src/verdict.js";
 
 const cat = loadCatalog();
 const doc = cat.documents[0]!;
 const documentText = new TextDecoder().decode(doc.bytes);
 const agentOutput = JSON.stringify({ ...doc.truth, total: "1336.50" });
 const ctx = { weights: cat.weights, documentText, agentOutput };
+
+/** The first document line showing `v` as a whole token ("" for an unstated field). */
+function lineFor(v: string | null): string {
+  return v === null ? "" : documentText.split("\n").find((l) => containsToken(l, v)) ?? "";
+}
 
 /** A correct verdict for doc 01 where only the total is wrong. */
 function wrongTotal(): Verdict {
@@ -17,7 +22,7 @@ function wrongTotal(): Verdict {
     document_says: doc.truth[field] ?? null,
     agent_said: field === "total" ? "1336.50" : (doc.truth[field] ?? null),
     correct: field !== "total",
-    quote_from_document: field === "total" ? "**Total due** | **1,215.00**" : "",
+    quote_from_document: lineFor(doc.truth[field] ?? null),
   }));
   return { upheld: true, findings, award_bps: 3000, reasons: "Total is 1,215.00, agent said 1,336.50." };
 }
@@ -73,6 +78,22 @@ describe("checkVerdict", () => {
     const v = wrongTotal();
     v.findings.find((f) => f.field === "total")!.quote_from_document = "Total due 9,999.00";
     expect(() => checkVerdict(v, ctx)).toThrow("not in the document");
+  });
+
+  it("rejects a document value borrowed from elsewhere, an empty value, or a partial number", () => {
+    const swap = (field: string, says: string, quote: string) => {
+      const v = wrongTotal();
+      const f = v.findings.find((x) => x.field === field)!;
+      f.document_says = says;
+      f.quote_from_document = quote;
+      return v;
+    };
+    // The subtotal line does not show the agent's 1336.50 as the document's total.
+    expect(() => checkVerdict(swap("total", "1336.50", "| Subtotal | 1,125.00 |"), ctx)).toThrow();
+    // "125.00" is inside "1,125.00" but not as a whole token.
+    expect(() => checkVerdict(swap("subtotal", "125.00", "| Subtotal | 1,125.00 |"), ctx)).toThrow("its quote does not show");
+    expect(() => checkVerdict(swap("tax", "", "| Tax (8%) | 90.00 |"), ctx)).toThrow();
+    expect(() => checkVerdict(swap("tax", "90.00", ""), ctx)).toThrow("verbatim quote");
   });
 
   it("rejects missing, duplicate or unknown fields", () => {

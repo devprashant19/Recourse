@@ -50,8 +50,11 @@ describe("verdict flow", () => {
     const bad = honestArbiterModel((v) => ({ ...v, award_bps: 10000 }));
     const { w, arbiter } = await setup({ output: (t) => ({ ...t, total: "1336.50" }) }, bad);
     await arbiter.tick();
+    expect(arbiter.state.claims["0"]).toMatchObject({ status: "retrying", attempts: 1 });
+    await arbiter.tick();
+    await arbiter.tick();
     expect(w.chain.resolved).toEqual([]);
-    expect(arbiter.state.claims["0"]).toMatchObject({ status: "failed", reason: expect.stringContaining("not the sum") });
+    expect(arbiter.state.claims["0"]).toMatchObject({ status: "failed", attempts: 3, reason: expect.stringContaining("not the sum") });
   });
 
   it("never resolves a claim that has moved on (e.g. closed by the stale-claim timeout)", async () => {
@@ -59,6 +62,21 @@ describe("verdict flow", () => {
     const c = await gatherCase({ chain: w.chain, documents, registry: w.registry, store: w.store }, 0);
     w.chain.claims[0]!.status = "TimedOut";
     await expect(judge(deps, c)).rejects.toThrow("claim is TimedOut");
+    expect(w.chain.resolved).toEqual([]);
+  });
+
+  it("skips (does not fail) a claim that moved on while it was being judged", async () => {
+    const bad = honestArbiterModel((v) => ({ ...v, award_bps: 10000 }));
+    const { w, arbiter } = await setup({ output: (t) => ({ ...t, total: "1336.50" }) }, bad);
+    const getClaim = w.chain.getClaim.bind(w.chain);
+    let calls = 0;
+    // The first reads see it Filed; after the verdict fails, the stale-claim timeout has closed it.
+    w.chain.getClaim = async (id: number) => {
+      const c = await getClaim(id);
+      return c && ++calls > 2 ? { ...c, status: "TimedOut" as const } : c;
+    };
+    await arbiter.tick();
+    expect(arbiter.state.claims["0"]).toMatchObject({ status: "skipped", reason: "claim is TimedOut" });
     expect(w.chain.resolved).toEqual([]);
   });
 

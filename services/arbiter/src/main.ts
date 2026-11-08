@@ -30,6 +30,7 @@ export function buildArbiter(cfg: ArbiterConfig, backend: Backend) {
     client: backend.client,
     verifier: backend.verifier,
     verifyOptions: backend.verifyOptions,
+    ...(backend.verifyOptions.requireAttestation ? { quoteVerifier: backend.verifier } : {}),
     store,
     registry: new FileReceiptRegistry(join(cfg.artifactDir, "receipts")),
     verdicts: new FileReceiptRegistry(join(cfg.artifactDir, "verdicts")),

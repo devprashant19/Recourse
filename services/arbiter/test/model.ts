@@ -7,6 +7,7 @@
 import { wrongFields, type Extraction } from "@recourse/jobs";
 
 import { FakeTee } from "../../../packages/receipts/test/fake-tee.js";
+import { containsToken } from "../src/verdict.js";
 import { catalog } from "./fixtures.js";
 
 export function honestArbiterModel(override?: (v: Record<string, unknown>) => unknown): FakeTee {
@@ -22,7 +23,7 @@ export function honestArbiterModel(override?: (v: Record<string, unknown>) => un
       document_says: doc.truth[field] ?? null,
       agent_said: agent[field] ?? null,
       correct: !wrong.has(field),
-      quote_from_document: wrong.has(field) ? text.split("\n").find((l) => l.replace(/,/g, "").includes(String(doc.truth[field]))) ?? "" : "",
+      quote_from_document: doc.truth[field] == null ? "" : text.split("\n").find((l) => containsToken(l, String(doc.truth[field]))) ?? "",
     }));
     const bps = [...wrong].reduce((s, f) => s + (catalog.weights[f] ?? 0), 0);
     const v = { upheld: wrong.size > 0, findings, award_bps: bps, reasons: wrong.size ? `Wrong: ${[...wrong].join(", ")}.` : "Every field matches the document." };
