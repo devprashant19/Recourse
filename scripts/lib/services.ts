@@ -39,13 +39,15 @@ export function services(c: Cast, artifactDir: string, sabotageMode: SabotageMod
     state: new MemoryStateStore(),
     log: silentLogger,
     agentId: c.accounts.agent.accountId,
-    perform: async (id, e, inputs) => {
-      if (!shouldWorkNow(sabotage.value, await workerChain.now(), BigInt(e.deadline))) return null;
+    registry,
+    perform: async (id, e, inputs, prepared) => {
+      if (!shouldWorkNow(sabotage.value, await workerChain.now(), BigInt(e.deadline))) return { kind: "deferred" as const };
       return performExtraction(
-        { client: backend.client, verifier: backend.verifier, store, registry, chain: workerChain, log: silentLogger, model: DEV_MODEL, instruction: () => sabotage.instruction() },
+        { client: backend.client, verifier: backend.verifier, store, chain: workerChain, log: silentLogger, model: DEV_MODEL, instruction: () => sabotage.instruction() },
         id,
         e,
         inputs,
+        prepared,
       );
     },
   });

@@ -513,7 +513,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 21. `test(testnet): verify live TEE receipt acceptance and tamper rejection`
 
-- **Commit:** (this commit)
+- **Commit:** `a36c5f6`
 - **Did:** `scripts/verify-live-receipt.ts` (`pnpm testnet:verify-receipt`). Flow:
   1. The client proposes two minimum-price jobs, and the agent accepts both.
   2. One extraction runs through the receipt library: on testnet a fresh-nonce attestation verified
@@ -539,6 +539,43 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   deployed testnet contract and no NEAR AI Cloud key on this machine. Exit criterion 1 stays open; the
   exact commands are in "Remaining to run" below.
 - **Files:** `scripts/verify-live-receipt.ts`, `package.json`
+
+### Review fixes A. `fix(worker): harden job recovery, deadlines and receipt publication`
+
+- **Commit:** (this commit)
+- **Why:** an independent TypeScript review (`ecc:typescript-reviewer`) and a security review
+  (`ecc:security-reviewer`) of the whole Phase 2 code found no problems in exact-byte handling,
+  signature recovery or award arithmetic. They did find real worker, config and file-safety issues,
+  all fixed here.
+- **Did:**
+  1. **Crash between accept and the local write.** An `Open` engagement naming this agent with no local
+     record is now resumed (only this account can accept for it). Before, it was locked forever and
+     never worked.
+  2. **Transient errors** are retried up to `MAX_ATTEMPTS` (5) ticks before a job is marked `failed`.
+     The error handler re-reads the current record. Writing the new tests caught that my first version
+     dropped a pending receipt here.
+  3. **Deadline.** It is checked **before** paying for a model call, so past-deadline and `late` jobs
+     are `closed` with no attestation or completion. Before, they re-ran every tick.
+  4. **Publish after submit** (closes a front-running vector). A receipt is published only after
+     `submit_receipt` succeeds; until then it sits in private local state (`pending_receipt`). If a
+     transaction lands but the worker crashes or times out, the next tick finds it `Delivered` with the
+     same response hash and publishes it.
+  5. **Fail-closed sandbox.** Worker and arbiter refuse `sandbox` mode (fixtures, sabotage) unless the
+     RPC is loopback, and the admin port is validated.
+  6. **Worker prompt** neutralises `<<<` and `>>>` in data too (`quoteData` moved to `@recourse/jobs`).
+     The demo documents contain neither, so the fixture request bytes are unchanged.
+  7. **Artifact files.** Atomic writes use unique, exclusively created (`wx`) temp files, and a planted
+     or corrupted file under an artifact's name is replaced rather than trusted.
+  8. **`verify-live-receipt`** now requires the contract's own signature-rejection message (`bad
+     signature` / `signer not allow-listed`). Before, any error counted as a rejection.
+- **Tests:** 7 new or changed (crash-resume; retry then success; give up after 5; non-loopback sandbox
+  refused; bad admin port; nothing published for a refused receipt; pending receipt published after a
+  landed-but-timed-out submit; no paid model call past the deadline; `late` makes no model call).
+  `FakeChain` now records the receipt on-chain as the contract does.
+- **Ran:**
+  - `vitest run services packages`: 218 passed. `pnpm typecheck` and `pnpm lint`: clean.
+  - Fresh sandbox deployment (`recourse4.test.near`): `scenario:02` PASS, `scenario:04` PASS,
+    `testnet:verify-receipt --network sandbox` PASS (accepted / rejected with the signature error).
 
 ---
 

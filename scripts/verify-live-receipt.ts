@@ -95,7 +95,9 @@ async function main() {
   const viewError = await client.checkReceipt(tampered).then(() => null, (e: unknown) => String(e));
   const txError = await agent.submitReceipt(b, tampered).then(() => null, (e: unknown) => String(e));
   const eb = (await client.getEngagement(b))!;
-  const rejected = viewError !== null && txError !== null && eb.status === "Open";
+  // Any error is not enough (network, gas, wrong account): the contract must refuse the signature itself.
+  const sigRejection = /bad signature|signer not allow-listed/;
+  const rejected = sigRejection.test(viewError ?? "") && sigRejection.test(txError ?? "") && eb.status === "Open";
   console.log(`tampered receipt on engagement ${b}: ${rejected ? "REJECTED" : "NOT rejected"} (status ${eb.status})`);
   console.log(`  contract error: ${(txError ?? "").match(/(bad signature|signer not allow-listed[^"\\]]*)/)?.[0] ?? txError}`);
 

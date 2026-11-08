@@ -38,9 +38,10 @@ export function buildWorker(cfg: WorkerConfig, backend: ModelBackend, sabotage: 
     state: new FileStateStore(cfg.stateFile),
     log,
     agentId: cfg.agentAccountId,
-    perform: async (id, e, inputs) => {
-      if (!shouldWorkNow(sabotage.value, await chain.now(), BigInt(e.deadline))) return null;
-      return performExtraction({ ...backend, store, registry, chain, log, model: cfg.model, instruction: () => sabotage.instruction() }, id, e, inputs);
+    registry,
+    perform: async (id, e, inputs, prepared) => {
+      if (!shouldWorkNow(sabotage.value, await chain.now(), BigInt(e.deadline))) return { kind: "deferred" };
+      return performExtraction({ ...backend, store, chain, log, model: cfg.model, instruction: () => sabotage.instruction() }, id, e, inputs, prepared);
     },
   });
   return { worker, log, sabotage };

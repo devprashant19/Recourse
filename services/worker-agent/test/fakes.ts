@@ -55,8 +55,10 @@ export class FakeChain implements WorkerChain {
     const e = this.engagements[id]!;
     if (e.status !== "Open") throw new Error("engagement is not open");
     if (this.time > BigInt(e.deadline)) throw new Error("deadline has passed");
+    const receipt = { model_id: r.model_id, request_hash: r.request_hash, response_hash: r.response_hash, signer: "00", signature_kind: r.kind, submitted_at: "1" };
     e.status = "Delivered";
+    e.receipt = receipt;
     this.submitted.push({ id, r });
-    return { model_id: r.model_id, request_hash: r.request_hash, response_hash: r.response_hash, signer: "00", signature_kind: r.kind, submitted_at: "1" };
+    return receipt;
   }
 }

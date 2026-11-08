@@ -32,6 +32,16 @@ const RPC: Record<Mode, string> = {
 
 const ACCOUNT = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
 
+/** Sandbox mode (fixtures, sabotage) may only talk to a local node. */
+export function isLoopbackUrl(url: string): boolean {
+  try {
+    const h = new URL(url).hostname;
+    return h === "127.0.0.1" || h === "localhost" || h === "[::1]" || h === "::1";
+  } catch {
+    return false;
+  }
+}
+
 export function parseMode(s: string | undefined): Mode {
   const m = s ?? "sandbox";
   if (m !== "sandbox" && m !== "testnet" && m !== "mainnet") throw new Error(`unknown mode: ${m}`);
@@ -69,6 +79,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: string[] 
     pollMs,
   };
   if (!cfg.agentKey.startsWith("ed25519:")) throw new Error("AGENT_FC_KEY must be an ed25519:... private key");
+  if (mode === "sandbox" && !isLoopbackUrl(cfg.rpcUrl)) {
+    throw new Error("sandbox mode (fixtures, sabotage) only talks to a loopback RPC; set RECOURSE_MODE for a real network");
+  }
   if (mode !== "sandbox") {
     cfg.nearAiKey = req(env, "NEARAI_API_KEY");
     if (!cfg.model) throw new Error("NEARAI_MODEL_WORKER is required outside sandbox mode");
@@ -78,7 +91,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: string[] 
   if (env.WORKER_ADMIN_TOKEN) {
     if (mode === "mainnet") throw new Error("the admin (sabotage) server is never enabled in mainnet mode");
     if (env.WORKER_ADMIN_TOKEN.length < 32) throw new Error("WORKER_ADMIN_TOKEN must be at least 32 characters");
-    cfg.admin = { port: Number(env.WORKER_ADMIN_PORT ?? 8787), token: env.WORKER_ADMIN_TOKEN };
+    const port = Number(env.WORKER_ADMIN_PORT ?? 8787);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("WORKER_ADMIN_PORT must be a port number");
+    cfg.admin = { port, token: env.WORKER_ADMIN_TOKEN };
   }
   return cfg;
 }

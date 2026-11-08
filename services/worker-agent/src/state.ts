@@ -7,12 +7,19 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-export type JobStatus = "accepted" | "submitted" | "closed" | "skipped" | "failed";
+import type { PublishedReceipt } from "@recourse/receipts";
+
+/** `pending`: not accepted yet, retrying after a transient error. */
+export type JobStatus = "pending" | "accepted" | "submitted" | "closed" | "skipped" | "failed";
 
 export interface JobRecord {
   status: JobStatus;
   reason?: string;
   receipt_hash?: string;
+  /** Failed attempts so far (transient errors are retried up to MAX_ATTEMPTS). */
+  attempts?: number;
+  /** A receipt built and about to be submitted; private until the chain accepts it. */
+  pending_receipt?: PublishedReceipt;
   updated_at: string;
 }
 

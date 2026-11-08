@@ -81,3 +81,12 @@ export function checkJobInputs(p: { terms: JobTerms; onChainTermsHash: string; d
   if (sha256Hex(p.documentBytes) !== p.terms.document_sha256) throw new Error("document bytes do not match the terms");
   if (sha256Hex(p.schemaBytes) !== p.terms.schema_sha256) throw new Error("schema bytes do not match the terms");
 }
+
+/**
+ * Data goes between `<<<NAME` and `NAME>>>` in prompts. Neutralise those
+ * markers inside the data so it cannot close its own block and continue as
+ * if it were instructions.
+ */
+export function quoteData(s: string): string {
+  return s.replace(/<<</g, "‹‹‹").replace(/>>>/g, "›››");
+}

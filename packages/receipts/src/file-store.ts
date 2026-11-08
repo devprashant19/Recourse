@@ -5,12 +5,21 @@
  * served under a receipt's URI.
  */
 
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { sha256Hex } from "./bytes.js";
 import { ARTIFACT_URI_PREFIX, artifactUri, checkArtifact } from "./completion.js";
 import type { PublishedReceipt, ReceiptRegistry } from "./registry.js";
 import type { ArtifactStore } from "./types.js";
+
+/** Writes via a fresh, exclusively created temp file, then renames into place. */
+export function atomicWrite(path: string, data: string | Uint8Array): void {
+  const tmp = `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  writeFileSync(tmp, data, { flag: "wx", mode: 0o600 });
+  renameSync(tmp, path);
+}
 
 export class FileArtifactStore implements ArtifactStore {
   constructor(private readonly dir: string) {
@@ -27,10 +36,9 @@ export class FileArtifactStore implements ArtifactStore {
   async put(_name: string, bytes: Uint8Array): Promise<string> {
     const uri = artifactUri(bytes);
     const p = this.path(uri);
-    if (!existsSync(p)) {
-      writeFileSync(`${p}.tmp`, bytes);
-      renameSync(`${p}.tmp`, p);
-    }
+    // Skip the write only if a file with the right content is already there;
+    // a planted or corrupted file under this name is replaced.
+    if (!existsSync(p) || sha256Hex(new Uint8Array(readFileSync(p))) !== uri.slice(ARTIFACT_URI_PREFIX.length)) atomicWrite(p, bytes);
     return uri;
   }
 
@@ -54,8 +62,7 @@ export class FileReceiptRegistry implements ReceiptRegistry {
   }
   async publish(r: PublishedReceipt): Promise<void> {
     const p = this.path(r.engagement_id);
-    writeFileSync(`${p}.tmp`, JSON.stringify(r, null, 2));
-    renameSync(`${p}.tmp`, p);
+    atomicWrite(p, JSON.stringify(r, null, 2));
   }
   async get(id: number): Promise<PublishedReceipt | null> {
     const p = this.path(id);

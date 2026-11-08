@@ -46,8 +46,9 @@ async function deliver(doc: number, mode: "none" | "wrong_total", store: Artifac
     state: new MemoryStateStore(),
     log: silentLogger,
     agentId: AGENT,
-    perform: (id, e, inputs) =>
-      performExtraction({ client: b.client, verifier: b.verifier, store, registry, chain, log: silentLogger, model: DEV_MODEL, instruction: () => sabotage.instruction() }, id, e, inputs),
+    registry,
+    perform: (id, e, inputs, prepared) =>
+      performExtraction({ client: b.client, verifier: b.verifier, store, chain, log: silentLogger, model: DEV_MODEL, instruction: () => sabotage.instruction() }, id, e, inputs, prepared),
   });
   await w.tick();
   return { chain, pub: (await registry.get(0))! };

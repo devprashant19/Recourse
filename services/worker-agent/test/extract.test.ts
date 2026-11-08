@@ -25,8 +25,8 @@ function setup(chain: FakeChain) {
   const tee = correctTee();
   const store = new MemoryArtifactStore();
   const registry = new MemoryReceiptRegistry();
-  const d: PerformDeps = { client: tee, verifier: structuralQuoteVerifier, store, registry, chain, log: silentLogger, model: tee.modelId };
-  const w = new Worker({ chain, documents: docs, state: new MemoryStateStore(), log: silentLogger, agentId: AGENT, perform: (id, e, i) => performExtraction(d, id, e, i) });
+  const d: PerformDeps = { client: tee, verifier: structuralQuoteVerifier, store, chain, log: silentLogger, model: tee.modelId };
+  const w = new Worker({ chain, documents: docs, state: new MemoryStateStore(), log: silentLogger, agentId: AGENT, registry, perform: (id, e, i, p) => performExtraction(d, id, e, i, p) });
   return { tee, store, registry, w };
 }
 
@@ -81,8 +81,8 @@ describe("extraction and receipt submission", () => {
     const { registry } = setup(chain);
     const state = new MemoryStateStore();
     const tee = correctTee();
-    const deps: PerformDeps = { client: tee, verifier: structuralQuoteVerifier, store: new MemoryArtifactStore(), registry, chain, log: silentLogger, model: tee.modelId };
-    const mk = () => new Worker({ chain, documents: docs, state, log: silentLogger, agentId: AGENT, perform: (id, e, i) => performExtraction(deps, id, e, i) });
+    const deps: PerformDeps = { client: tee, verifier: structuralQuoteVerifier, store: new MemoryArtifactStore(), chain, log: silentLogger, model: tee.modelId };
+    const mk = () => new Worker({ chain, documents: docs, state, log: silentLogger, agentId: AGENT, registry, perform: (id, e, i, p) => performExtraction(deps, id, e, i, p) });
     await mk().tick();
     // Simulate a crash after submission but before the local record was written.
     state.save({ ...state.load(), jobs: { "0": { status: "accepted", updated_at: "x" } } });
@@ -96,5 +96,51 @@ describe("extraction and receipt submission", () => {
     const inputs = (await docs.byTermsHash(engagement().terms_hash))!;
     expect(extractionMessages(inputs)[0]!.content).not.toContain("EXTRA");
     expect(extractionMessages(inputs, "EXTRA")[0]!.content).toContain("EXTRA");
+  });
+});
+
+describe("publication and crash safety", () => {
+  it("does not publish a receipt the chain refused", async () => {
+    const chain = new FakeChain([engagement()]);
+    chain.submitReceipt = async () => {
+      throw new Error("rpc timeout");
+    };
+    const { registry, w } = setup(chain);
+    await w.tick();
+    expect(await registry.get(0)).toBeNull();
+    expect(w.state.jobs["0"]).toMatchObject({ status: "accepted", attempts: 1 });
+    expect(w.state.jobs["0"]?.pending_receipt?.engagement_id).toBe(0);
+  });
+
+  it("publishes the pending receipt once a restart finds it accepted on-chain", async () => {
+    const chain = new FakeChain([engagement()]);
+    const realSubmit = chain.submitReceipt.bind(chain);
+    // The transaction lands, but the worker sees a timeout (crash-like).
+    chain.submitReceipt = async (id, r) => {
+      await realSubmit(id, r);
+      throw new Error("timeout after send");
+    };
+    const { registry, w } = setup(chain);
+    await w.tick();
+    expect(await registry.get(0)).toBeNull();
+    await w.tick();
+    expect((await registry.get(0))?.engagement_id).toBe(0);
+    expect(w.state.jobs["0"]?.status).toBe("submitted");
+    expect(chain.submitted).toHaveLength(1);
+  });
+
+  it("never pays for a model call once the deadline has passed", async () => {
+    const chain = new FakeChain([engagement({ status: "Open" })]);
+    chain.time = 10n ** 13n;
+    let calls = 0;
+    const tee = correctTee();
+    const orig = tee.chatCompletion.bind(tee);
+    tee.chatCompletion = async (r) => (calls++, orig(r));
+    const d: PerformDeps = { client: tee, verifier: structuralQuoteVerifier, store: new MemoryArtifactStore(), chain, log: silentLogger, model: tee.modelId };
+    const w = new Worker({ chain, documents: docs, state: new MemoryStateStore(), log: silentLogger, agentId: AGENT, perform: (id, e, i, p) => performExtraction(d, id, e, i, p) });
+    await w.tick();
+    await w.tick();
+    expect(calls).toBe(0);
+    expect(w.state.jobs["0"]?.status).toBe("closed");
   });
 });

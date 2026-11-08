@@ -36,14 +36,16 @@ async function runWith(mode: SabotageMode, doc = 0, opts: { pastDeadline?: boole
     state: new MemoryStateStore(),
     log: silentLogger,
     agentId: AGENT,
-    perform: async (id, e, inputs) => {
+    registry,
+    perform: async (id, e, inputs, prepared) => {
       if (opts.pastDeadline) chain.time = BigInt(e.deadline) + 1n;
-      if (!shouldWorkNow(sabotage.value, await chain.now(), BigInt(e.deadline))) return null;
+      if (!shouldWorkNow(sabotage.value, await chain.now(), BigInt(e.deadline))) return { kind: "deferred" as const };
       return performExtraction(
-        { client: tee, verifier: structuralQuoteVerifier, store, registry, chain, log: silentLogger, model: tee.modelId, instruction: () => sabotage.instruction() },
+        { client: tee, verifier: structuralQuoteVerifier, store, chain, log: silentLogger, model: tee.modelId, instruction: () => sabotage.instruction() },
         id,
         e,
         inputs,
+        prepared,
       );
     },
   });
@@ -76,9 +78,9 @@ describe("sabotage modes", () => {
     expect(r.signedRequest).toContain("invent a plausible one");
   });
 
-  it("late: works only after the deadline, so nothing is submitted", async () => {
+  it("late: waits past the deadline, then closes the job without a paid model call or a submission", async () => {
     const r = await runWith("late", 0, { pastDeadline: true });
-    expect(r.requests).toHaveLength(1);
+    expect(r.requests).toEqual([]);
     expect(r.chain.submitted).toEqual([]);
     expect(shouldWorkNow("late", 5n, 10n)).toBe(false);
   });

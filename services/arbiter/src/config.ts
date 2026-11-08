@@ -56,6 +56,12 @@ export function loadArbiterConfig(env: NodeJS.ProcessEnv = process.env, argv: st
     documentsDir: env.DOCUMENTS_DIR ?? "demo/documents",
     pollMs,
   };
+  if (mode === "sandbox") {
+    const h = (() => { try { return new URL(cfg.rpcUrl).hostname; } catch { return ""; } })();
+    if (!["127.0.0.1", "localhost", "::1", "[::1]"].includes(h)) {
+      throw new Error("sandbox mode (fixtures) only talks to a loopback RPC; set RECOURSE_MODE for a real network");
+    }
+  }
   if (mode !== "sandbox") {
     cfg.nearAiKey = need("NEARAI_API_KEY");
     if (!cfg.model) throw new Error("NEARAI_MODEL_ARBITER is required outside sandbox mode");

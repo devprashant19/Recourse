@@ -17,10 +17,13 @@ import {
 } from "@recourse/receipts";
 import type { Engagement } from "@recourse/sdk";
 
+import { quoteData } from "@recourse/jobs";
+import type { PublishedReceipt } from "@recourse/receipts";
+
 import type { WorkerChain } from "./chain.js";
 import type { JobInputs } from "./documents.js";
 import type { Logger } from "./log.js";
-import type { ReceiptRegistry } from "@recourse/receipts";
+import type { PerformOutcome } from "./worker.js";
 
 export const EXTRACTION_SYSTEM_PROMPT = [
   "You extract fields from a business document into JSON.",
@@ -39,7 +42,7 @@ export function extractionMessages(inputs: JobInputs, extraInstruction?: string)
     { role: "system", content: system },
     {
       role: "user",
-      content: `JSON Schema:\n<<<SCHEMA\n${schema}\nSCHEMA>>>\n\nDocument (${inputs.terms.document}):\n<<<DOCUMENT\n${doc}\nDOCUMENT>>>`,
+      content: `JSON Schema:\n<<<SCHEMA\n${quoteData(schema)}\nSCHEMA>>>\n\nDocument (${inputs.terms.document}):\n<<<DOCUMENT\n${quoteData(doc)}\nDOCUMENT>>>`,
     },
   ];
 }
@@ -53,7 +56,6 @@ export interface PerformDeps {
   client: NearAiClient;
   verifier: QuoteVerifier;
   store: ArtifactStore;
-  registry: ReceiptRegistry;
   chain: WorkerChain;
   log: Logger;
   model: string;
@@ -61,21 +63,33 @@ export interface PerformDeps {
   instruction?: () => string | undefined;
 }
 
-/** Runs one job and submits its receipt; returns the receipt hash, or null if not submitted. */
-export async function performExtraction(d: PerformDeps, id: number, e: Engagement, inputs: JobInputs): Promise<string | null> {
+/**
+ * Runs one job and submits its receipt. Checks the deadline before paying for
+ * a model call; hands the receipt record to `prepared` before submitting, and
+ * returns it for publication only once the chain has accepted it.
+ */
+export async function performExtraction(
+  d: PerformDeps,
+  id: number,
+  e: Engagement,
+  inputs: JobInputs,
+  prepared: (r: PublishedReceipt) => void = () => {},
+): Promise<PerformOutcome> {
+  if ((await d.chain.now()) > BigInt(e.deadline)) return { kind: "closed", reason: "deadline passed before the work started" };
   const request = extractionRequest(d.model, inputs, d.instruction?.());
   const out = await attestedCompletion({ client: d.client, verifier: d.verifier, store: d.store, modelId: d.model, engagementId: id, request });
-
-  const outputUri = await d.store.put("output", new TextEncoder().encode(out.completion.content));
-  const reportUri = await d.store.put("report", out.report);
-  // Published before submitting, so a crash in between leaves a record to reconcile.
-  await d.registry.publish({ engagement_id: id, receipt: out.receipt, receipt_hash: out.receipt_hash, report_uri: reportUri, output_uri: outputUri });
-
-  const now = await d.chain.now();
-  if (now > BigInt(e.deadline)) {
+  const published: PublishedReceipt = {
+    engagement_id: id,
+    receipt: out.receipt,
+    receipt_hash: out.receipt_hash,
+    report_uri: await d.store.put("report", out.report),
+    output_uri: await d.store.put("output", new TextEncoder().encode(out.completion.content)),
+  };
+  if ((await d.chain.now()) > BigInt(e.deadline)) {
     d.log.log("warn", "work finished after the deadline; not submitting", { id });
-    return null;
+    return { kind: "closed", reason: "work finished after the deadline" };
   }
+  prepared(published);
   const r = out.receipt;
   await d.chain.submitReceipt(id, {
     model_id: r.model_id,
@@ -84,5 +98,5 @@ export async function performExtraction(d: PerformDeps, id: number, e: Engagemen
     signature: r.signature,
     kind: r.signature_kind === "provider_tee" ? "ProviderTee" : "Gateway",
   });
-  return out.receipt_hash;
+  return { kind: "submitted", published };
 }

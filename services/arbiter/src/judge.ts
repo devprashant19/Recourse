@@ -8,7 +8,7 @@
  * the identical bytes again, and sandbox fixtures can be looked up by them.
  */
 
-import { awardAmount, canonicalJson } from "@recourse/jobs";
+import { awardAmount, canonicalJson, quoteData } from "@recourse/jobs";
 import {
   attestedCompletion,
   buildChatRequest,
@@ -25,14 +25,7 @@ import type { CaseFile } from "./case.js";
 import type { ArbiterChain } from "./chain.js";
 import { checkVerdict, RUBRIC, type Verdict } from "./verdict.js";
 
-/**
- * Data goes between `<<<NAME` and `NAME>>>`. Neutralise those markers inside
- * the data so a claimant cannot close the EVIDENCE block early and continue
- * as if it were the arbiter's own instructions.
- */
-export function quoteData(s: string): string {
-  return s.replace(/<<</g, "‹‹‹").replace(/>>>/g, "›››");
-}
+export { quoteData };
 
 export function verdictMessages(c: CaseFile): ChatMessage[] {
   const terms = new TextDecoder().decode(c.inputs.schemaBytes);
