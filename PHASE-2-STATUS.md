@@ -484,7 +484,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 20. `chore(deploy): add Phase 2 testnet service configuration`
 
-- **Commit:** (this commit)
+- **Commit:** `d84ef25`
 - **Did:**
   - **Least-privilege keys** (`scripts/lib/service-keys.ts`):
     - worker: `accept_engagement` and `submit_receipt`;
@@ -510,6 +510,35 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   method lists exact and deposit-free). `register-tee-signer` without credentials refuses (run).
 - **Ran:** `vitest` (3 passed), root `tsc --noEmit`, `eslint`: clean.
 - **Evidence:** unit-tested. **Not run against testnet** (no testnet account or NEAR AI key here).
+
+### 21. `test(testnet): verify live TEE receipt acceptance and tamper rejection`
+
+- **Commit:** (this commit)
+- **Did:** `scripts/verify-live-receipt.ts` (`pnpm testnet:verify-receipt`). Flow:
+  1. The client proposes two minimum-price jobs, and the agent accepts both.
+  2. One extraction runs through the receipt library: on testnet a fresh-nonce attestation verified
+     with dcap-qvl, exact bytes, and a signature from a verified TEE.
+  3. The receipt passes offline `verifyReceipt`, then the contract's `check_receipt` view, then a real
+     `submit_receipt` on job A, which must reach `Delivered` with the same response hash on-chain.
+  4. One byte of the signed artifact's hash is flipped. Job B must refuse it in both the
+     `check_receipt` view and a real `submit_receipt` transaction, and stay `Open`.
+  5. The outcome is saved to `.data/<network>-live-receipt.json`.
+
+  `--network sandbox` runs the identical code path on fixtures and prints that it is **not** a live
+  verification.
+- **Ran:**
+  - `pnpm testnet:verify-receipt --network sandbox` on the local sandbox: **PASS**. The genuine receipt
+    was ACCEPTED (engagement 2 `Delivered`). The tampered copy was REJECTED, both in the view and
+    on-chain (engagement 3 stayed `Open`; the contract said `signer not allow-listed`, because the
+    flipped hash recovers a different signer).
+  - An accidental second sandbox run was refused by the contract with `receipt already used`, which is
+    replay protection working.
+  - `--network testnet` without configuration refuses with a named missing variable.
+  - `tsc --noEmit` and `eslint`: clean.
+- **Evidence:** sandbox-tested on dev fixtures. **Testnet: NOT run.** There is no testnet account, no
+  deployed testnet contract and no NEAR AI Cloud key on this machine. Exit criterion 1 stays open; the
+  exact commands are in "Remaining to run" below.
+- **Files:** `scripts/verify-live-receipt.ts`, `package.json`
 
 ---
 
