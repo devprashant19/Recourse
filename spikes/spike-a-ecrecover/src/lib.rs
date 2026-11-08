@@ -44,7 +44,12 @@ mod tests {
 
     fn recover_address(text: &str, sig_hex: &str) -> String {
         let sig = hex::decode(sig_hex.trim_start_matches("0x")).expect("signature is not hex");
-        assert_eq!(sig.len(), 65, "expected a 65-byte signature, got {}", sig.len());
+        assert_eq!(
+            sig.len(),
+            65,
+            "expected a 65-byte signature, got {}",
+            sig.len()
+        );
 
         let digest = eip191_digest(text);
         let v = normalize_v(sig[64]);
@@ -60,10 +65,15 @@ mod tests {
     fn recovers_the_same_signer_as_the_typescript_half() {
         testing_env!(VMContextBuilder::new().build());
 
-        let raw = match std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/fixture.json")) {
+        let raw = match std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fixture.json"
+        )) {
             Ok(s) => s,
             Err(_) => {
-                eprintln!("fixture.json missing — run `pnpm spike:a` first (it needs NEARAI_API_KEY).");
+                eprintln!(
+                    "fixture.json missing — run `pnpm spike:a` first (it needs NEARAI_API_KEY)."
+                );
                 return; // Not a failure: the TS half has not been run yet.
             }
         };
@@ -75,7 +85,10 @@ mod tests {
             "gateway" => format!("{}:{}", f.request_hash, f.response_hash),
             other => panic!("unknown signature kind: {other}"),
         };
-        assert_eq!(f.text, expected_text, "signed text does not match the documented form");
+        assert_eq!(
+            f.text, expected_text,
+            "signed text does not match the documented form"
+        );
 
         let recovered = recover_address(&f.text, &f.signature);
 
@@ -97,10 +110,11 @@ mod tests {
     fn tampered_text_recovers_a_different_address() {
         testing_env!(VMContextBuilder::new().build());
 
-        let raw = match std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/fixture.json")) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
+        let raw =
+            match std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/fixture.json")) {
+                Ok(s) => s,
+                Err(_) => return,
+            };
         let f: Fixture = serde_json::from_str(&raw).unwrap();
 
         let good = recover_address(&f.text, &f.signature);
@@ -110,7 +124,10 @@ mod tests {
         }
         let bad = recover_address(&tampered_text, &f.signature);
 
-        assert_ne!(good, bad, "tampering the signed text did not change the recovered signer");
+        assert_ne!(
+            good, bad,
+            "tampering the signed text did not change the recovered signer"
+        );
         println!("tampered text recovers a different address, as it must");
     }
 }

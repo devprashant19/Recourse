@@ -9,7 +9,7 @@ const API = (process.env.E2E_API_URL ?? "http://localhost:8080").replace(/\/$/, 
 
 interface ClaimRow {
   id: number;
-  claim: { kind: string; status: string; engagement_id: number; verdict: { upheld: boolean; arbiter: string | null } | null };
+  claim: { kind: string; status: string; engagement_id: number; verdict: { upheld: boolean; arbiter: string | null; appealed_by?: string | null } | null };
   payout: { status: string } | null;
 }
 
@@ -54,10 +54,10 @@ test("01 happy path — a completed job with a receipt that verifies in the brow
 });
 
 test("02 wrong work is fined — findings, the bond-first split and the payout", async ({ page }) => {
-  await visitClaim(page, (c) => c.claim.kind === "Quality" && c.claim.verdict?.upheld === true && c.payout?.status === "Success" && c.claim.verdict.arbiter !== null, "an upheld quality claim");
+  await visitClaim(page, (c) => c.claim.kind === "Quality" && c.claim.verdict?.upheld === true && c.payout?.status === "Success" && c.claim.verdict.arbiter !== null && !c.claim.verdict.appealed_by, "an upheld, unappealed quality claim");
   await expect(page.getByText("Arbiter upheld the claim")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Who paid" })).toBeVisible();
-  await expect(page.getByText("Agent's own bond")).toBeVisible();
+  await expect(page.getByText("Agent's own bond").first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Payout" })).toBeVisible();
   await expect(page.getByText("Slashed").first()).toBeVisible();
 });

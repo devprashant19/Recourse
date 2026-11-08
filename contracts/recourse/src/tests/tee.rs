@@ -221,15 +221,19 @@ fn zero_address_signer_is_rejected() {
 // response, and the signer bound to that model's attestation report). These
 // tests run it through the same path `submit_receipt` uses.
 
-use near_sdk::serde_json;
 use crate::Recourse;
+use near_sdk::serde_json;
 
 fn live() -> serde_json::Value {
-    serde_json::from_str(include_str!("fixtures/near_ai_live_receipt.json")).expect("live fixture JSON")
+    serde_json::from_str(include_str!("fixtures/near_ai_live_receipt.json"))
+        .expect("live fixture JSON")
 }
 
 fn live_str(key: &str) -> String {
-    live()[key].as_str().expect("live fixture field").to_string()
+    live()[key]
+        .as_str()
+        .expect("live fixture field")
+        .to_string()
 }
 
 fn live_receipt() -> ReceiptInput {
@@ -247,7 +251,12 @@ fn allow_live_signer(c: &mut Recourse) -> EvmAddress {
     let addr = EvmAddress::from_hex(&live_str("expected_address")).unwrap();
     let report = Hash::from_hex(live()["attestation"]["report_hash"].as_str().unwrap()).unwrap();
     ctx(&owner(), 0, T0);
-    c.register_signer(addr, live_str("model_id"), report, SignatureKind::ProviderTee);
+    c.register_signer(
+        addr,
+        live_str("model_id"),
+        report,
+        SignatureKind::ProviderTee,
+    );
     addr
 }
 

@@ -186,7 +186,7 @@ Live testnet and mainnet need credentials: [`docs/hosting.md`](docs/hosting.md) 
 | Receipts | Full four-step flow; checked on-chain with `ecrecover`. Scenarios 01, 02 and 04 replay **genuine NEAR AI Cloud recordings**: worker `Qwen/Qwen3.8-27B`, arbiter `z-ai/glm-5.3-flash`, both signed inside Intel TDX, every quote verified by dcap-qvl (`UpToDate`) at recording time, and their real signers allow-listed on-chain. Scenarios 05–07 and the adversarial suite sign synthetic receipts with a labelled dev key to test the contract's mechanics |
 | Genuine NEAR AI Cloud recordings | **Done** — `demo/fixtures/near-ai/fixtures.json`, recorded 8 Nov 2026; the five judge receipts in `demo/fixtures/receipts` verify standalone with `pnpm verify-receipt` |
 | Spike A (a real NEAR AI Cloud signature recovered by `env::ecrecover`) | **PASS** — TypeScript and Rust recover the same signer, which matches the address in the model's attestation report; the contract's `check_receipt` accepts the live receipt and rejects tampered copies (`contracts/recourse/src/tests/tee.rs`) |
-| Hosted demo | Keyless sandbox stack with hourly reset (`docker compose up`); the live testnet deployment needs accounts and keys |
+| Hosted demo | Keyless sandbox stack with hourly reset (`docker compose up`): seeds the seven scenarios, indexes every event, serves the site. **Playwright: 14/14** (seven scenarios × desktop and phone) against it. The live testnet deployment needs accounts and keys |
 | Mainnet run | **Not yet recorded** — a human confirms every transaction (`demo/mainnet-run/RUN.md`) |
 | `pnpm demo` timing | About 6–7 minutes, longer than the 3 the plan targets; scenario 07 skips three bid windows and seven claim windows on the sandbox |
 

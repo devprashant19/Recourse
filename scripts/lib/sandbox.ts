@@ -17,7 +17,7 @@
  */
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { DATA_DIR } from "./near.js";
@@ -123,6 +123,9 @@ async function rpcReady(url: string): Promise<boolean> {
   }
 }
 
+/** Epochs of history the sandbox keeps: effectively all of it for a demo-length chain. */
+export const KEEP_EPOCHS = 100_000;
+
 /** Starts a fresh sandbox (new genesis, new home dir) and resolves once its RPC answers. */
 export async function startSandbox(o: SandboxOptions = {}): Promise<SandboxHandle> {
   const version = o.version ?? process.env.RECOURSE_SANDBOX_VERSION ?? DEFAULT_SANDBOX_VERSION;
@@ -136,6 +139,15 @@ export async function startSandbox(o: SandboxOptions = {}): Promise<SandboxHandl
   const homeDir = mkdtempSync(join(resolve(dataDir, "sandbox"), "home-"));
   const init = spawnSync(bin, ["--home", homeDir, "init"], { stdio: ["ignore", "ignore", "pipe"] });
   if (init.status !== 0) throw new Error(`near-sandbox init failed: ${init.stderr?.toString().slice(-500)}`);
+
+  // Keep every block. The default keeps 5 epochs (2,500 blocks), and each
+  // fast_forward skips dozens of blocks, so by the end of `pnpm demo` the node
+  // had already deleted scenarios 02-05: an indexer started afterwards (the
+  // hosted stack, the web UI) could never see them.
+  const cfgPath = join(homeDir, "config.json");
+  const cfg = JSON.parse(readFileSync(cfgPath, "utf8")) as Record<string, unknown>;
+  cfg.gc_num_epochs_to_keep = KEEP_EPOCHS;
+  writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
 
   const child: ChildProcess = spawn(
     bin,
