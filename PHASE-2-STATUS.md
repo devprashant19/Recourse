@@ -185,7 +185,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 8. `feat(worker): implement engagement monitoring and document validation`
 
-- **Commit:** (this commit)
+- **Commit:** `ab8d9a5`
 - **Did:** `services/worker-agent`: validated config (`--mode sandbox|testnet|mainnet` / `RECOURSE_MODE`,
   account-id format, `ed25519:` function-call key, NEAR AI key + model required outside sandbox, admin
   server forbidden in mainnet and needing a ≥32-char token elsewhere); JSON-lines logger that redacts
@@ -202,6 +202,28 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   recorded and loop continues; four config cases incl. mainnet admin refusal; log redaction).
 - **Ran:** `vitest run services/worker-agent` (14 passed), `tsc --noEmit`, `eslint` — clean.
 - **Evidence:** unit-tested (in-memory test chain).
+
+### 9. `feat(worker): implement TEE-backed extraction and receipt submission`
+
+- **Commit:** (this commit)
+- **Did:** `performExtraction`: builds the request once (system prompt + schema and document as quoted
+  data, `temperature: 0`, `response_format: json_object`), runs the full `attestedCompletion` flow
+  (fresh-nonce attestation, raw bytes, signature checked against verified signers), stores request,
+  response, report and the delivered output in a content-addressed store, **publishes the receipt record
+  before submitting** (crash between the two reconciles from chain state; no double submission), re-checks
+  the deadline, then calls `submit_receipt` through the SDK slice. New: `FileArtifactStore`
+  (`@recourse/receipts/file-store`, Node-only: hash-named files, atomic writes, re-hashed on read),
+  `FileReceiptRegistry`, `SdkWorkerChain` (RecourseClient signing with the agent's function-call key),
+  and the live wiring (`LiveNearAiClient` + `DcapQuoteVerifier`).
+- **Files:** `services/worker-agent/src/{extract,registry,sdk-chain,main,index}.ts`,
+  `test/extract.test.ts`, `packages/receipts/{src/file-store.ts,package.json}`, `pnpm-lock.yaml`
+- **Tests:** 5 (end-to-end tick: accept → extract → submit, published artifacts pass `verifyReceipt`
+  with the allowed signer and the output equals ground truth; temperature 0 and quoted document in the
+  exact request bytes; no submission after the deadline; restart after a crash mid-submit does not
+  resubmit; sabotage hook only when asked). Uses the test-only TEE double.
+- **Ran:** `vitest run services/worker-agent packages/receipts` (80 passed), `tsc --noEmit`, `eslint` — clean.
+- **Evidence:** unit-tested. The live path (`SdkWorkerChain` + NEAR AI Cloud) is exercised in the
+  sandbox scenarios and the testnet step.
 
 ---
 

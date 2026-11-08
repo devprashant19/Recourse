@@ -16,6 +16,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./dcap": "./src/dcap.ts"
+    "./dcap": "./src/dcap.ts",
+    "./file-store": "./src/file-store.ts"
   }
 }
