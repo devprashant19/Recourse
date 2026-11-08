@@ -1,0 +1,105 @@
+# `pnpm dev` / the hosted demo.
+#
+#   docker compose up --build                 # keyless: sandbox chain + every service + API + web
+#   docker compose --profile testnet up       # live testnet services (needs .env, see docs/hosting.md)
+#
+# Default (no profile): `stack` runs scripts/hosted-sandbox.ts — a fresh NEAR
+# sandbox, the seven scenarios as seed history, then the worker, arbiter,
+# keeper and three underwriters live, plus the indexer API on :8080; it
+# resets every HOSTED_RESET_MINUTES. `web` serves the site on :3000.
+
+services:
+  stack:
+    build:
+      context: .
+      dockerfile: Dockerfile.judge
+    image: recourse-judge
+    command: ["pnpm", "hosted"]
+    environment:
+      RECOURSE_MODE: sandbox
+      INDEXER_HOST: 0.0.0.0
+      INDEXER_PORT: "8080"
+      HOSTED_RESET_MINUTES: ${HOSTED_RESET_MINUTES:-60}
+      HOSTED_SEED: ${HOSTED_SEED:-1}
+    ports:
+      - "8080:8080"
+    volumes:
+      - stack-data:/w/.data
+    restart: unless-stopped
+
+  web:
+    image: recourse-judge
+    depends_on: [stack]
+    working_dir: /w/apps/web
+    command: ["sh", "-c", "npx next build && npx next start -p 3000 -H 0.0.0.0"]
+    environment:
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080}
+      NEXT_PUBLIC_EXPLORER_TX: ${EXPLORER_TX:-}
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  # ----- live testnet (profile: testnet) ---------------------------------------
+  # Each service signs with its own function-call key from .env; see docs/hosting.md.
+  indexer:
+    profiles: [testnet]
+    image: recourse-judge
+    command: ["pnpm", "indexer", "--", "--mode", "testnet"]
+    env_file: .env
+    environment: { RECOURSE_MODE: testnet, INDEXER_HOST: 0.0.0.0 }
+    ports: ["8080:8080"]
+    volumes: [testnet-data:/w/.data]
+    restart: unless-stopped
+  worker:
+    profiles: [testnet]
+    image: recourse-judge
+    command: ["pnpm", "--filter", "@recourse/worker-agent", "start", "--", "--mode", "testnet"]
+    env_file: .env
+    environment: { RECOURSE_MODE: testnet }
+    volumes: [testnet-data:/w/.data]
+    restart: unless-stopped
+  arbiter:
+    profiles: [testnet]
+    image: recourse-judge
+    command: ["pnpm", "--filter", "@recourse/arbiter", "start", "--", "--mode", "testnet"]
+    env_file: .env
+    environment: { RECOURSE_MODE: testnet }
+    volumes: [testnet-data:/w/.data]
+    restart: unless-stopped
+  keeper:
+    profiles: [testnet]
+    image: recourse-judge
+    command: ["pnpm", "--filter", "@recourse/keeper", "start", "--", "--mode", "testnet"]
+    env_file: .env
+    environment: { RECOURSE_MODE: testnet }
+    volumes: [testnet-data:/w/.data]
+    restart: unless-stopped
+  underwriter-cautious:
+    profiles: [testnet]
+    image: recourse-judge
+    command: ["pnpm", "--filter", "@recourse/underwriters", "start", "--", "--mode", "testnet"]
+    env_file: .env
+    environment: { RECOURSE_MODE: testnet, UNDERWRITER_PERSONA: cautious, UNDERWRITER_ACCOUNT_ID: "${UNDERWRITER_1_ACCOUNT_ID:-}", UNDERWRITER_KEY: "${UNDERWRITER_1_KEY:-}" }
+    volumes: [testnet-data:/w/.data]
+    restart: unless-stopped
+  underwriter-balanced:
+    profiles: [testnet]
+    image: recourse-judge
+    command: ["pnpm", "--filter", "@recourse/underwriters", "start", "--", "--mode", "testnet"]
+    env_file: .env
+    environment: { RECOURSE_MODE: testnet, UNDERWRITER_PERSONA: balanced, UNDERWRITER_ACCOUNT_ID: "${UNDERWRITER_2_ACCOUNT_ID:-}", UNDERWRITER_KEY: "${UNDERWRITER_2_KEY:-}" }
+    volumes: [testnet-data:/w/.data]
+    restart: unless-stopped
+  underwriter-aggressive:
+    profiles: [testnet]
+    image: recourse-judge
+    command: ["pnpm", "--filter", "@recourse/underwriters", "start", "--", "--mode", "testnet"]
+    env_file: .env
+    environment: { RECOURSE_MODE: testnet, UNDERWRITER_PERSONA: aggressive, UNDERWRITER_ACCOUNT_ID: "${UNDERWRITER_3_ACCOUNT_ID:-}", UNDERWRITER_KEY: "${UNDERWRITER_3_KEY:-}" }
+    volumes: [testnet-data:/w/.data]
+    restart: unless-stopped
+
+volumes:
+  stack-data:
+  testnet-data:

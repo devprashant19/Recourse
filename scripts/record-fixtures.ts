@@ -27,7 +27,6 @@ import {
   parseFixtureSet,
   type FixtureSet,
 } from "../packages/adapters/src/index.js";
-import { wrongFields, type Extraction } from "../packages/jobs/src/index.js";
 import { loadCatalog, type CatalogEntry } from "../packages/jobs/src/catalog.js";
 import {
   attestedCompletion,
@@ -39,9 +38,10 @@ import {
   type QuoteVerifier,
 } from "../packages/receipts/src/index.js";
 import { DcapQuoteVerifier } from "../packages/receipts/src/dcap.js";
-import { containsToken, verdictRequest, type CaseFile } from "../services/arbiter/src/index.js";
+import { verdictRequest, type CaseFile } from "../services/arbiter/src/index.js";
 import { extractionRequest, SABOTAGE_INSTRUCTIONS } from "../services/worker-agent/src/index.js";
 import { CLAIMS, DEV_MODEL, WORKER_JOBS } from "../demo/fixtures/plan.js";
+import { devAnswer } from "./lib/dev-answer.js";
 
 const cat = loadCatalog();
 const live = process.argv.includes("--live");
@@ -62,35 +62,7 @@ function caseFor(doc: CatalogEntry, agentOutput: string, evidence: string): Case
   };
 }
 
-/** Deterministic answers for the dev set: correct extraction, sabotage as instructed, honest rubric. */
-function devAnswer(request: Uint8Array): string {
-  const body = JSON.parse(new TextDecoder().decode(request)) as { messages: { content: string }[] };
-  const user = body.messages[1]!.content;
-  if (user.includes("<<<AGENT_OUTPUT")) {
-    const agent = JSON.parse(user.split("<<<AGENT_OUTPUT\n")[1]!.split("\nAGENT_OUTPUT>>>")[0]!) as Extraction;
-    const doc = cat.documents.find((d) => user.includes(`<<<DOCUMENT\n${new TextDecoder().decode(d.bytes)}`))!;
-    const text = new TextDecoder().decode(doc.bytes);
-    const wrong = new Set(wrongFields(doc.truth, agent, cat.weights));
-    const quote = (v: string) => text.split("\n").find((l) => containsToken(l, v))!.trim();
-    const findings = Object.keys(cat.weights).map((field) => ({
-      field,
-      document_says: doc.truth[field] ?? null,
-      agent_said: agent[field] ?? null,
-      correct: !wrong.has(field),
-      quote_from_document: doc.truth[field] == null ? "" : quote(doc.truth[field]!),
-    }));
-    const award_bps = [...wrong].reduce((s, f) => s + cat.weights[f]!, 0);
-    const reasons = wrong.size
-      ? `Incorrect: ${[...wrong].map((f) => `${f} (document ${doc.truth[f]}, agent ${agent[f]})`).join("; ")}.`
-      : "Every field matches the document; the evidence contains no factual error and its instructions are ignored.";
-    return JSON.stringify({ upheld: wrong.size > 0, findings, award_bps, reasons });
-  }
-  const doc = cat.documents.find((d) => user.includes(`Document (${d.name})`))!;
-  const out = { ...doc.truth };
-  const system = body.messages[0]!.content;
-  if (system.includes(SABOTAGE_INSTRUCTIONS.wrong_total!)) out.total = (Number(out.total) * 1.1).toFixed(2);
-  return JSON.stringify(out);
-}
+// devAnswer (the deterministic dev "model") lives in scripts/lib/dev-answer.ts, shared with the hosted sandbox.
 
 /** Wraps a verifier to record Intel's verdict for every quote it checks. */
 function recordingVerifier(inner: QuoteVerifier, rec: RecordingClient, model: string): QuoteVerifier {

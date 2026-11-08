@@ -6,7 +6,7 @@
 
 import { join } from "node:path";
 
-import { selectBackend } from "../../packages/adapters/src/index.js";
+import { selectBackend, type Backend } from "../../packages/adapters/src/index.js";
 import { CatalogDocumentSource } from "../../packages/jobs/src/source.js";
 import { FileArtifactStore, FileReceiptRegistry } from "../../packages/receipts/src/file-store.js";
 import { Arbiter, MemoryArbiterState, SdkArbiterChain } from "../../services/arbiter/src/index.js";
@@ -23,9 +23,13 @@ import {
 } from "../../services/worker-agent/src/index.js";
 import type { Cast } from "./scenario.js";
 
-export function services(c: Cast, artifactDir: string, sabotageMode: SabotageMode) {
+/** Shared with the indexer, so the UI can show every published receipt and verdict. */
+export function artifactDir(): string {
+  return process.env.ARTIFACT_DIR ?? ".data/artifacts";
+}
+
+export function services(c: Cast, artifactDir: string, sabotageMode: SabotageMode, backend: Backend = selectBackend("sandbox")) {
   const rpcUrl = process.env.RECOURSE_RPC_URL ?? "http://127.0.0.1:3030";
-  const backend = selectBackend("sandbox");
   const store = new FileArtifactStore(artifactDir);
   const registry = new FileReceiptRegistry(join(artifactDir, "receipts"));
   const documents = new CatalogDocumentSource();
@@ -65,5 +69,5 @@ export function services(c: Cast, artifactDir: string, sabotageMode: SabotageMod
     state: new MemoryArbiterState(),
     log: { log() {} },
   });
-  return { worker, arbiter, store, backend, documents };
+  return { worker, arbiter, store, backend, documents, sabotage };
 }

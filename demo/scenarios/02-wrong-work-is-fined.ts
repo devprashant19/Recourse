@@ -19,16 +19,13 @@
  * hash once, so run this on a fresh deployment.
  */
 
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { termsHash } from "../../packages/jobs/src/index.js";
 import { loadCatalog } from "../../packages/jobs/src/catalog.js";
 import { sha256Hex } from "../../packages/receipts/src/index.js";
 import { chainNow, MINUTE_NS, ONE_NEAR, skipPast } from "../../scripts/lib/near.js";
 import { defineScenario, expect, runIfMain } from "../../scripts/lib/scenario.js";
-import { services } from "../../scripts/lib/services.js";
+import { artifactDir, services } from "../../scripts/lib/services.js";
 import { CLAIMS } from "../fixtures/plan.js";
 
 export const scenario = defineScenario({
@@ -38,7 +35,7 @@ export const scenario = defineScenario({
   async run(c) {
     const plan = CLAIMS[0]!;
     const doc = loadCatalog().documents[plan.doc]!;
-    const s = services(c, mkdtempSync(join(tmpdir(), "rc-s02-")), "wrong_total");
+    const s = services(c, artifactDir(), "wrong_total");
     const agentId = c.accounts.agent.accountId;
     const vaultId = c.accounts.underwriter.accountId;
     const view = c.view;

@@ -76,6 +76,9 @@ export async function setupNetwork(net: Network, log: (s: string) => void): Prom
     // A fresh chain for a fresh run: fixtures replay byte-for-byte, and the
     // contract accepts each response hash exactly once.
     for (const f of ["deployment", "accounts", "dao", "rationales.jsonl"]) rmSync(join(DATA_DIR, `sandbox-${f}${f.endsWith(".jsonl") ? "" : ".json"}`), { force: true });
+    // Published receipts are keyed by engagement id, which restarts at 0 on a new chain.
+    rmSync(process.env.ARTIFACT_DIR ?? join(DATA_DIR, "artifacts"), { recursive: true, force: true });
+    rmSync(join(DATA_DIR, "sandbox-indexer.sqlite"), { force: true });
     mkdirSync(DATA_DIR, { recursive: true });
     sandbox = await startSandbox({ log });
     process.env.RECOURSE_RPC_URL = sandbox.rpcUrl;

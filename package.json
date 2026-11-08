@@ -51,7 +51,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && pnpm -r typecheck",
     "lint": "eslint .",
     "demo:keep": "tsx demo/run-demo.ts --mode sandbox --keep",
-    "export-receipts": "tsx scripts/export-receipts.ts"
+    "export-receipts": "tsx scripts/export-receipts.ts",
+    "hosted": "tsx scripts/hosted-sandbox.ts",
+    "indexer": "pnpm --filter @recourse/indexer start",
+    "web": "pnpm --filter @recourse/web dev"
   },
   "devDependencies": {
     "@playwright/test": "1.49.1",
