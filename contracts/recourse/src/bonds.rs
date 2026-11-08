@@ -27,6 +27,7 @@ impl Recourse {
     /// so the whole deposit becomes bond.
     #[payable]
     pub fn post_bond(&mut self) -> Bond {
+        self.assert_native_mode();
         let agent_id = env::predecessor_account_id();
         self.assert_registered(&agent_id);
         let posted = env::attached_deposit().as_yoctonear();

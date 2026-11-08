@@ -27,12 +27,6 @@ fn new_stores_config_and_starts_unpaused() {
 }
 
 #[test]
-#[should_panic(expected = "only the Native bond asset is supported")]
-fn ft_bond_asset_is_rejected_until_usdc_support() {
-    init_with(|c| c.bond_asset = BondAsset::Ft(acc("usdc.near")));
-}
-
-#[test]
 #[should_panic(expected = "min_bond must be positive")]
 fn zero_min_bond_is_rejected() {
     init_with(|c| c.min_bond = U128(0));

@@ -42,6 +42,7 @@ impl Recourse {
         evidence_uri: String,
         destination: Destination,
     ) -> ClaimId {
+        self.assert_native_mode();
         let mut e = self.engagement_of(id);
         let claimant = env::predecessor_account_id();
         require!(

@@ -68,6 +68,7 @@ enum StorageKey {
     Signers,
     UsedReceipts,
     AgentExposure,
+    StorageBalances,
 }
 
 #[near(contract_state)]
@@ -105,6 +106,14 @@ pub struct Recourse {
     agent_exposure: LookupMap<(AccountId, AccountId), u128>,
     /// Running sums of every liability bucket (right-hand side of invariant I1).
     totals: Totals,
+    /// Ft mode: fungible-token units this contract holds by its own accounting
+    /// (received through ft_on_transfer, minus every transfer out).
+    ft_held: u128,
+    /// NEP-145 storage balances in yoctoNEAR: prepaid storage for USDC-mode
+    /// operations, which cannot attach NEAR.
+    storage_balances: LookupMap<AccountId, u128>,
+    /// Sum of `storage_balances`; owed back in NEAR, so a native-mode liability.
+    storage_balance_total: u128,
 }
 
 #[near]
@@ -140,6 +149,9 @@ impl Recourse {
             paused: false,
             agent_exposure: LookupMap::new(StorageKey::AgentExposure),
             totals: Totals::default(),
+            ft_held: 0,
+            storage_balances: LookupMap::new(StorageKey::StorageBalances),
+            storage_balance_total: 0,
         }
     }
 
@@ -176,10 +188,12 @@ impl Recourse {
 
 /// Rejects any config that would make a later invariant impossible to keep.
 fn validate_config(c: &Config) {
-    require!(
-        c.bond_asset == BondAsset::Native,
-        "only the Native bond asset is supported until USDC support lands"
-    );
+    if let BondAsset::Ft(token) = &c.bond_asset {
+        require!(
+            token.as_str() != env::current_account_id().as_str(),
+            "the bond token cannot be this contract"
+        );
+    }
     require!(c.min_bond.0 > 0, "min_bond must be positive");
     for (name, d) in [
         ("withdrawal_cooldown", c.withdrawal_cooldown),

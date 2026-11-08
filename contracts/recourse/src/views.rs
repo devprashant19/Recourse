@@ -113,13 +113,29 @@ impl Recourse {
             .collect()
     }
 
+    /// Fungible-token units this contract holds by its own accounting (Ft mode).
+    pub fn get_ft_held(&self) -> U128 {
+        U128(self.ft_held)
+    }
+
     /// Both sides of invariant I1. `ok` holds when what the contract holds,
     /// less what the runtime reserves for storage, covers every liability.
     pub fn solvency(&self) -> Solvency {
         let t = &self.totals;
-        let held = env::account_balance().as_yoctonear();
-        let storage_reserved =
-            u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear();
+        // Ft mode: the money is the token, tracked in `ft_held`; NEAR only pays
+        // for storage. Native mode: the account balance, less what storage
+        // locks, and prepaid NEP-145 storage balances are owed back too.
+        let ft = self.ft_token().is_some();
+        let held = if ft {
+            self.ft_held
+        } else {
+            env::account_balance().as_yoctonear()
+        };
+        let storage_reserved = if ft {
+            0
+        } else {
+            u128::from(env::storage_usage()) * env::storage_byte_cost().as_yoctonear()
+        };
         let liabilities = [
             t.bonds.0,
             t.vault_capital.0,
@@ -127,6 +143,7 @@ impl Recourse {
             t.claim_stakes.0,
             t.pending_payouts.0,
             self.unattributed,
+            if ft { 0 } else { self.storage_balance_total },
         ]
         .into_iter()
         .fold(0, |acc, x| add(acc, x, "liabilities"));

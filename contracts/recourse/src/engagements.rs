@@ -39,6 +39,7 @@ impl Recourse {
         price: U128,
     ) -> EngagementId {
         self.assert_not_paused();
+        self.assert_native_mode();
         let client = env::predecessor_account_id();
         require!(client != agent, "an agent cannot hire itself");
         let now = env::block_timestamp();

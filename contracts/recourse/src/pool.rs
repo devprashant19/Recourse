@@ -76,6 +76,7 @@ impl Recourse {
     /// share price moving between quoting and execution.
     #[payable]
     pub fn deposit_vault(&mut self, vault: AccountId, min_shares: Option<U128>) -> U128 {
+        self.assert_native_mode();
         let lp = env::predecessor_account_id();
         let mut v = self.vault_of(&vault);
         let key = (vault.clone(), lp.clone());
