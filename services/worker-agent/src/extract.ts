@@ -20,7 +20,7 @@ import type { Engagement } from "@recourse/sdk";
 import type { WorkerChain } from "./chain.js";
 import type { JobInputs } from "./documents.js";
 import type { Logger } from "./log.js";
-import type { ReceiptRegistry } from "./registry.js";
+import type { ReceiptRegistry } from "@recourse/receipts";
 
 export const EXTRACTION_SYSTEM_PROMPT = [
   "You extract fields from a business document into JSON.",

@@ -22,3 +22,4 @@ export * from "./completion.js";
 export * from "./signature.js";
 export * from "./quote.js";
 export * from "./receipt.js";
+export * from "./registry.js";

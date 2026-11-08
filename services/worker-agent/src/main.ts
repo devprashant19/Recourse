@@ -12,14 +12,13 @@ import { join } from "node:path";
 
 import { LiveNearAiClient, type NearAiClient, type QuoteVerifier } from "@recourse/receipts";
 import { DcapQuoteVerifier } from "@recourse/receipts/dcap";
-import { FileArtifactStore } from "@recourse/receipts/file-store";
+import { FileArtifactStore, FileReceiptRegistry } from "@recourse/receipts/file-store";
 
 import type { WorkerConfig } from "./config.js";
 import { CatalogDocumentSource } from "./documents.js";
 import { performExtraction } from "./extract.js";
 import { SabotageController, shouldWorkNow } from "./sabotage.js";
 import { jsonLogger } from "./log.js";
-import { FileReceiptRegistry } from "./registry.js";
 import { SdkWorkerChain } from "./sdk-chain.js";
 import { FileStateStore } from "./state.js";
 import { Worker } from "./worker.js";

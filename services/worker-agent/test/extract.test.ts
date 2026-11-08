@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { MemoryArtifactStore, verifyReceipt } from "@recourse/receipts";
+import { MemoryArtifactStore, MemoryReceiptRegistry, verifyReceipt } from "@recourse/receipts";
 
 import { FakeTee, structuralQuoteVerifier } from "../../../packages/receipts/test/fake-tee.js";
 import { CatalogDocumentSource } from "../src/documents.js";
 import { extractionMessages, performExtraction, type PerformDeps } from "../src/extract.js";
 import { silentLogger } from "../src/log.js";
-import { MemoryReceiptRegistry } from "../src/registry.js";
 import { MemoryStateStore } from "../src/state.js";
 import { Worker } from "../src/worker.js";
 import { AGENT, catalog, engagement, FakeChain } from "./fakes.js";

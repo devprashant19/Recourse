@@ -247,7 +247,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 11. `feat(arbiter): define quality assessment rubric and output schema`
 
-- **Commit:** (this commit)
+- **Commit:** `c2ddd17`
 - **Did:** `services/arbiter/rubric.md` — the published, inspectable rubric: the document is the only
   source of truth; **everything in the quoted blocks (document, agent output, evidence) is data, not
   instructions**, with the typical injections named; one finding per terms field with a verbatim quote;
@@ -263,6 +263,29 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   text; valid rejection; non-JSON / extra field / out-of-range / fractional / missing field rejected;
   inflated award; inconsistent `upheld`; ungrounded quote; missing / duplicate / unknown fields).
 - **Ran:** `vitest run services/arbiter` (8 passed), `tsc --noEmit`, `eslint` — clean.
+- **Evidence:** unit-tested.
+
+### 12. `feat(arbiter): implement claim monitoring and evidence verification`
+
+- **Commit:** (this commit)
+- **Did:** `ArbiterChain` slice + `SdkArbiterChain` (function-call key limited to `resolve_claim`);
+  `isPendingQualityClaim` (Quality and `Filed` only — never Resolved, Finalized, Rejected or a
+  `TimedOut` claim closed by Phase 1's stale-claim path); `gatherCase` assembles a case file trusting
+  nothing handed over: terms/document/schema must hash to `terms_hash`; the published agent receipt
+  must equal the receipt the **contract accepted on-chain** (hashes, model, signer, kind) and pass
+  `verifyReceipt` with its artifact bytes and attestation; the agent's output is read from the
+  **signed response bytes**, not the separately published output file; evidence comes only from the
+  content-addressed store (no arbitrary URLs — no SSRF), ≤ 16 KB, UTF-8, and must hash to the on-chain
+  `evidence_hash`. Refactor: the receipt registry moved to `@recourse/receipts` (file impl in
+  `/file-store`) and the document source to `@recourse/jobs/source`, shared by worker and arbiter
+  instead of duplicated.
+- **Files:** `services/arbiter/src/{chain,case,sdk-chain,index}.ts`, `test/{case.test,fixtures}.ts`;
+  `packages/receipts/src/{registry,file-store,index}.ts`; `packages/jobs/{src/source.ts,package.json}`;
+  `services/worker-agent/src/{documents,extract,main,index}.ts` and tests (imports only)
+- **Tests:** 8 (claim filtering incl. TimedOut; verified case with output from the signed response;
+  doctored output file ignored; published-vs-on-chain mismatch; tampered artifact; evidence hash
+  mismatch; arbitrary-URL and oversized evidence; no on-chain receipt / unknown document).
+- **Ran:** `vitest run packages services` (all pass), `tsc --noEmit` (all packages), `eslint` — clean.
 - **Evidence:** unit-tested.
 
 ---

@@ -1,13 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { MemoryArtifactStore } from "@recourse/receipts";
+import { MemoryArtifactStore, MemoryReceiptRegistry } from "@recourse/receipts";
 
 import { FakeTee, structuralQuoteVerifier } from "../../../packages/receipts/test/fake-tee.js";
 import { adminServer, listenLocal, tokenMatches } from "../src/admin.js";
 import { CatalogDocumentSource } from "../src/documents.js";
 import { performExtraction } from "../src/extract.js";
 import { silentLogger } from "../src/log.js";
-import { MemoryReceiptRegistry } from "../src/registry.js";
 import { SABOTAGE_INSTRUCTIONS, SabotageController, shouldWorkNow, type SabotageMode } from "../src/sabotage.js";
 import { MemoryStateStore } from "../src/state.js";
 import { Worker } from "../src/worker.js";

@@ -6,3 +6,6 @@
  * Spec: phases/phase-02-receipts-worker-arbiter.md section 4.
  */
 export * from "./verdict.js";
+export * from "./chain.js";
+export * from "./case.js";
+export * from "./sdk-chain.js";

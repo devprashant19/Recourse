@@ -4,10 +4,7 @@
  * artifacts. Consumers re-verify everything; nothing here is trusted.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-
-import type { Receipt } from "@recourse/receipts";
+import type { Receipt } from "./types.js";
 
 export interface PublishedReceipt {
   engagement_id: number;
@@ -21,25 +18,6 @@ export interface PublishedReceipt {
 export interface ReceiptRegistry {
   publish(r: PublishedReceipt): Promise<void>;
   get(engagementId: number): Promise<PublishedReceipt | null>;
-}
-
-export class FileReceiptRegistry implements ReceiptRegistry {
-  constructor(private readonly dir: string) {
-    mkdirSync(dir, { recursive: true });
-  }
-  private path(id: number): string {
-    if (!Number.isSafeInteger(id) || id < 0) throw new Error("bad engagement id");
-    return join(this.dir, `${id}.json`);
-  }
-  async publish(r: PublishedReceipt): Promise<void> {
-    const p = this.path(r.engagement_id);
-    writeFileSync(`${p}.tmp`, JSON.stringify(r, null, 2));
-    renameSync(`${p}.tmp`, p);
-  }
-  async get(id: number): Promise<PublishedReceipt | null> {
-    const p = this.path(id);
-    return existsSync(p) ? (JSON.parse(readFileSync(p, "utf8")) as PublishedReceipt) : null;
-  }
 }
 
 export class MemoryReceiptRegistry implements ReceiptRegistry {
