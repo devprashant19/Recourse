@@ -128,7 +128,7 @@ async function main() {
     const dcap = new DcapQuoteVerifier();
     console.log("recording LIVE NEAR AI Cloud fixtures");
     await runPlan(() => rec, (m) => recordingVerifier(dcap, rec, m), models);
-    set = parseFixtureSet(rec.toFixtureSet("genuine", "Recorded from NEAR AI Cloud by scripts/record-fixtures.ts --live. Intel verdicts by dcap-qvl at recording time."));
+    set = parseFixtureSet({ ...rec.toFixtureSet("genuine", "Recorded from NEAR AI Cloud by scripts/record-fixtures.ts --live. Intel verdicts by dcap-qvl at recording time."), roles: models });
   } else {
     models = { worker: DEV_MODEL, arbiter: DEV_MODEL };
     const rec = new RecordingClient(new DevModelClient(DEV_MODEL, devAnswer));

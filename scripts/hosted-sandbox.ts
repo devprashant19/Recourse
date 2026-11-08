@@ -69,7 +69,7 @@ async function cycle(n: number): Promise<void> {
     const rpcUrl = process.env.RECOURSE_RPC_URL!;
 
     // Worker + arbiter, live, on the dev model.
-    const s = services(c, artifactDir(), "none", devLiveBackend(DEV_MODEL));
+    const s = services(c, artifactDir(), "none", devLiveBackend(DEV_MODEL), { worker: DEV_MODEL, arbiter: DEV_MODEL });
     const admin = adminServer({ token, sabotage: s.sabotage, log: { log: (level, msg, f) => log(`worker ${level}: ${msg}`, f ?? {}) } });
     await listenLocal(admin, ADMIN_PORT);
     stops.push(() => new Promise<void>((r) => admin.close(() => r())));

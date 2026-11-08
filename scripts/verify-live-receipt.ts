@@ -22,7 +22,7 @@ import { loadCatalog } from "../packages/jobs/src/catalog.js";
 import { attestedCompletion, MemoryArtifactStore, verifyReceipt } from "../packages/receipts/src/index.js";
 import { RecourseClient, type ReceiptInput } from "../packages/sdk/src/index.js";
 import { extractionRequest } from "../services/worker-agent/src/index.js";
-import { DEV_MODEL } from "../demo/fixtures/plan.js";
+import { sandboxModels } from "./lib/sandbox-models.js";
 import { chainNow, load, MINUTE_NS, network, provider, save, type Deployment, type SeededAccounts } from "./lib/near.js";
 
 const DOC = 1;
@@ -38,7 +38,7 @@ async function main() {
     client = new RecourseClient(contractId, p, new Account(acc.client.accountId, p, acc.client.privateKey as KeyPairString));
     agentId = acc.agent.accountId;
     agent = new RecourseClient(contractId, p, new Account(agentId, p, acc.agent.privateKey as KeyPairString));
-    model = DEV_MODEL;
+    model = sandboxModels().worker;
     console.log("SANDBOX RUN on fixtures — validates the code path; this is NOT a live NEAR AI Cloud verification\n");
   } else {
     const need = (k: string) => process.env[k] || (() => { throw new Error(`${k} is required`); })();

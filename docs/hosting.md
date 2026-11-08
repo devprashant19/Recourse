@@ -6,7 +6,7 @@ Two deployments, for two different jobs.
 |---|---|---|
 | Command | `docker compose up` (or `pnpm hosted` + `pnpm web`) | `docker compose --profile testnet up` |
 | Chain | A fresh local NEAR sandbox, reset every hour | `recourse-v1.testnet` *(name to confirm)* |
-| Model | Deterministic dev model, signed by the allow-listed sandbox key — **no TEE**; every receipt says `dev-fixture` | Live NEAR AI Cloud, attested with a fresh nonce |
+| Model | Seed history replays genuine NEAR AI Cloud recordings; new hires from the UI use a deterministic dev model signed by the allow-listed sandbox key — **no TEE**, and those receipts say `dev-fixture` | Live NEAR AI Cloud, attested with a fresh nonce |
 | 1Click | Not used (Direct payouts on NEAR) | Live quotes with `dry: true` |
 | Explorer links | None (no public explorer for a local chain) | `NEXT_PUBLIC_EXPLORER_TX=https://testnet.nearblocks.io/txns/` |
 | Needs | Docker | `.env` with accounts, function-call keys and `NEARAI_API_KEY` |

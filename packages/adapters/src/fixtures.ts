@@ -39,6 +39,8 @@ export interface FixtureSet {
   kind: FixtureKind;
   note: string;
   recorded_at: string;
+  /** Which recorded model played which part (genuine sets). */
+  roles?: { worker: string; arbiter: string };
   models: Record<string, RecordedModel>;
   interactions: RecordedInteraction[];
 }
@@ -54,6 +56,9 @@ export function parseFixtureSet(x: unknown): FixtureSet {
   for (const [model, m] of Object.entries(f.models)) {
     if (!/^[0-9a-f]{64}$/.test(m.nonce ?? "")) throw new Error(`fixture model ${model} has a bad nonce`);
     if (typeof m.report !== "string" || typeof m.quote_verdicts !== "object") throw new Error(`fixture model ${model} is incomplete`);
+  }
+  if (f.roles !== undefined && (typeof f.roles?.worker !== "string" || typeof f.roles?.arbiter !== "string" || !f.models[f.roles.worker] || !f.models[f.roles.arbiter])) {
+    throw new Error("fixture roles must name recorded models");
   }
   const seen = new Set<string>();
   for (const [i, it] of f.interactions.entries()) {

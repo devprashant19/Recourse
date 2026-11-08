@@ -1,20 +1,20 @@
 {
   "version": 1,
   "engagement_id": 1004,
-  "model_id": "deepseek-ai/DeepSeek-V3.1",
-  "request_hash": "432e8c8a4b7c3834f1651dca57128b969c2e5616fbfc99ff12611aa58e8edf35",
-  "response_hash": "dc8b3a265fc2c1180a8ef3c5ba910a4640a57a8dd72a985872f8a535bdf4ec71",
-  "signature": "0x10e50068a235ca0ad0e893628320771cafa520aaaacc75466077bf9c69f96a0a2040bf50c2b8e45d8f9cc09d675f96d621ef6f04e4edd669c8e240793b3946641b",
-  "signing_address": "0xa8559cb8cf1603c3d43d75c9cf9b449e54115b61",
+  "model_id": "Qwen/Qwen3.8-27B",
+  "request_hash": "0a99acd27a0950af2135dd5555d3abe08016c958616671026a92adb970d2554f",
+  "response_hash": "a7fc81c41749daecc4cc2d76345227db0665460b660508f50d3a5de4cf987d64",
+  "signature": "0x288a7d553f1d0e879447ab357fefc37ada7893f76fb24b16a4f8d0b7556d861434392838b60d94bf46032b0ec18b5e60d4f7163d01281264cb5336fb010cfd691b",
+  "signing_address": "0x835ab53d20294ef795906dff21ae4c045336aa26",
   "signature_kind": "provider_tee",
   "attestation": {
-    "nonce": "27b2f195415c72e6572e6910b3cf827e0595cd894c8f0ca281b8230aaae7c567",
-    "report_hash": "428c04e6091b2469490176eb697336173c9df286420258820e6f8b634058dace",
-    "verified_at": "2026-11-08T13:10:41.565Z",
-    "verifier": "dev-fixture: no Intel signature, no TEE"
+    "nonce": "55ce188d25527a54d8db5c771ce4fca4f2798105f715550a5b4e8ae040477be2",
+    "report_hash": "27581b0330cae79dfb57cf26e7ff78ffb35acb4f3d602c7f35ed81f6ea676630",
+    "verified_at": "2026-11-08T17:25:37.680Z",
+    "verifier": "dcap-qvl@0.3.3 (recorded verdict, replayed)"
   },
   "artifacts": {
-    "request_uri": "artifact://sha256/432e8c8a4b7c3834f1651dca57128b969c2e5616fbfc99ff12611aa58e8edf35",
-    "response_uri": "artifact://sha256/dc8b3a265fc2c1180a8ef3c5ba910a4640a57a8dd72a985872f8a535bdf4ec71"
+    "request_uri": "artifact://sha256/0a99acd27a0950af2135dd5555d3abe08016c958616671026a92adb970d2554f",
+    "response_uri": "artifact://sha256/a7fc81c41749daecc4cc2d76345227db0665460b660508f50d3a5de4cf987d64"
   }
 }

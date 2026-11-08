@@ -10,7 +10,7 @@ import { selectBackend, type Backend } from "../../packages/adapters/src/index.j
 import { CatalogDocumentSource } from "../../packages/jobs/src/source.js";
 import { FileArtifactStore, FileReceiptRegistry } from "../../packages/receipts/src/file-store.js";
 import { Arbiter, MemoryArbiterState, SdkArbiterChain } from "../../services/arbiter/src/index.js";
-import { DEV_MODEL } from "../../demo/fixtures/plan.js";
+import { sandboxModels } from "./sandbox-models.js";
 import {
   MemoryStateStore,
   performExtraction,
@@ -28,7 +28,13 @@ export function artifactDir(): string {
   return process.env.ARTIFACT_DIR ?? ".data/artifacts";
 }
 
-export function services(c: Cast, artifactDir: string, sabotageMode: SabotageMode, backend: Backend = selectBackend("sandbox")) {
+export function services(
+  c: Cast,
+  artifactDir: string,
+  sabotageMode: SabotageMode,
+  backend: Backend = selectBackend("sandbox"),
+  models: { worker: string; arbiter: string } = sandboxModels(),
+) {
   const rpcUrl = process.env.RECOURSE_RPC_URL ?? "http://127.0.0.1:3030";
   const store = new FileArtifactStore(artifactDir);
   const registry = new FileReceiptRegistry(join(artifactDir, "receipts"));
@@ -47,7 +53,7 @@ export function services(c: Cast, artifactDir: string, sabotageMode: SabotageMod
     perform: async (id, e, inputs, prepared) => {
       if (!shouldWorkNow(sabotage.value, await workerChain.now(), BigInt(e.deadline))) return { kind: "deferred" as const };
       return performExtraction(
-        { client: backend.client, verifier: backend.verifier, store, chain: workerChain, log: silentLogger, model: DEV_MODEL, instruction: () => sabotage.instruction() },
+        { client: backend.client, verifier: backend.verifier, store, chain: workerChain, log: silentLogger, model: models.worker, instruction: () => sabotage.instruction() },
         id,
         e,
         inputs,
@@ -65,7 +71,7 @@ export function services(c: Cast, artifactDir: string, sabotageMode: SabotageMod
     verdicts: new FileReceiptRegistry(join(artifactDir, "verdicts")),
     documents,
     chain: new SdkArbiterChain({ rpcUrl, contractId: c.contractId, arbiterAccountId: c.accounts.arbiter.accountId, arbiterKey: c.accounts.arbiter.privateKey }),
-    model: DEV_MODEL,
+    model: models.arbiter,
     state: new MemoryArbiterState(),
     log: { log() {} },
   });

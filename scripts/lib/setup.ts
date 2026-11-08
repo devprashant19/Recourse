@@ -16,7 +16,7 @@ import { Account, JsonRpcProvider, KeyPair, actions } from "near-api-js";
 import { getRecourseConfig } from "../../packages/config/src/index.js";
 import { RecourseClient } from "../../packages/sdk/src/index.js";
 import { chainNow, clientAs, MINUTE_NS, ONE_NEAR, save, type Deployment, type Network, type SeededAccount, type SeededAccounts } from "./near.js";
-import { TEE_MODEL, teeWallet } from "./tee.js";
+import { sandboxModels } from "./sandbox-models.js";
 
 /** Where the deployable wasm comes from, in order of preference. */
 export const WASM_CANDIDATES = ["target/near/recourse/recourse.wasm", "contracts/recourse/res/recourse.wasm"];
@@ -195,8 +195,9 @@ export async function seed(o: { net: Network; p: JsonRpcProvider; owner: Account
   const asOwner = new RecourseClient(dep.contractId, p, owner);
   await asOwner.addKeeper(accounts.keeper.accountId);
   await asOwner.addArbiter(accounts.arbiter.accountId);
-  const tee = teeWallet().address.toLowerCase().slice(2);
-  if (!(await asOwner.getSigner(tee))) await asOwner.registerSigner(tee, TEE_MODEL, "00".repeat(32), "ProviderTee");
+  for (const s of sandboxModels().signers) {
+    if (!(await asOwner.getSigner(s.address))) await asOwner.registerSigner(s.address, s.model, s.reportHash, "ProviderTee");
+  }
 
   // 3. Agents.
   const agent = clientAs(dep.contractId, p, accounts.agent);

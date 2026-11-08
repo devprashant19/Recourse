@@ -12,7 +12,8 @@ import { MemoryArtifactStore, MemoryReceiptRegistry, sha256Hex, verifyReceipt, t
 import type { Claim } from "@recourse/sdk";
 import { CatalogDocumentSource } from "@recourse/jobs/source";
 
-import { CLAIMS, DEV_MODEL } from "../../../demo/fixtures/plan.js";
+import { CLAIMS } from "../../../demo/fixtures/plan.js";
+import { sandboxModels } from "../../../scripts/lib/sandbox-models.js";
 import { performExtraction } from "../../worker-agent/src/extract.js";
 import { silentLogger } from "../../worker-agent/src/log.js";
 import { SabotageController } from "../../worker-agent/src/sabotage.js";
@@ -23,6 +24,7 @@ import { Arbiter, MemoryArbiterState } from "../src/arbiter.js";
 import { FakeArbiterChain } from "./fixtures.js";
 
 const FIXTURES = fileURLToPath(new URL("../../../demo/fixtures/", import.meta.url));
+const MODELS = sandboxModels(FIXTURES);
 const documents = new CatalogDocumentSource();
 
 function backend() {
@@ -49,7 +51,7 @@ async function deliver(doc: number, mode: "none" | "wrong_total", store: Artifac
     agentId: AGENT,
     registry,
     perform: (id, e, inputs, prepared) =>
-      performExtraction({ client: b.client, verifier: b.verifier, store, chain, log: silentLogger, model: DEV_MODEL, instruction: () => sabotage.instruction() }, id, e, inputs, prepared),
+      performExtraction({ client: b.client, verifier: b.verifier, store, chain, log: silentLogger, model: MODELS.worker, instruction: () => sabotage.instruction() }, id, e, inputs, prepared),
   });
   await w.tick();
   return { chain, pub: (await registry.get(0))! };
@@ -72,7 +74,7 @@ async function judgeClaim(planIndex: number) {
   const b = backend();
   const a = new Arbiter({
     client: b.client, verifier: b.verifier, verifyOptions: b.verifyOptions, store, registry, verdicts: new MemoryReceiptRegistry(),
-    documents, chain, model: DEV_MODEL, state: new MemoryArbiterState(), log: { log() {} },
+    documents, chain, model: MODELS.arbiter, state: new MemoryArbiterState(), log: { log() {} },
   });
   await a.tick();
   return { chain, state: a.state };

@@ -15,7 +15,8 @@ import { loadCatalog } from "../../packages/jobs/src/catalog.js";
 import { MemoryArtifactStore, attestedCompletion, verifyReceipt, type Receipt, type ReceiptBytes, type VerifyResult } from "../../packages/receipts/src/index.js";
 import { extractionRequest } from "../../services/worker-agent/src/extract.js";
 import { SABOTAGE_INSTRUCTIONS } from "../../services/worker-agent/src/sabotage.js";
-import { DEV_MODEL, WORKER_JOBS } from "../../demo/fixtures/plan.js";
+import { WORKER_JOBS } from "../../demo/fixtures/plan.js";
+import { sandboxModels } from "./sandbox-models.js";
 
 export interface ReceiptBundle {
   /** e.g. "01-northwind-invoice" or "01-northwind-invoice.wrong-total" */
@@ -27,13 +28,14 @@ export interface ReceiptBundle {
 
 export async function buildReceiptBundles(): Promise<{ bundles: ReceiptBundle[]; backend: Backend }> {
   const backend = selectBackend("sandbox");
+  const model = sandboxModels().worker;
   const catalog = loadCatalog();
   const bundles: ReceiptBundle[] = [];
   for (const [i, job] of WORKER_JOBS.entries()) {
     const doc = catalog.documents[job.doc]!;
     const inputs = { terms: doc.terms, document: doc.bytes, schemaBytes: catalog.schemaBytes, schema: catalog.schema };
-    const request = extractionRequest(DEV_MODEL, inputs, job.sabotage === "none" ? undefined : SABOTAGE_INSTRUCTIONS[job.sabotage]);
-    const out = await attestedCompletion({ client: backend.client, verifier: backend.verifier, store: new MemoryArtifactStore(), modelId: DEV_MODEL, engagementId: 1000 + i, request });
+    const request = extractionRequest(model, inputs, job.sabotage === "none" ? undefined : SABOTAGE_INSTRUCTIONS[job.sabotage]);
+    const out = await attestedCompletion({ client: backend.client, verifier: backend.verifier, store: new MemoryArtifactStore(), modelId: model, engagementId: 1000 + i, request });
     bundles.push({
       name: doc.name.replace(/\.md$/, "") + (job.sabotage === "none" ? "" : `.${job.sabotage.replace("_", "-")}`),
       receipt: out.receipt,

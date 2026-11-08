@@ -9,9 +9,9 @@ receipt cannot be forged, even by the agent's own operator. If the work fails, t
 and the client is paid **in the token and on the chain they chose**, through NEAR Intents.
 
 > **Status (8 Nov 2026):** protocol, services, demo, judge, indexer and web app are built and run end
-> to end. `pnpm demo` passes **7/7 with solvency OK** on a fresh sandbox. **Not done yet:** genuine NEAR AI
-> Cloud recordings (the sandbox replays a clearly labelled *dev* set until then), the recorded mainnet
-> run, and the live testnet deployment — all three need credentials and a human. Details:
+> to end. `pnpm demo` passes **7/7 with solvency OK** on a fresh sandbox, replaying **genuine NEAR AI
+> Cloud recordings** (TEE-signed, Intel-verified) for the worker and arbiter. **Not done yet:** the
+> recorded mainnet run and the live testnet deployment — both need funded accounts and a human. Details:
 > [What is real today](#what-is-real-today).
 
 ---
@@ -115,8 +115,8 @@ the bytes come from, never whether they are verified.
 **What has been verified so far:** unit-tested throughout; scenarios 02 and 04 run the real worker and
 arbiter against the real contract on every `pnpm demo`, with every receipt and verdict verified on-chain.
 Spike A passes against a real NEAR AI Cloud signature: the contract's own `check_receipt` accepts a live
-receipt from `Qwen/Qwen3.8-27B` and rejects it with one byte changed or under another model name. Still
-open: genuine NEAR AI Cloud recordings for the demo and a live receipt on testnet; see
+receipt from `Qwen/Qwen3.8-27B` and rejects it with one byte changed or under another model name. The
+demo replays genuine NEAR AI Cloud recordings. Still open: a live receipt on testnet; see
 [What is real today](#what-is-real-today).
 
 ## Trust assumptions
@@ -183,8 +183,8 @@ Live testnet and mainnet need credentials: [`docs/hosting.md`](docs/hosting.md) 
 |---|---|
 | Contract (bonds, vaults, engagements, on-chain receipt check, claims, slashing, appeals, USDC, Intents payouts, sealed-bid underwriting) | Built; unit, invariant, integration and adversarial tests |
 | `pnpm demo` | **7/7 PASS, solvency OK** on a fresh nearcore 2.14 sandbox, keyless |
-| Receipts | Full four-step flow; checked on-chain with `ecrecover`. **The sandbox replays the dev fixture set**: signed by a throwaway test key, no TEE, and every such receipt says `dev-fixture` |
-| Genuine NEAR AI Cloud recordings | **Not yet** — `pnpm record-fixtures --live` needs `NEARAI_API_KEY` |
+| Receipts | Full four-step flow; checked on-chain with `ecrecover`. Scenarios 01, 02 and 04 replay **genuine NEAR AI Cloud recordings**: worker `Qwen/Qwen3.8-27B`, arbiter `z-ai/glm-5.3-flash`, both signed inside Intel TDX, every quote verified by dcap-qvl (`UpToDate`) at recording time, and their real signers allow-listed on-chain. Scenarios 05–07 and the adversarial suite sign synthetic receipts with a labelled dev key to test the contract's mechanics |
+| Genuine NEAR AI Cloud recordings | **Done** — `demo/fixtures/near-ai/fixtures.json`, recorded 8 Nov 2026; the five judge receipts in `demo/fixtures/receipts` verify standalone with `pnpm verify-receipt` |
 | Spike A (a real NEAR AI Cloud signature recovered by `env::ecrecover`) | **PASS** — TypeScript and Rust recover the same signer, which matches the address in the model's attestation report; the contract's `check_receipt` accepts the live receipt and rejects tampered copies (`contracts/recourse/src/tests/tee.rs`) |
 | Hosted demo | Keyless sandbox stack with hourly reset (`docker compose up`); the live testnet deployment needs accounts and keys |
 | Mainnet run | **Not yet recorded** — a human confirms every transaction (`demo/mainnet-run/RUN.md`) |
