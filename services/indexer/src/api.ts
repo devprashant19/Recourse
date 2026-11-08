@@ -70,10 +70,6 @@ function ev(e: StoredEvent) {
   return { id: e.id, event: e.event, block_height: e.block_height, block_time: e.block_time, tx_hash: e.tx_hash, receipt_id: e.receipt_id, data: e.data };
 }
 
-function readJson<T>(path: string): T | null {
-  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as T) : null;
-}
-
 function readRationales(path: string): unknown[] {
   if (!existsSync(path)) return [];
   return readFileSync(path, "utf8")
