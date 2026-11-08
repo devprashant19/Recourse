@@ -15,7 +15,7 @@ import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
 
 import { RecourseClient } from "../../packages/sdk/src/index.js";
 
-export type Network = "sandbox" | "testnet";
+export type Network = "sandbox" | "testnet" | "mainnet";
 
 export const ONE_NEAR = 10n ** 24n;
 export const MINUTE_NS = 60n * 1_000_000_000n;
@@ -24,6 +24,7 @@ export const DATA_DIR = ".data";
 const RPC: Record<Network, string> = {
   sandbox: "http://127.0.0.1:3030",
   testnet: "https://test.rpc.fastnear.com",
+  mainnet: "https://free.rpc.fastnear.com",
 };
 
 export function arg(name: string): string | undefined {
@@ -33,12 +34,7 @@ export function arg(name: string): string | undefined {
 
 export function network(): Network {
   const n = arg("network") ?? process.env.RECOURSE_MODE ?? "sandbox";
-  if (n === "mainnet") {
-    // The mainnet config denominates in USDC (BondAsset::Ft), which the
-    // contract rejects until USDC support lands in Phase 3.
-    throw new Error("mainnet deploys need USDC support (Phase 3); use --network sandbox or testnet");
-  }
-  if (n !== "sandbox" && n !== "testnet") throw new Error(`unknown network: ${n}`);
+  if (n !== "sandbox" && n !== "testnet" && n !== "mainnet") throw new Error(`unknown network: ${n}`);
   return n;
 }
 

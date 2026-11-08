@@ -27,6 +27,7 @@
     "test:e2e": "playwright test",
     "dev": "docker compose up --build",
     "deploy": "tsx scripts/deploy.ts",
+    "deploy:dao": "tsx scripts/deploy-dao.ts",
     "seed": "tsx scripts/seed.ts",
     "setup-service-keys": "tsx scripts/setup-service-keys.ts",
     "register-tee-signer": "tsx scripts/register-tee-signer.ts",

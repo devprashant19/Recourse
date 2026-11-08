@@ -22,30 +22,13 @@ import { readFileSync } from "node:fs";
 import { actions } from "near-api-js";
 
 import { RecourseClient } from "../packages/sdk/src/index.js";
-import { arg, MINUTE_NS, network, ONE_NEAR, ownerAccount, provider, save } from "./lib/near.js";
+import { getRecourseConfig, type RecourseConfig } from "../packages/config/src/index.js";
+import { arg, network, ONE_NEAR, ownerAccount, provider, save } from "./lib/near.js";
 
 const DEFAULT_WASM = "target/near/recourse/recourse.wasm";
 /** Covers the code's storage (~0.4 MB at 1e19 yocto/byte) plus a buffer for contract-paid records. */
 const CONTRACT_FUNDING = 8n * ONE_NEAR;
 const INIT_GAS = 100_000_000_000_000n;
-
-/** Sandbox/testnet column of the spec's config table. */
-function config(council: string | undefined) {
-  return {
-    bond_asset: "Native",
-    min_bond: (5n * ONE_NEAR).toString(),
-    withdrawal_cooldown: (5n * MINUTE_NS).toString(),
-    claim_window: (3n * MINUTE_NS).toString(),
-    appeal_window: (3n * MINUTE_NS).toString(),
-    bid_commit_window: MINUTE_NS.toString(),
-    bid_reveal_window: MINUTE_NS.toString(),
-    claim_stake_bps: 500,
-    base_bond_share_bps: 5000,
-    min_bond_share_bps: 2000,
-    max_vault_exposure_bps: 2500,
-    council: council ?? null,
-  };
-}
 
 async function main() {
   const net = network();
@@ -59,9 +42,23 @@ async function main() {
   const wasm = readFileSync(wasmPath);
   const sha = createHash("sha256").update(wasm).digest("hex");
 
+  const assetArg = arg("asset") ?? process.env.RECOURSE_BOND_ASSET;
+  const bondAsset = assetArg === "ft" || assetArg === "usdc" ? "Ft" : assetArg === "native" ? "Native" : undefined;
+  const usdcTokenId = arg("usdc-id") ?? process.env.USDC_TOKEN_ID;
+  const councilId = arg("council-id") ?? process.env.COUNCIL_DAO_ID;
+
+  const cfg = getRecourseConfig({
+    network: net,
+    bondAsset,
+    usdcContractId: usdcTokenId,
+    councilDaoId: councilId,
+  });
+
   console.log(`network   ${net}`);
   console.log(`owner     ${owner.accountId}`);
   console.log(`contract  ${contractId}`);
+  console.log(`bond_asset ${JSON.stringify(cfg.bond_asset)}`);
+  console.log(`council   ${cfg.council ?? "none"}`);
   console.log(`wasm      ${wasmPath} (${wasm.length} bytes, sha256 ${sha})`);
 
   await owner.signAndSendTransaction({
@@ -72,7 +69,7 @@ async function main() {
       actions.deployContract(new Uint8Array(wasm)),
       actions.functionCall(
         "new",
-        { config: config(process.env.COUNCIL_DAO_ID || undefined), owner: owner.accountId },
+        { config: cfg, owner: owner.accountId },
         INIT_GAS,
         0n,
       ),
@@ -80,17 +77,18 @@ async function main() {
   });
 
   const c = new RecourseClient(contractId, p);
-  const cfg = await c.getConfig();
+  const onChainCfg = await c.getConfig();
   const roles = await c.getRoles();
   if (roles.owner !== owner.accountId) throw new Error("owner mismatch after init");
   const s = await c.solvency();
-  console.log(`initialised: min_bond ${cfg.min_bond}, claim_window ${cfg.claim_window} ns, solvency ok=${s.ok}`);
+  console.log(`initialised: min_bond ${onChainCfg.min_bond}, claim_window ${onChainCfg.claim_window} ns, solvency ok=${s.ok}`);
 
   save(net, "deployment", {
     network: net,
     contractId,
     owner: owner.accountId,
     wasmSha256: sha,
+    config: onChainCfg,
     deployedAt: new Date().toISOString(),
   });
   console.log(`wrote .data/${net}-deployment.json`);
