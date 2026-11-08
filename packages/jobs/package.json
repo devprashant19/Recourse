@@ -12,5 +12,9 @@
     "@recourse/receipts": "workspace:^",
     "ajv": "8.20.0",
     "canonicalize": "5.1.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./catalog": "./src/catalog.ts"
   }
 }

@@ -7,5 +7,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@recourse/jobs": "workspace:^",
+    "@recourse/receipts": "workspace:^",
+    "@recourse/sdk": "workspace:^"
   }
 }

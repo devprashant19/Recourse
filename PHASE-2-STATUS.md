@@ -163,7 +163,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 7. `feat(demo): add structured extraction documents and ground truth`
 
-- **Commit:** (this commit)
+- **Commit:** `dc46978`
 - **Did:** five fictional invoices in `demo/documents` with deliberately different layouts (Markdown
   tables, dotted plain text with long-form dates, usage statement, fixed-width freight invoice, prose
   letter), two without a PO number so an invented PO is unambiguously wrong, varied currencies, a 0%
@@ -183,9 +183,37 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 - **Ran:** `vitest run packages/jobs` (11 passed), `tsc --noEmit`, `eslint` — clean.
 - **Evidence:** unit-tested.
 
+### 8. `feat(worker): implement engagement monitoring and document validation`
+
+- **Commit:** (this commit)
+- **Did:** `services/worker-agent`: validated config (`--mode sandbox|testnet|mainnet` / `RECOURSE_MODE`,
+  account-id format, `ed25519:` function-call key, NEAR AI key + model required outside sandbox, admin
+  server forbidden in mainnet and needing a ≥32-char token elsewhere); JSON-lines logger that redacts
+  secret-looking fields; atomic file state store (temp + rename, mode 600). `Worker.tick()` scans new
+  engagements from a persisted cursor, keeps only those naming this agent, and for a `Proposed` one
+  fetches terms + document + schema, checks them against the on-chain `terms_hash`
+  (`@recourse/jobs` `checkJobInputs`) and skips past-deadline jobs — **only then** calls
+  `accept_engagement` (Phase 1's consent step locking the agent's liability). It never acts on an
+  `Open` job it did not accept; failures are recorded per job and logged, never swallowed.
+- **Files:** `services/worker-agent/{package.json,src/{config,log,state,chain,documents,worker,index}.ts,
+  test/{worker.test,fakes}.ts}`, `packages/jobs/package.json` (`./catalog` export), `pnpm-lock.yaml`
+- **Tests:** 14 (accept after validation; other agents ignored; unknown terms; tampered document;
+  past deadline; duplicate tick; restart resumes from cursor; foreign Open job untouched; failure
+  recorded and loop continues; four config cases incl. mainnet admin refusal; log redaction).
+- **Ran:** `vitest run services/worker-agent` (14 passed), `tsc --noEmit`, `eslint` — clean.
+- **Evidence:** unit-tested (in-memory test chain).
+
 ---
 
 ## Deviations from the spec
+- **The worker reads engagements from contract state, not by scanning `engagement_opened` logs.**
+  It polls `get_counters` / `get_engagement` from a persisted cursor. Contract state is the source of
+  truth those events describe, it survives restarts without re-scanning blocks, and the log indexer
+  arrives only in Phase 4. Switching the source to the indexer later changes one interface.
+- **Validate, then accept.** Phase 1 added agent consent (`accept_engagement`); the worker checks the
+  document against `terms_hash` before consenting, so it never locks liability for work it cannot verify.
+- **Job terms live in `@recourse/jobs`**, a new small package, because worker, arbiter and scenarios
+  all need the same terms, hashing and award rule.
 
 ## Open items
 

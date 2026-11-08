@@ -85,7 +85,17 @@ importers:
 
   services/underwriters: {}
 
-  services/worker-agent: {}
+  services/worker-agent:
+    dependencies:
+      '@recourse/jobs':
+        specifier: workspace:^
+        version: link:../../packages/jobs
+      '@recourse/receipts':
+        specifier: workspace:^
+        version: link:../../packages/receipts
+      '@recourse/sdk':
+        specifier: workspace:^
+        version: link:../../packages/sdk
 
 packages:
 

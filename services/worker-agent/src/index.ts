@@ -1,11 +1,12 @@
 /**
- * @recourse/worker-agent
+ * @recourse/worker-agent — does the paid job (structured extraction) and
+ * proves it with a TEE receipt.
  *
- * Does the paid job (structured extraction). Sabotage modes: none, wrong_total, hallucinate, late, silent.
- *
- * Built in: Phase 2
- * Spec: phases/phase-02-receipts-worker-arbiter.md
+ * Spec: phases/phase-02-receipts-worker-arbiter.md section 3.
  */
-
-export const PLACEHOLDER = true;
-// TODO(Phase 2): implement.
+export * from "./config.js";
+export * from "./chain.js";
+export * from "./documents.js";
+export * from "./log.js";
+export * from "./state.js";
+export * from "./worker.js";
