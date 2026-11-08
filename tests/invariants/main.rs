@@ -167,6 +167,8 @@ struct World {
     ft_in_flight: VecDeque<(AccountId, u128)>,
     /// Tokens 1Click refunded by plain transfer that no payout has claimed.
     refunds: u128,
+    /// When a read last caught a transient deposit.
+    last_transient: Option<u64>,
     /// NEAR the contract holds, by the model: deposits in, transfers out.
     held: u128,
     worker: TeeKey,
@@ -217,6 +219,41 @@ impl World {
         r
     }
 
+    fn flying(&self) -> u128 {
+        self.ft_in_flight.iter().map(|x| x.1).sum::<u128>()
+            + if self.ft {
+                self.in_flight.iter().map(|x| x.1).sum::<u128>()
+            } else {
+                0
+            }
+    }
+
+    /// One keeper balance read. The token reports the modelled balance plus
+    /// `transient`: tokens of a rejected deposit it has not refunded yet.
+    fn sync_read(&mut self, transient: u128) {
+        let epoch = self.view(|c| c.get_ft_epoch());
+        self.call(&keeper(), 0, |c| {
+            let _ = c.sync_unattributed();
+        });
+        let balance = self.held_ft + self.refunds + transient;
+        let mut b = VMContextBuilder::new();
+        b.current_account_id(contract())
+            .predecessor_account_id(contract())
+            .account_balance(NearToken::from_yoctonear(self.held))
+            .block_timestamp(self.now);
+        testing_env!(
+            b.build(),
+            near_sdk::test_vm_config(),
+            near_parameters::RuntimeFeesConfig::test(),
+            Default::default(),
+            vec![PromiseResult::Successful(
+                format!("\"{balance}\"").into_bytes()
+            )],
+        );
+        self.c.on_ft_balance(epoch);
+        self.record_events();
+    }
+
     /// `sender` sends `amount` tokens with `ft_transfer_call(msg)`. Returns
     /// what the contract kept (the token contract refunds the rest).
     fn ft_in(&mut self, sender: &AccountId, amount: u128, msg: String) -> u128 {
@@ -258,6 +295,7 @@ impl World {
             held_ft: 0,
             ft_in_flight: VecDeque::new(),
             refunds: 0,
+            last_transient: None,
             held: 0,
             worker: TeeKey::new(7),
             judge: TeeKey::new(9),
@@ -396,6 +434,8 @@ enum Op {
     SettleFt(bool),
     ClaimOwed(usize),
     ConfirmPayout(usize, u8),
+    /// A keeper read that catches a rejected deposit still on the balance.
+    TransientSync(u128),
 }
 
 fn op() -> impl Strategy<Value = Op> {
@@ -426,6 +466,7 @@ fn op() -> impl Strategy<Value = Op> {
         3 => any::<bool>().prop_map(Op::SettleFt),
         1 => (0usize..6).prop_map(Op::ClaimOwed),
         3 => (pick.clone(), 0u8..3).prop_map(|(p, o)| Op::ConfirmPayout(p, o)),
+        2 => (1u128..50).prop_map(|n| Op::TransientSync(n * NEAR)),
     ]
 }
 
@@ -758,6 +799,18 @@ impl World {
                     self.call(&who, 0, |c| c.claim_owed());
                 }
             }
+            Op::TransientSync(_) if !self.ft => {}
+            Op::TransientSync(x) => {
+                // What the contract guarantees: one read that catches a
+                // rejected deposit never raises `unattributed`. Two reads a
+                // SYNC_GAP_NS apart that both catch one would — a residual
+                // documented in payouts.rs (it also needs a false REFUNDED
+                // report to matter), so a run has at most one such read.
+                if self.flying() == 0 && self.last_transient.is_none() {
+                    self.last_transient = Some(self.now);
+                    self.sync_read(x);
+                }
+            }
             Op::ConfirmPayout(p, outcome) => {
                 let n = self.view(|c| c.get_counters().claim);
                 let found = (0..n).map(|k| (k + p as u64) % n.max(1)).find_map(|id| {
@@ -774,35 +827,25 @@ impl World {
                 let quote = pay.quote_id.clone().unwrap();
                 let status = ["SUCCESS", "FAILED", "REFUNDED"][usize::from(outcome)];
                 if status == "REFUNDED" {
+                    if self.flying() > 0 {
+                        return; // the keeper syncs once transfers settle
+                    }
                     // 1Click sends the award back by plain ft_transfer; the
-                    // contract only learns of it from its balance.
+                    // contract only learns of it from two quiet balance reads.
                     self.refunds += pay.amount.0;
-                    let flying: u128 = self.ft_in_flight.iter().map(|x| x.1).sum::<u128>()
-                        + self.in_flight.iter().map(|x| x.1).sum::<u128>();
-                    let balance = self.held_ft + flying + self.refunds;
-                    self.call(&acc("anyone.near"), 0, |c| {
-                        let _ = c.sync_unattributed();
-                    });
-                    let mut b = VMContextBuilder::new();
-                    b.current_account_id(contract())
-                        .predecessor_account_id(contract())
-                        .account_balance(NearToken::from_yoctonear(self.held))
-                        .block_timestamp(self.now);
-                    testing_env!(
-                        b.build(),
-                        near_sdk::test_vm_config(),
-                        near_parameters::RuntimeFeesConfig::test(),
-                        Default::default(),
-                        vec![PromiseResult::Successful(
-                            format!("\"{balance}\"").into_bytes()
-                        )],
+                    self.now += 1;
+                    self.sync_read(0);
+                    self.now += recourse::payouts::SYNC_GAP_NS;
+                    self.sync_read(0);
+                    let seen = self.view(|c| c.solvency()).unattributed.0;
+                    assert_eq!(
+                        seen, self.refunds,
+                        "two quiet reads see exactly the unmatched refunds"
                     );
-                    let seen = self.c.on_ft_balance().0;
-                    assert_eq!(seen, self.refunds, "sync saw exactly the unmatched refunds");
-                    self.record_events();
                 }
                 self.call(&keeper(), 0, |c| {
-                    c.confirm_payout(id, quote, status.into(), Some("0xdest".into()))
+                    let tx = (status == "SUCCESS").then(|| "0xdest".to_string());
+                    c.confirm_payout(id, quote, status.into(), tx)
                 });
                 if status == "REFUNDED" {
                     self.refunds -= pay.amount.0;
@@ -824,10 +867,18 @@ impl World {
                     self.nonce += 1;
                     let addr = format!("{:064x}", self.nonce);
                     let quote = format!("q-{}", self.nonce);
-                    self.call(&keeper(), recourse::payouts::INTENTS_STORAGE_DEPOSIT, |c| {
-                        let _ =
-                            c.execute_payout(id, Some(addr), Some(quote), Some(HexBytes([6; 32])));
-                    });
+                    self.call(
+                        &keeper(),
+                        recourse::payouts::INTENTS_STORAGE_DEPOSIT + NEAR / 100,
+                        |c| {
+                            let _ = c.execute_payout(
+                                id,
+                                Some(addr),
+                                Some(quote),
+                                Some(HexBytes([6; 32])),
+                            );
+                        },
+                    );
                 } else {
                     self.call(&keeper(), 0, |c| {
                         let _ = c.execute_payout(id, None, None, None);

@@ -129,6 +129,16 @@ pub struct Recourse {
     /// They may or may not have left the token balance, so a balance sync
     /// never counts them as unattributed.
     ft_in_flight: u128,
+    /// Bumped on every change to the token books (`ft_held`, `ft_in_flight`):
+    /// a balance read is only trusted if nothing moved while it was taken.
+    ft_epoch: u64,
+    /// The older of the last two quiet balance reads: (excess over the
+    /// books, block time). `unattributed` only rises to what two reads at
+    /// least `SYNC_GAP_NS` apart both saw.
+    unattributed_obs: Option<(u128, u64)>,
+    /// Block time of the first read that backs the current `unattributed`.
+    /// A refund only matches a payout sent before it.
+    unattributed_at: u64,
 }
 
 #[near]
@@ -171,6 +181,9 @@ impl Recourse {
             owed_total: 0,
             used_quotes: LookupSet::new(StorageKey::UsedQuotes),
             ft_in_flight: 0,
+            ft_epoch: 0,
+            unattributed_obs: None,
+            unattributed_at: 0,
         }
     }
 

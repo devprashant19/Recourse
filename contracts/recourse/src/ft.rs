@@ -99,6 +99,7 @@ impl Recourse {
         let used = self.apply_ft_deposit(&sender_id, amount.0, action);
         let unused = sub(amount.0, used, "ft refund");
         self.ft_held = sub(self.ft_held, unused, "ft held");
+        self.ft_epoch += 1;
         PromiseOrValue::Value(U128(unused))
     }
 

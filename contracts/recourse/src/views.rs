@@ -118,6 +118,12 @@ impl Recourse {
         U128(self.ft_held)
     }
 
+    /// Counter of changes to the token books; `sync_unattributed` passes it
+    /// to its callback so a read taken while the books moved is ignored.
+    pub fn get_ft_epoch(&self) -> u64 {
+        self.ft_epoch
+    }
+
     /// Token units sent whose transfer callback has not run yet.
     pub fn get_ft_in_flight(&self) -> U128 {
         U128(self.ft_in_flight)

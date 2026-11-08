@@ -16,6 +16,8 @@ use crate::Recourse;
 
 const AWARD: u128 = 2_000_000;
 const NOW: u64 = DEADLINE + 10;
+/// What a keeper attaches beyond the token registration, for this record's storage.
+const KEEPER_SPARE: u128 = ONE_NEAR / 100;
 
 fn deposit_address() -> String {
     "a1".repeat(32)
@@ -38,6 +40,12 @@ fn near_usdc_to_client() -> Destination {
 fn with_keeper(dest: Destination) -> (Recourse, u64) {
     let mut c = ft_ready();
     let cid = ft_pending_payout(&mut c, dest);
+    // Resolution refunded the claimant's stake; let that transfer settle.
+    let flying = c.get_ft_in_flight().0;
+    if flying > 0 {
+        as_contract(PromiseResult::Successful(vec![]));
+        c.on_ft_paid(client(), U128(flying));
+    }
     ctx(&owner(), 0, NOW);
     c.add_keeper(keeper());
     (c, cid)
@@ -45,7 +53,7 @@ fn with_keeper(dest: Destination) -> (Recourse, u64) {
 
 fn execute(c: &mut Recourse, cid: u64, addr: Option<String>, quote: Option<&str>) {
     let deposit = if quote.is_some() {
-        INTENTS_STORAGE_DEPOSIT
+        INTENTS_STORAGE_DEPOSIT + KEEPER_SPARE
     } else {
         0
     };
@@ -237,7 +245,7 @@ fn intents_quote_id_is_bounded() {
 #[should_panic(expected = "need the quote hash")]
 fn intents_payout_needs_the_quote_hash() {
     let (mut c, cid) = with_keeper(base_usdc());
-    ctx(&keeper(), INTENTS_STORAGE_DEPOSIT, NOW);
+    ctx(&keeper(), INTENTS_STORAGE_DEPOSIT + KEEPER_SPARE, NOW);
     let _ = c.execute_payout(cid, Some(deposit_address()), Some("q".into()), None);
 }
 
@@ -313,21 +321,19 @@ fn intents_payout_registers_the_deposit_address_then_transfers_then_settles() {
 
 #[test]
 fn the_payout_gas_budget_is_thirty_tgas() {
+    // Attached ceilings; the sandbox test checks what is actually burnt.
     let attached = STORAGE_DEPOSIT_GAS.as_gas()
         + crate::pay::FT_TRANSFER_GAS.as_gas()
         + PAYOUT_CALLBACK_GAS.as_gas();
     assert_eq!(attached, INTENTS_PAYOUT_GAS.as_gas());
-    assert!(
-        INTENTS_PAYOUT_GAS.as_gas() + near_sdk::Gas::from_tgas(5).as_gas()
-            <= near_sdk::Gas::from_tgas(30).as_gas()
-    );
+    assert_eq!(INTENTS_PAYOUT_GAS, near_sdk::Gas::from_tgas(30));
 }
 
 #[test]
-#[should_panic(expected = "for the deposit address's token storage")]
+#[should_panic(expected = "the deposit address's token storage plus this record's")]
 fn intents_payout_needs_the_storage_deposit() {
     let (mut c, cid) = with_keeper(base_usdc());
-    ctx(&keeper(), INTENTS_STORAGE_DEPOSIT - 1, NOW);
+    ctx(&keeper(), INTENTS_STORAGE_DEPOSIT, NOW);
     let _ = c.execute_payout(
         cid,
         Some(deposit_address()),
@@ -346,12 +352,12 @@ fn direct_payout_takes_no_deposit() {
 
 // ----- confirmation and refunds ---------------------------------------------
 
-fn as_contract(outcome: PromiseResult) {
+fn as_contract_at(outcome: PromiseResult, now: u64) {
     let mut b = VMContextBuilder::new();
     b.current_account_id(contract_id())
         .predecessor_account_id(contract_id())
         .account_balance(NearToken::from_near(1_000_000))
-        .block_timestamp(NOW);
+        .block_timestamp(now);
     testing_env!(
         b.build(),
         near_sdk::test_vm_config(),
@@ -361,25 +367,32 @@ fn as_contract(outcome: PromiseResult) {
     );
 }
 
-/// Runs `sync_unattributed` as if the token reported `balance`.
-fn sync(c: &mut Recourse, balance: u128) -> u128 {
-    ctx(&stranger(), 0, NOW);
+fn as_contract(outcome: PromiseResult) {
+    as_contract_at(outcome, NOW);
+}
+
+/// One keeper sync at `at`, the token reporting `balance`, nothing moving.
+fn read(c: &mut Recourse, balance: u128, at: u64) -> u128 {
+    ctx(&keeper(), 0, at);
     let _ = c.sync_unattributed();
-    as_contract(PromiseResult::Successful(
-        format!("\"{balance}\"").into_bytes(),
-    ));
-    c.on_ft_balance().0
+    let epoch = c.ft_epoch;
+    as_contract_at(
+        PromiseResult::Successful(format!("\"{balance}\"").into_bytes()),
+        at,
+    );
+    c.on_ft_balance(epoch).0
+}
+
+/// Two quiet reads `SYNC_GAP_NS` apart, after the payout was sent.
+fn sync(c: &mut Recourse, balance: u128) -> u128 {
+    read(c, balance, NOW + 1);
+    read(c, balance, NOW + 1 + SYNC_GAP_NS)
 }
 
 fn confirm(c: &mut Recourse, cid: u64, quote: &str, status: &str) -> PayoutStatus {
-    ctx(&keeper(), 0, NOW);
-    c.confirm_payout(cid, quote.into(), status.into(), Some("0xdesttx".into()))
-}
-
-/// What the token balance shows with no refund: the books plus transfers
-/// still in flight (the stake refunded at resolution, for one).
-fn books(c: &Recourse) -> u128 {
-    c.get_ft_held().0 + c.get_ft_in_flight().0
+    ctx(&keeper(), 0, NOW + 2 * SYNC_GAP_NS);
+    let tx = (status == "SUCCESS").then(|| "0xdesttx".to_string());
+    c.confirm_payout(cid, quote.into(), status.into(), tx)
 }
 
 /// An Intents payout sent with quote `q-1` and delivered to 1Click.
@@ -402,6 +415,14 @@ fn success_is_final_and_records_the_destination_tx() {
     assert_eq!(p.dest_tx.as_deref(), Some("0xdesttx"));
     assert_eq!(events()[0]["event"], "payout_confirmed");
     assert!(c.solvency().ok);
+}
+
+#[test]
+#[should_panic(expected = "dest_tx is only recorded on SUCCESS")]
+fn dest_tx_is_only_taken_with_success() {
+    let (mut c, cid) = delivered();
+    ctx(&keeper(), 0, NOW);
+    c.confirm_payout(cid, "q-1".into(), "FAILED".into(), Some("0x".into()));
 }
 
 #[test]
@@ -454,9 +475,7 @@ fn a_seen_refund_returns_the_payout_to_pending() {
     let (mut c, cid) = delivered();
     let held = c.get_ft_held().0;
     // 1Click refunded the award by plain ft_transfer.
-    let balance = books(&c) + AWARD;
-    assert_eq!(sync(&mut c, balance), AWARD);
-    assert_eq!(events()[0]["event"], "unattributed_synced");
+    assert_eq!(sync(&mut c, held + AWARD), AWARD);
     assert!(c.solvency().ok);
     assert_eq!(
         confirm(&mut c, cid, "q-1", "REFUNDED"),
@@ -477,8 +496,8 @@ fn a_seen_refund_returns_the_payout_to_pending() {
 #[should_panic(expected = "payout is not delivered to 1Click")]
 fn a_refund_cannot_be_matched_twice() {
     let (mut c, cid) = delivered();
-    let balance = books(&c) + 2 * AWARD;
-    sync(&mut c, balance);
+    let held = c.get_ft_held().0;
+    sync(&mut c, held + 2 * AWARD);
     confirm(&mut c, cid, "q-1", "REFUNDED");
     confirm(&mut c, cid, "q-1", "REFUNDED");
 }
@@ -487,8 +506,8 @@ fn a_refund_cannot_be_matched_twice() {
 fn a_failed_payout_can_be_refunded_later() {
     let (mut c, cid) = delivered();
     assert_eq!(confirm(&mut c, cid, "q-1", "FAILED"), PayoutStatus::Failed);
-    let balance = books(&c) + AWARD;
-    sync(&mut c, balance);
+    let held = c.get_ft_held().0;
+    sync(&mut c, held + AWARD);
     assert_eq!(
         confirm(&mut c, cid, "q-1", "REFUNDED"),
         PayoutStatus::Pending
@@ -496,29 +515,121 @@ fn a_failed_payout_can_be_refunded_later() {
 }
 
 #[test]
-fn tokens_in_flight_are_never_counted_as_unattributed() {
-    let (mut c, cid) = with_keeper(base_usdc());
-    let before = books(&c);
-    let flying = c.get_ft_in_flight().0;
-    execute(&mut c, cid, Some(deposit_address()), Some("q-1"));
-    assert_eq!(c.get_ft_in_flight(), U128(flying + AWARD));
-    // The token has not moved yet: the balance still includes the award.
-    assert_eq!(sync(&mut c, before), 0);
-    callback(&mut c, cid, PromiseResult::Successful(vec![]));
-    assert_eq!(c.get_ft_in_flight(), U128(flying));
+fn a_single_read_never_raises_unattributed() {
+    let (mut c, _) = delivered();
+    let held = c.get_ft_held().0;
+    assert_eq!(read(&mut c, held + AWARD, NOW + 1), 0);
 }
 
 #[test]
-fn a_balance_below_the_books_syncs_to_zero() {
+fn two_reads_too_close_together_do_not_raise_it() {
     let (mut c, _) = delivered();
-    assert_eq!(sync(&mut c, 0), 0);
+    let held = c.get_ft_held().0;
+    read(&mut c, held + AWARD, NOW + 1);
+    assert_eq!(read(&mut c, held + AWARD, NOW + SYNC_GAP_NS), 0);
+}
+
+#[test]
+fn a_transient_excess_seen_once_is_not_trusted() {
+    // A rejected deposit sits on the balance until the token refunds it: one
+    // read sees it, the next does not; only the smaller is believed.
+    let (mut c, _) = delivered();
+    let held = c.get_ft_held().0;
+    read(&mut c, held + 5 * AWARD, NOW + 1);
+    assert_eq!(read(&mut c, held + AWARD, NOW + 1 + SYNC_GAP_NS), AWARD);
+}
+
+#[test]
+fn a_lower_read_lowers_unattributed_at_once() {
+    let (mut c, _) = delivered();
+    let held = c.get_ft_held().0;
+    sync(&mut c, held + AWARD);
+    assert_eq!(read(&mut c, held, NOW + 3 * SYNC_GAP_NS), 0);
+}
+
+#[test]
+fn a_read_taken_while_the_books_moved_is_ignored() {
+    let (mut c, _) = delivered();
+    let held = c.get_ft_held().0;
+    read(&mut c, held + AWARD, NOW + 1);
+    // Second read: requested, then a deposit lands before the callback.
+    ctx(&keeper(), 0, NOW + 1 + SYNC_GAP_NS);
+    let _ = c.sync_unattributed();
+    let epoch = c.ft_epoch;
+    ctx(&usdc(), 0, NOW + 1 + SYNC_GAP_NS);
+    let _ = c.ft_on_transfer(agent(), U128(USDC_UNIT), "bond".into());
+    as_contract_at(
+        PromiseResult::Successful(format!("\"{}\"", held + AWARD).into_bytes()),
+        NOW + 1 + SYNC_GAP_NS,
+    );
+    assert_eq!(c.on_ft_balance(epoch), U128(0));
+    assert_eq!(events()[0]["data"][0]["accepted"], false);
+}
+
+#[test]
+#[should_panic(expected = "refund not seen on the balance yet")]
+fn a_refund_must_be_seen_after_the_payout_was_sent() {
+    let (mut c, cid) = with_keeper(base_usdc());
+    let held = c.get_ft_held().0;
+    // Excess seen before this payout was sent belongs to something else.
+    read(&mut c, held + AWARD, NOW - 2 * SYNC_GAP_NS);
+    read(&mut c, held + AWARD, NOW - SYNC_GAP_NS);
+    execute(&mut c, cid, Some(deposit_address()), Some("q-1"));
+    callback(&mut c, cid, PromiseResult::Successful(vec![]));
+    confirm(&mut c, cid, "q-1", "REFUNDED");
+}
+
+#[test]
+#[should_panic(expected = "transfers in flight")]
+fn no_sync_while_a_transfer_is_in_flight() {
+    let (mut c, cid) = with_keeper(base_usdc());
+    execute(&mut c, cid, Some(deposit_address()), Some("q-1"));
+    ctx(&keeper(), 0, NOW);
+    let _ = c.sync_unattributed();
+}
+
+#[test]
+#[should_panic(expected = "keeper only")]
+fn only_a_keeper_syncs() {
+    let (mut c, _) = delivered();
+    ctx(&stranger(), 0, NOW);
+    let _ = c.sync_unattributed();
+}
+
+#[test]
+fn the_keeper_pays_for_the_attempt_and_gets_the_rest_back() {
+    let (mut c, cid) = with_keeper(base_usdc());
+    execute(&mut c, cid, Some(deposit_address()), Some("q-1"));
+    let back: u128 = transfers()
+        .iter()
+        .filter(|t| t.0 == keeper())
+        .map(|t| t.1)
+        .sum();
+    assert!(back > 0 && back < KEEPER_SPARE, "refund {back}");
+}
+
+#[test]
+#[should_panic(expected = "too many attempts")]
+fn attempts_are_capped() {
+    let (mut c, cid) = with_keeper(base_usdc());
+    for i in 0..=MAX_PAYOUT_ATTEMPTS {
+        execute(
+            &mut c,
+            cid,
+            Some(format!("{i:064x}")),
+            Some(&format!("q-{i}")),
+        );
+        callback(&mut c, cid, PromiseResult::Failed);
+    }
 }
 
 #[test]
 #[should_panic(expected = "only token deployments hold unattributed tokens")]
 fn native_deployments_have_nothing_to_sync() {
     let mut c = new_contract();
-    ctx(&stranger(), 0, T0);
+    ctx(&owner(), 0, T0);
+    c.add_keeper(keeper());
+    ctx(&keeper(), 0, T0);
     let _ = c.sync_unattributed();
 }
 
@@ -527,5 +638,7 @@ fn native_deployments_have_nothing_to_sync() {
 fn a_failed_balance_read_changes_nothing() {
     let (mut c, _) = delivered();
     as_contract(PromiseResult::Failed);
-    c.on_ft_balance();
+    c.on_ft_balance(c.ft_epoch);
 }
+
+const USDC_UNIT: u128 = 1_000_000;

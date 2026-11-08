@@ -44,6 +44,7 @@ impl Recourse {
     #[private]
     pub fn on_ft_paid(&mut self, to: AccountId, amount: U128) -> bool {
         self.ft_in_flight = sub(self.ft_in_flight, amount.0, "ft in flight");
+        self.ft_epoch += 1;
         // Only an outright failure means the tokens did not move. A success
         // with an unexpectedly long return value still moved them, so it must
         // never be credited back (that would pay twice).
@@ -90,6 +91,7 @@ impl Recourse {
         };
         self.ft_held = sub(self.ft_held, amount, "ft held");
         self.ft_in_flight = add(self.ft_in_flight, amount, "ft in flight");
+        self.ft_epoch += 1;
         ext_ft::ext(token)
             .with_attached_deposit(NearToken::from_yoctonear(1))
             .with_static_gas(FT_TRANSFER_GAS)

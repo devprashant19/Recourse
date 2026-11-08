@@ -262,7 +262,7 @@ async fn execute_intents(
         .keeper
         .call(u.e.contract.id(), "execute_payout")
         .args_json(json!({ "claim_id": claim_id, "deposit_address": addr, "quote_id": quote, "quote_hash": "77".repeat(32) }))
-        .deposit(NearToken::from_yoctonear(INTENTS_STORAGE))
+        .deposit(NearToken::from_yoctonear(INTENTS_STORAGE + 10u128.pow(22)))
         .max_gas()
         .transact()
         .await?)
@@ -344,15 +344,38 @@ async fn usdc_intents_payout_refund_and_retry_on_the_sandbox() -> anyhow::Result
         .args_json(json!({ "receiver_id": u.e.contract.id(), "amount": award.to_string(), "memo": "refund quote-1" }))
         .deposit(NearToken::from_yoctonear(ONE_YOCTO)).transact().await?;
     assert!(refund.is_success());
-    let seen = call(
-        &u.e.stranger,
+    let anyone =
+        u.e.stranger
+            .call(u.e.contract.id(), "sync_unattributed")
+            .args_json(json!({}))
+            .max_gas()
+            .transact()
+            .await?;
+    assert!(anyone.is_failure(), "only the keeper syncs");
+    let first = call(
+        &u.e.keeper,
         &u.e.contract,
         "sync_unattributed",
         json!({}),
         0,
     )
     .await?;
-    assert_eq!(u128_of(&seen), award, "the refund is unattributed");
+    assert_eq!(u128_of(&first), 0, "one read is not enough");
+    let read_at = now(&u.e.worker).await?;
+    skip_past(&u.e, read_at + 30_000_000_000).await?;
+    let seen = call(
+        &u.e.keeper,
+        &u.e.contract,
+        "sync_unattributed",
+        json!({}),
+        0,
+    )
+    .await?;
+    assert_eq!(
+        u128_of(&seen),
+        award,
+        "two quiet reads 30 s apart see the refund"
+    );
     assert_books_match_the_token(&u).await?;
     let status = call(
         &u.e.keeper,

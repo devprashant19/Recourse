@@ -28,6 +28,7 @@ use near_sdk::{env, near, require, AccountId, Gas, NearToken, Promise};
 use crate::events::Event;
 use crate::math::{add, sub};
 use crate::pay::{ext_ft, FT_TRANSFER_GAS};
+use crate::storage::refund;
 use crate::types::*;
 use crate::views::MAX_PAGE;
 use crate::{Recourse, RecourseExt};
@@ -35,10 +36,10 @@ use crate::{Recourse, RecourseExt};
 /// Gas reserved for `on_payout_transfer`; it only reads and writes one record.
 pub const PAYOUT_CALLBACK_GAS: Gas = Gas::from_tgas(10);
 /// Gas for the token's `storage_deposit` on an Intents payout.
-pub const STORAGE_DEPOSIT_GAS: Gas = Gas::from_tgas(5);
-/// What an Intents payout's attached calls may use in all; with the
-/// method's own work the whole payout fits in about 30 Tgas.
-pub const INTENTS_PAYOUT_GAS: Gas = Gas::from_tgas(25);
+pub const STORAGE_DEPOSIT_GAS: Gas = Gas::from_tgas(10);
+/// Gas an Intents payout attaches to its three calls (a ceiling; the
+/// sandbox run burns about 9 Tgas in all).
+pub const INTENTS_PAYOUT_GAS: Gas = Gas::from_tgas(30);
 /// NEAR the keeper attaches for the deposit address's token storage
 /// (NEP-145 registration on USDC is 0.00125 NEAR).
 pub const INTENTS_STORAGE_DEPOSIT: u128 = 1_250_000_000_000_000_000_000;
@@ -69,9 +70,17 @@ impl Recourse {
     /// for that fixed destination. A quote id or deposit address can be used
     /// once; Direct payouts take neither.
     ///
-    /// Intents payouts attach at least `INTENTS_STORAGE_DEPOSIT` (paid by the
-    /// keeper) to register the deposit address on the token; Direct payouts
-    /// attach nothing.
+    /// Intents payouts attach more than `INTENTS_STORAGE_DEPOSIT`: exactly
+    /// that registers the deposit address on the token, the storage this
+    /// attempt adds here is kept, and the rest is refunded to the keeper.
+    /// Direct payouts attach nothing.
+    ///
+    /// Trust note (T8): the deposit address and quote are relayed by the
+    /// keeper and cannot be checked on-chain against the claimant's
+    /// destination. They are recorded (with `quote_hash`, the sha256 of the
+    /// raw quote) and emitted so anyone can check them against 1Click's
+    /// public status for that deposit address; the keeper's bond is what
+    /// answers for a mismatch.
     #[payable]
     pub fn execute_payout(
         &mut self,
@@ -81,6 +90,7 @@ impl Recourse {
         quote_hash: Option<Hash>,
     ) -> Promise {
         self.assert_keeper();
+        let before = env::storage_usage();
         let mut p = self
             .payouts
             .get(&claim_id)
@@ -100,10 +110,14 @@ impl Recourse {
             }
             PayoutMode::Intents => {
                 require!(
-                    env::attached_deposit().as_yoctonear() >= INTENTS_STORAGE_DEPOSIT,
+                    env::attached_deposit().as_yoctonear() > INTENTS_STORAGE_DEPOSIT,
                     format!(
-                        "attach at least {INTENTS_STORAGE_DEPOSIT} yoctoNEAR for the deposit address's token storage"
+                        "attach more than {INTENTS_STORAGE_DEPOSIT} yoctoNEAR: the deposit address's token storage plus this record's"
                     )
+                );
+                require!(
+                    p.attempts < MAX_PAYOUT_ATTEMPTS,
+                    "too many attempts for this payout"
                 );
                 let quote = IntentsQuote::check(deposit_address, quote_id, quote_hash);
                 self.use_quote_once(&quote);
@@ -119,6 +133,14 @@ impl Recourse {
         p.sent_at = Some(U64(env::block_timestamp()));
         p.final_status = None;
         self.payouts.insert(claim_id, p.clone());
+        if p.mode == PayoutMode::Intents {
+            // The keeper pays for what this attempt adds (quote record, the
+            // single-use entries); the rest beyond the token registration
+            // goes back to it.
+            let spare = env::attached_deposit().as_yoctonear() - INTENTS_STORAGE_DEPOSIT;
+            let left = self.charge_storage(before, spare);
+            refund(left);
+        }
         // The money leaves now; if the transfer fails the callback puts it back.
         self.totals.pending_payouts = U128(sub(
             self.totals.pending_payouts.0,
@@ -157,6 +179,7 @@ impl Recourse {
             .unwrap_or_else(|| env::panic_str("payout not found"));
         if self.is_ft_mode() {
             self.ft_in_flight = sub(self.ft_in_flight, p.amount.0, "ft in flight");
+            self.ft_epoch += 1;
         }
         if p.status != PayoutStatus::Sent {
             // Nothing in flight for this claim; never double-settle.
@@ -214,6 +237,12 @@ pub const MAX_DEST_TX_LEN: usize = 128;
 /// Gas for the token's `ft_balance_of` and for `on_ft_balance`.
 pub const FT_BALANCE_GAS: Gas = Gas::from_tgas(5);
 pub const FT_BALANCE_CALLBACK_GAS: Gas = Gas::from_tgas(10);
+
+/// Two balance reads must be this far apart (ns) before `unattributed` may
+/// rise: longer than a rejected deposit takes to be refunded by the token.
+pub const SYNC_GAP_NS: u64 = 30_000_000_000;
+/// Attempts a payout may take before it needs another look.
+pub const MAX_PAYOUT_ATTEMPTS: u32 = 10;
 
 /// Longest 1Click quote id accepted.
 pub const MAX_QUOTE_ID_LEN: usize = 128;
@@ -282,6 +311,10 @@ impl Recourse {
             p.quote_id.as_deref() == Some(quote_id.as_str()),
             "quote id does not match the payout"
         );
+        require!(
+            dest_tx.is_none() || status == "SUCCESS",
+            "dest_tx is only recorded on SUCCESS"
+        );
         if let Some(tx) = &dest_tx {
             require!(
                 !tx.is_empty() && tx.len() <= MAX_DEST_TX_LEN,
@@ -305,11 +338,16 @@ impl Recourse {
                     delivered || p.status == PayoutStatus::Failed,
                     "payout is not delivered to 1Click"
                 );
+                let sent_at = p.sent_at.map(|t| t.0).unwrap_or_default();
                 require!(
-                    self.unattributed >= p.amount.0,
+                    self.unattributed >= p.amount.0 && self.unattributed_at > sent_at,
                     "refund not seen on the balance yet; call sync_unattributed"
                 );
                 self.unattributed -= p.amount.0;
+                if let Some((x, t)) = self.unattributed_obs {
+                    self.unattributed_obs = Some((x.saturating_sub(p.amount.0), t));
+                }
+                self.ft_epoch += 1;
                 self.ft_held = add(self.ft_held, p.amount.0, "ft held");
                 self.totals.pending_payouts = U128(add(
                     self.totals.pending_payouts.0,
@@ -334,36 +372,75 @@ impl Recourse {
         p.status
     }
 
-    /// Reads this contract's real token balance and sets `unattributed` to
-    /// what it holds beyond its own accounting (`ft_held`) and transfers
-    /// still in flight: tokens that arrived by plain `ft_transfer`, such as
-    /// 1Click refunds. Anyone may call it.
+    /// Keeper only. Reads this contract's real token balance to find tokens
+    /// that arrived by plain `ft_transfer` (1Click refunds). The read is
+    /// taken in another receipt, so it is trusted only when nothing moved in
+    /// between: no transfer in flight and the books unchanged from request
+    /// to callback. Even then a deposit being refunded by the token can sit
+    /// on the balance for a few blocks, so `unattributed` only rises to what
+    /// two quiet reads at least `SYNC_GAP_NS` apart both saw; it falls at
+    /// once.
+    ///
+    /// Residual risk: someone who lands a rejected deposit on *both* reads
+    /// can still overstate it. That only matters together with a false
+    /// `REFUNDED` report, i.e. a dishonest keeper, which the keeper bond
+    /// answers for (as with the deposit address, T8).
     pub fn sync_unattributed(&mut self) -> Promise {
+        self.assert_keeper();
         let token = self
             .ft_token()
             .unwrap_or_else(|| env::panic_str("only token deployments hold unattributed tokens"));
+        require!(
+            self.ft_in_flight == 0,
+            "transfers in flight; sync once they settle"
+        );
         ext_ft::ext(token)
             .with_static_gas(FT_BALANCE_GAS)
             .ft_balance_of(env::current_account_id())
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(FT_BALANCE_CALLBACK_GAS)
-                    .on_ft_balance(),
+                    .on_ft_balance(self.ft_epoch),
             )
     }
 
     #[private]
-    pub fn on_ft_balance(&mut self) -> U128 {
+    pub fn on_ft_balance(&mut self, epoch: u64) -> U128 {
         let raw = env::promise_result_checked(0, 64)
             .unwrap_or_else(|_| env::panic_str("ft_balance_of failed"));
         let balance: U128 = near_sdk::serde_json::from_slice(&raw)
             .unwrap_or_else(|_| env::panic_str("bad ft_balance_of result"));
-        let accounted = add(self.ft_held, self.ft_in_flight, "accounted tokens");
-        self.unattributed = balance.0.saturating_sub(accounted);
+        let quiet = epoch == self.ft_epoch && self.ft_in_flight == 0;
+        if !quiet {
+            Event::UnattributedSynced.emit(json!({
+                "balance": balance,
+                "accepted": false,
+                "unattributed": U128(self.unattributed),
+            }));
+            return U128(self.unattributed);
+        }
+        let excess = balance.0.saturating_sub(self.ft_held);
+        let deficit = self.ft_held.saturating_sub(balance.0);
+        let now = env::block_timestamp();
+        // Falling is always safe; rising needs an older quiet read too.
+        self.unattributed = self.unattributed.min(excess);
+        self.unattributed_obs = match self.unattributed_obs {
+            Some((x, t)) if now >= t.saturating_add(SYNC_GAP_NS) => {
+                // The latest confirmed pair replaces the last one: both
+                // reads saw at least `seen`, the older one at `t`.
+                self.unattributed = x.min(excess);
+                self.unattributed_at = t;
+                Some((excess, now))
+            }
+            Some((x, t)) => Some((x.min(excess), t)),
+            None => Some((excess, now)),
+        };
         Event::UnattributedSynced.emit(json!({
             "balance": balance,
+            "accepted": true,
             "ft_held": U128(self.ft_held),
-            "in_flight": U128(self.ft_in_flight),
+            "excess": U128(excess),
+            "deficit": U128(deficit),
             "unattributed": U128(self.unattributed),
         }));
         U128(self.unattributed)
@@ -423,6 +500,7 @@ impl Recourse {
         };
         self.ft_held = sub(self.ft_held, p.amount.0, "ft held");
         self.ft_in_flight = add(self.ft_in_flight, p.amount.0, "ft in flight");
+        self.ft_epoch += 1;
         let transfer = |to: AccountId, memo: Option<String>| {
             ext_ft::ext(token.clone())
                 .with_attached_deposit(NearToken::from_yoctonear(1))
@@ -437,7 +515,7 @@ impl Recourse {
         //    callback reads the transfer's result: if registration failed the
         //    transfer fails too and the payout is Pending again.
         ext_ft::ext(token.clone())
-            .with_attached_deposit(env::attached_deposit())
+            .with_attached_deposit(NearToken::from_yoctonear(INTENTS_STORAGE_DEPOSIT))
             .with_static_gas(STORAGE_DEPOSIT_GAS)
             .storage_deposit(Some(q.deposit_address.clone()), Some(true))
             .then(transfer(
