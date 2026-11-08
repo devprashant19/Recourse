@@ -1,6 +1,6 @@
 /**
  * The Keeper Service: manages contract connection, token discovery,
- * pending payout execution, deposit submission, and status polling.
+ * pending payout execution, deposit submission, status polling, and reconciliation.
  */
 
 import {
@@ -24,6 +24,7 @@ import {
   submitPendingDeposits,
   type PollResult,
 } from "./polling.js";
+import { PayoutReconciler, type ReconcileResult } from "./reconcile.js";
 import { PayoutTracker } from "./tracker.js";
 
 export class KeeperService {
@@ -32,6 +33,7 @@ export class KeeperService {
   private tokens: TokenInfo[] = [];
   readonly log: KeeperLogger;
   readonly tracker: PayoutTracker;
+  readonly reconciler: PayoutReconciler;
 
   constructor(
     readonly config: KeeperConfig,
@@ -39,9 +41,12 @@ export class KeeperService {
     readonly api: OneClickApi | null = null,
     logger?: KeeperLogger,
     tracker?: PayoutTracker,
+    reconciler?: PayoutReconciler,
   ) {
     this.log = logger ?? new KeeperLogger("keeper");
     this.tracker = tracker ?? new PayoutTracker(config.stateFile);
+    this.reconciler =
+      reconciler ?? new PayoutReconciler(this.chain, this.tracker, this.log);
   }
 
   /**
@@ -93,10 +98,15 @@ export class KeeperService {
     await recoverActivePayouts(this.chain, this.tracker, this.log);
   }
 
-  /** Runs a single discovery, execution, submission, and polling cycle. */
-  async tick(): Promise<{ executed: ExecutePayoutResult[]; polled: PollResult[] }> {
+  /** Runs a single discovery, execution, submission, polling, and reconciliation cycle. */
+  async tick(): Promise<{
+    executed: ExecutePayoutResult[];
+    polled: PollResult[];
+    reconciled: ReconcileResult[];
+  }> {
     const executed: ExecutePayoutResult[] = [];
     let polled: PollResult[] = [];
+    let reconciled: ReconcileResult[] = [];
 
     // 1. Discover and execute new pending payouts
     try {
@@ -153,7 +163,19 @@ export class KeeperService {
       }
     }
 
-    return { executed, polled };
+    // 3. Reconcile outcomes with the on-chain contract
+    try {
+      reconciled = await this.reconciler.reconcile();
+      if (reconciled.length > 0) {
+        this.log.info("payouts_reconciled", { count: reconciled.length });
+      }
+    } catch (recErr) {
+      this.log.error("keeper_reconcile_error", {
+        error: recErr instanceof Error ? recErr.message : String(recErr),
+      });
+    }
+
+    return { executed, polled, reconciled };
   }
 
   /** Starts the continuous polling loop. */

@@ -9,4 +9,5 @@ export * from "./sdk-chain.js";
 export * from "./payout.js";
 export * from "./tracker.js";
 export * from "./polling.js";
+export * from "./reconcile.js";
 export * from "./service.js";
