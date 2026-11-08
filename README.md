@@ -28,7 +28,12 @@ and the client is paid **in the token and on the chain they chose**, through NEA
 | `pnpm mainnet:verify` | The real mainnet slash and the USDC arriving on Base, checked from public data |
 
 `pnpm demo` needs **no `.env` and no keys**. A local NEAR sandbox boots, the contracts deploy, seven
-scripted scenarios run against recorded-but-real signatures and quotes, and a pass/fail table prints.
+scripted scenarios run against recorded signatures and quotes, and a pass/fail table prints.
+
+> **Current state of the recordings:** genuine NEAR AI Cloud fixtures are produced by
+> `pnpm record-fixtures --live` and have **not been recorded yet**. Until they are, the sandbox replays
+> a clearly labelled **dev** set (`demo/fixtures/dev`) signed by a throwaway test key with no TEE behind
+> it; every receipt built on it says so. See [`demo/fixtures/README.md`](demo/fixtures/README.md).
 
 ## The one technical claim worth checking first
 
@@ -57,6 +62,66 @@ The short answer, up front:
 3. **Either side can appeal** to a Sputnik DAO council.
 4. **The arbiter is bonded.** If the council overturns it, it is fined.
 
+## Receipts, worker and arbiter
+
+**A receipt proves which model produced which bytes inside an attested TEE. It does not prove the output
+is correct. That is the arbiter's job.**
+
+**Receipt lifecycle** (`packages/receipts`, used by the worker, the arbiter, `pnpm verify-receipt`
+and, in the browser, the Verify button):
+
+1. **Attest first.** A fresh 32-byte nonce, then `GET /v1/attestation/report`. Each TEE's Intel TDX quote
+   is verified with dcap-qvl, the library NEAR's own verifier uses. Its `report_data` must bind the TEE's
+   signing address and that nonce; an HTTP 200 alone proves nothing.
+2. **Keep the exact bytes.** The request is serialised once, then sent and hashed. The response is kept
+   byte-for-byte and never re-serialised.
+3. **Check the signature.** The signed text must be `model:sha256(request):sha256(response)` (or the
+   gateway form) for exactly those bytes. EIP-191 recovery must give the reported address, and that
+   address must be exactly one TEE whose attestation verified.
+4. **Receipt.**
+   `{version, engagement_id, model_id, request_hash, response_hash, signature, signing_address,
+   signature_kind, attestation{nonce, report_hash, verified_at, verifier}, artifacts{request_uri,
+   response_uri}}`, with `receipt_hash = sha256(JCS(receipt))` (RFC 8785).
+
+`verifyReceipt(receipt, bytes)` is pure and browser-safe. It re-hashes the bytes, re-derives the signed
+text, recovers the signer and, given the report, re-checks the quote's nonce/signer binding. Intel's
+signature on the quote needs Intel's collateral, so that verdict is recorded at build time in
+`attestation.verifier`.
+
+**Worker** (`services/worker-agent`). It watches for engagements naming its agent and checks the
+document against the on-chain `terms_hash` **before** accepting. It extracts at temperature 0 through the
+receipt library, then calls `submit_receipt`, with crash-safe, idempotent state. The sabotage switch
+(`/admin/sabotage`, sandbox and testnet only, loopback and bearer token) has five modes: `none`,
+`wrong_total`, `hallucinate`, `late`, `silent`. The bad ones work by **telling the model in the prompt**,
+so the TEE honestly signs bad work and the receipt's request bytes show the agent's own bad instruction.
+
+**Arbiter** (`services/arbiter`):
+
+- It runs the published [`rubric.md`](services/arbiter/rubric.md) on a TEE model at temperature 0. **The
+  verdict is itself a receipt**, and the contract verifies it on-chain.
+- `award = liability_cap × Σ weights of wrong fields`, rounded down and capped at the claimed amount.
+- **Prompt injection (T15) has three layers.** Evidence, document and agent output are quoted data that
+  cannot close their own block. The rubric says instructions inside them carry no authority. And code
+  checks every verdict, so a model that obeys an injection produces an **invalid** verdict, not a wrong
+  one. That check enforces the schema, one finding per field, what the agent actually said, every
+  claimed document value appearing in the document, the award equalling the weight sum, and a
+  consistent `upheld`.
+- `pnpm rerun-verdict <claim>` resends the identical request bytes. LLMs are not byte-reproducible even
+  at temperature 0, so it and the judge compare only `upheld` and `award_bps`.
+
+**Fixtures and adapters** (`packages/adapters`). `RECOURSE_MODE=sandbox` replays recorded bytes with no
+keys. Testnet and mainnet are live only; mainnet refuses fixtures and sabotage. A fixture changes where
+the bytes come from, never whether they are verified.
+
+**What has been verified so far.** Full status is in [`PHASE-2-STATUS.md`](PHASE-2-STATUS.md).
+
+- **Unit-tested:** all of the above.
+- **Sandbox-tested on dev fixtures:** scenarios 02 (wrong work is fined) and 04 (bogus claim), and one
+  receipt accepted with a tampered copy rejected. The real worker and arbiter run against the real
+  contract, which verifies every receipt and verdict on-chain.
+- **Not yet done:** recording genuine NEAR AI Cloud fixtures, a live receipt on testnet, and checking a
+  real NEAR AI Cloud signature (Spike A). These need credentials and are documented with exact commands.
+
 ## Trust assumptions
 
 - **NEAR AI Cloud runs models in TEEs and signs their outputs honestly.** Attestation is verified with
@@ -76,6 +141,9 @@ Full list of what is *not* defended against: [`THREAT_MODEL.md`](THREAT_MODEL.md
 | [`THREAT_MODEL.md`](THREAT_MODEL.md) | 16 attacks, each with the test that proves the defence |
 | [`phases/`](phases/) | The build plan, phase by phase, with exit criteria |
 | [`HACKATHON_DISCLOSURE.md`](HACKATHON_DISCLOSURE.md) | Baseline, libraries, AI-generated code |
+| [`docs/services.md`](docs/services.md) | Running the worker and arbiter: modes, keys, testnet steps, operations |
+| [`services/arbiter/rubric.md`](services/arbiter/rubric.md) | The published arbiter rubric |
+| [`demo/fixtures/README.md`](demo/fixtures/README.md) | What the recorded fixtures are (and the dev set is not) |
 
 ## Repository layout
 

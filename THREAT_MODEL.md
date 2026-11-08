@@ -57,8 +57,12 @@ rather than a wrong one. Tested against a recorded fixture so it is deterministi
 
 - **Receipts are bound to a model and a key, not to a job.** The contract only sees hashes, so it
   cannot check that a receipt's request was *this* engagement's job or that a verdict's response says
-  what the arbiter submitted. Phase 2 puts the engagement id in the request and `pnpm rerun-verdict`
-  re-checks verdicts off-chain; the appeal path (Phase 3) is the on-chain recourse.
+  what the arbiter submitted. Off-chain: the worker checks the document against `terms_hash` before
+  accepting, publishes a receipt only after the contract has accepted it (so nobody can read it and
+  submit it first under another engagement), the arbiter matches the published receipt to the one
+  accepted on-chain, and `pnpm rerun-verdict` re-checks verdicts. The engagement id is deliberately
+  not put in the request bytes, because recorded fixtures must replay byte-for-byte. The appeal path
+  (Phase 3) is the on-chain recourse.
 - **The owner and keepers choose the TEE signers and arbiters.** They cannot move funds (T16), but an
   owner who allow-lists its own key or arbiter could influence outcomes. That trust is explicit; appeals
   to the council (Phase 3) bound it.

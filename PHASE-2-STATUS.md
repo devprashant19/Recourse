@@ -631,13 +631,58 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   client and agent who are the same person profit from the vault (T6). Scenario 02 asserts the
   implemented Phase 1 rule: client receives award + stake.
 
+## Exit criteria (from the phase doc)
+
+- [ ] **A live NEAR AI Cloud receipt is accepted by the testnet contract.** NOT done: no NEAR AI
+  Cloud key, no testnet account and no testnet deployment on this machine. The workflow is implemented
+  (`pnpm testnet:verify-receipt`) and the same code path passes on the local sandbox with fixtures.
+- [ ] **A tampered receipt is rejected.** Shown on the **sandbox**: the contract refused a one-byte-
+  tampered receipt in both the view and a real transaction (`signer not allow-listed`). It has
+  **not** been shown on testnet; it is part of the same command.
+- [x] **Scenarios 02 and 04 pass in the sandbox on fixtures.** Both PASS on a local nearcore 2.14
+  sandbox with the real contract, worker and arbiter. They ran on the **dev** fixture set; the spec's
+  intent is genuine recorded fixtures, which `pnpm record-fixtures --live` produces and the sandbox
+  then prefers automatically.
+
+Also from the spec:
+- **Five receipts verify, five tampered copies fail:** passes (`services/arbiter/test/keyless.test.ts`)
+  on dev fixtures.
+- **`t15_arbiter_resists_injection`:** passes, at the code layer, on recorded adversarial responses.
+- **Rubric schema validation:** passes.
+
+## Remaining to run (needs credentials; exact commands)
+
+```bash
+# 1. .env (git-ignored): NEARAI_API_KEY, NEARAI_MODEL_WORKER, NEARAI_MODEL_ARBITER,
+#    OWNER_ACCOUNT_ID/OWNER_PRIVATE_KEY, AGENT_/ARBITER_/KEEPER_ACCOUNT_ID + *_FULL_ACCESS_KEY,
+#    CLIENT_ACCOUNT_ID/CLIENT_KEY — see .env.example and docs/services.md
+pnpm record-fixtures --live                       # genuine fixtures -> demo/fixtures/near-ai (Spike A, live)
+pnpm build:contract:dev
+pnpm run deploy --network testnet                 # then export RECOURSE_CONTRACT_ID
+#    owner: add_arbiter / add_keeper; agent: register_agent + post_bond; underwriter: create_vault,
+#    deposit_vault, bind_coverage (as in scripts/seed.ts)
+pnpm setup-service-keys --network testnet         # function-call keys -> .data/testnet-fc-keys.json
+pnpm register-tee-signer --network testnet --model "$NEARAI_MODEL_WORKER"
+pnpm testnet:verify-receipt                       # exit criteria 1 and 2
+```
+
 ## Open items
 
 - **No NEAR AI Cloud key / testnet account on this machine.** Live exit criteria stay open.
-- **Spike A** (a real NEAR AI Cloud signature checked by this code and by the contract) is still
-  open. Format agreement was established from NEAR's own verifier source
+- **Spike A is still open.** Nobody has yet checked a real NEAR AI Cloud signature with this code
+  and with the contract. Format agreement was established from NEAR's own verifier source
   (`github.com/nearai/nearai-cloud-verifier`): `{text, signature, signing_address}`, text
   `model:sha256(req):sha256(resp)` or `req:resp`, plain EIP-191 — exactly what the contract checks.
 - The maintainer untracked `PHASE-1-STATUS.md` (working-tree deletion plus a `.gitignore` entry)
   while this phase was being built. Those are the maintainer's own changes; these commits leave them
   unstaged and untouched.
+- **Receipt-to-job binding** stays off-chain (see THREAT_MODEL.md). The engagement id is deliberately
+  not in the request bytes, because fixtures must replay byte-for-byte.
+- **Fixture replay** pins the recorded nonce, and the contract accepts each response hash once, so the
+  scenarios need a fresh deployment per run.
+- **`scenario:02`'s award fits inside the agent's bond share,** so the vault pays nothing. The split
+  into the vault is covered by Phase 1's tests.
+- **No real LLM has been tested.** Injection resistance with a real model is unmeasured until genuine
+  recordings exist; `t15` covers the code layer.
+- **The worker emits no NEP-297 logs of its own.** It reads engagements from contract state (see
+  Deviations).
