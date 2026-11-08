@@ -106,7 +106,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 5. `feat(receipts): implement EIP-191 signature retrieval and verification`
 
-- **Commit:** (this commit)
+- **Commit:** `68c81d3`
 - **Did:** `signedText` (the two documented forms only), `eip191Digest` (keccak256 of
   `"\x19Ethereum Signed Message:\n" + byteLength + text`), `recoverSigner` (`@noble/curves` secp256k1;
   65-byte `r||s||v`, v 27/28 or 0/1, high-s refused — the same rules as the contract's `tee.rs`),
@@ -129,6 +129,37 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   signer list; endpoint URL and body validation).
 - **Ran:** `vitest run packages/receipts` (45 passed), `tsc --noEmit`, `eslint` — clean.
 - **Evidence:** unit-tested; TypeScript and on-chain Rust recovery agree on shared vectors.
+
+### 6. `feat(receipts): build canonical receipts and export verification API`
+
+- **Commit:** (this commit)
+- **Did:** `receiptHash = sha256(JCS(receipt))` (RFC 8785 via `canonicalize`). `attestedCompletion`
+  runs the four steps in the spec's order (fresh-nonce attestation, verified signers required →
+  raw-byte completion → signature checked against those exact hashes and signers → receipt) and
+  stores request, response and report bytes. **`verifyReceipt(receipt, bytes, opts)`** — pure, no
+  Node APIs (confirmed by grep; the Intel collateral check stays in `@recourse/receipts/dcap`):
+  strict shape (exact field set, types, lowercase hex, ISO date), request/response bytes re-hashed,
+  signed text re-derived from the receipt's own fields and the signer recovered, optional allowed-signer
+  set, and — by default — the attestation: report bytes must hash to `report_hash`, contain a TEE entry
+  for the signer whose TDX quote `report_data` (read directly from the quote, v4/v5 layout) binds the
+  signer and the receipt's nonce. Development-fixture reports are rejected as attestation unless
+  `requireAttestation: false` is passed explicitly. It collects every failure and recomputes the receipt
+  hash instead of trusting one. `pnpm verify-receipt` CLI wraps it.
+- **What `verifyReceipt` cannot check offline:** Intel's signature on the quote (needs Intel's
+  collateral and network) — that verdict is recorded at build time in `attestation.verifier`.
+- **Files:** `packages/receipts/src/{receipt,quote,index}.ts`, `test/{receipt.test,fake-tee}.ts`,
+  `scripts/verify-receipt.ts`
+- **Tests:** 16 (spec field set and JCS hash; artifacts stored; no verified TEE → refused; key-order
+  independence; RFC 8785 ordering; valid receipt; gateway form; one flipped byte in request, response or
+  report; altered hash, signature, signer, model or kind; altered nonce breaks quote binding and
+  changes the hash; disallowed signer; report required unless opted out; dev-fixture report refused;
+  missing/extra fields, wrong types, NaN, null; v4 report_data offset; bad version and truncation).
+  The receipt-flow tests use a **test-only** TEE double (`test/fake-tee.ts`: a real secp256k1 key
+  signing real EIP-191 signatures, and a structurally correct but unsigned v4 quote).
+- **Ran:** `vitest run packages/receipts` (61 passed), `tsc --noEmit` (package and root), `eslint` —
+  clean. One test first failed because a `JSON.stringify` replacer array also filtered nested keys;
+  the test was fixed, not the code.
+- **Evidence:** unit-tested.
 
 ---
 

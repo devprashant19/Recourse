@@ -20,3 +20,5 @@ export * from "./attestation.js";
 export * from "./client.js";
 export * from "./completion.js";
 export * from "./signature.js";
+export * from "./quote.js";
+export * from "./receipt.js";
