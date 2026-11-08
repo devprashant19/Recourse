@@ -1,11 +1,10 @@
 /**
- * @recourse/keeper
- *
- * Payout keeper: quote -> execute_payout -> poll status -> confirm_payout. Plus the signer registrar loop.
- *
- * Built in: Phase 3
- * Spec: phases/phase-03-money-out.md
+ * @recourse/keeper — Payout keeper and signer registrar.
  */
 
-export const PLACEHOLDER = true;
-// TODO(Phase 3): implement.
+export * from "./config.js";
+export * from "./logger.js";
+export * from "./chain.js";
+export * from "./sdk-chain.js";
+export * from "./payout.js";
+export * from "./service.js";

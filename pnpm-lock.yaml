@@ -114,7 +114,23 @@ importers:
 
   services/indexer: {}
 
-  services/keeper: {}
+  services/keeper:
+    dependencies:
+      '@recourse/adapters':
+        specifier: workspace:^
+        version: link:../../packages/adapters
+      '@recourse/intents':
+        specifier: workspace:^
+        version: link:../../packages/intents
+      '@recourse/receipts':
+        specifier: workspace:^
+        version: link:../../packages/receipts
+      '@recourse/sdk':
+        specifier: workspace:^
+        version: link:../../packages/sdk
+      near-api-js:
+        specifier: 7.4.0
+        version: 7.4.0
 
   services/underwriters: {}
 
