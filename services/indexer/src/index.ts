@@ -1,11 +1,10 @@
 /**
- * @recourse/indexer
+ * @recourse/indexer — NEP-297 event ingester + REST API (Fastify, SQLite)
+ * + content-addressed artifact serving.
  *
- * Event ingester + REST API (Fastify, SQLite) + artifact store keyed by sha256.
- *
- * Built in: Phase 4
- * Spec: phases/phase-04-underwriting-indexer-attacks.md
+ * Spec: phases/phase-04-underwriting-indexer-attacks.md section 4.
  */
-
-export const PLACEHOLDER = true;
-// TODO(Phase 4): implement.
+export * from "./config.js";
+export * from "./db.js";
+export * from "./ingest.js";
+export * from "./api.js";

@@ -8,7 +8,9 @@
 # Windows cannot run the NEAR sandbox natively (no nearcore build for it);
 # this is the supported way to run the demo there.
 
-FROM node:20-bookworm AS base
+# Ubuntu 24.04, not Debian bookworm: the nearcore 2.14 sandbox binary links
+# against glibc 2.39, and bookworm ships 2.36.
+FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PNPM_HOME=/pnpm \
@@ -19,8 +21,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CI=true
 
 RUN apt-get update -qq \
- && apt-get install -y -qq --no-install-recommends curl ca-certificates tar git build-essential pkg-config libssl-dev python3 \
+ && apt-get install -y -qq --no-install-recommends curl ca-certificates gnupg tar git build-essential pkg-config libssl-dev python3 xz-utils \
+ && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt-get install -y -qq --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/* \
+ && node --version \
  && corepack enable \
  && corepack prepare pnpm@9.12.3 --activate
 
