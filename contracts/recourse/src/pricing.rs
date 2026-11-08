@@ -136,9 +136,13 @@ pub struct JobQuote {
     /// Vault capital the agent can still lock in its coverage vault.
     pub vault_available: U128,
     pub coverage_vault: Option<AccountId>,
-    /// Prepaid storage for the engagement and its receipt.
+    /// Prepaid storage for the engagement and its receipt, in yoctoNEAR.
+    /// Native mode: part of the attached deposit. Ft mode: taken from the
+    /// client's NEP-145 storage balance.
     pub storage_fee: U128,
-    /// `price + premium + storage_fee` to attach, when `price` was given.
+    /// What to send, when `price` was given. Native mode: `price + premium +
+    /// storage_fee` to attach. Ft mode: `price + premium` in the token, sent
+    /// with `ft_transfer_call`.
     pub total_deposit: Option<U128>,
     pub can_open: bool,
     /// Why `can_open` is false.
@@ -207,7 +211,10 @@ impl Recourse {
             total_deposit: price.and_then(|p| {
                 premium_amt
                     .and_then(|pr| p.0.checked_add(pr))
-                    .and_then(|x| x.checked_add(fee))
+                    .and_then(|x| match self.ft_token() {
+                        Some(_) => Some(x),
+                        None => x.checked_add(fee),
+                    })
                     .map(U128)
             }),
             can_open: plan.is_ok(),

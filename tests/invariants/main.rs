@@ -9,6 +9,11 @@
 //! secp256k1 signatures are produced for every receipt and verdict, so the
 //! on-chain check runs on every delivery.
 //!
+//! Every run happens twice over: once with native NEAR as the bond asset and
+//! once in USDC mode (`bond_asset = Ft`), where money arrives through
+//! `ft_on_transfer`, leaves as `ft_transfer`, and a refused transfer becomes
+//! `owed`. (Ft-mode payouts arrive with the Intents payout path.)
+//!
 //! After every step:
 //!   I1 solvency     the money model (deposits in, transfers out) covers every
 //!                   liability, and the running totals equal the records;
@@ -26,8 +31,9 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 
 use near_sdk::json_types::{U128, U64};
 use near_sdk::mock::MockAction;
+use near_sdk::serde_json::{self, json};
 use near_sdk::test_utils::{get_created_receipts, VMContextBuilder};
-use near_sdk::{env, testing_env, AccountId, NearToken, PromiseResult};
+use near_sdk::{env, testing_env, AccountId, NearToken, PromiseOrValue, PromiseResult};
 use proptest::prelude::*;
 
 use recourse::pool::assets_for_shares;
@@ -65,9 +71,17 @@ const VAULTS: [&str; 2] = ["v0.near", "v1.near"];
 const LPS: [&str; 2] = ["lp0.near", "lp1.near"];
 const CLIENTS: [&str; 2] = ["c0.near", "c1.near"];
 
-fn config() -> Config {
+fn usdc() -> AccountId {
+    acc("usdc.near")
+}
+
+fn config(ft: bool) -> Config {
     Config {
-        bond_asset: BondAsset::Native,
+        bond_asset: if ft {
+            BondAsset::Ft(usdc())
+        } else {
+            BondAsset::Native
+        },
         min_bond: U128(5 * NEAR),
         withdrawal_cooldown: U64(5 * MIN),
         claim_window: U64(CLAIM_WINDOW),
@@ -144,6 +158,13 @@ impl TeeKey {
 struct World {
     c: Recourse,
     now: u64,
+    /// USDC mode.
+    ft: bool,
+    /// Token units the contract holds, by the model: deposits used, minus
+    /// transfers sent, plus refused transfers returned.
+    held_ft: u128,
+    /// Token transfers whose callback has not run yet.
+    ft_in_flight: VecDeque<(AccountId, u128)>,
     /// NEAR the contract holds, by the model: deposits in, transfers out.
     held: u128,
     worker: TeeKey,
@@ -183,14 +204,36 @@ impl World {
                 .checked_sub(t)
                 .expect("contract sent more than it held");
         }
+        for (to, amount) in ft_transfers() {
+            assert!(self.ft, "a native deployment sent a token transfer");
+            self.held_ft = self
+                .held_ft
+                .checked_sub(amount)
+                .expect("contract sent more tokens than it held");
+            self.ft_in_flight.push_back((to, amount));
+        }
         r
+    }
+
+    /// `sender` sends `amount` tokens with `ft_transfer_call(msg)`. Returns
+    /// what the contract kept (the token contract refunds the rest).
+    fn ft_in(&mut self, sender: &AccountId, amount: u128, msg: String) -> u128 {
+        let unused = self.call(&usdc(), 0, |c| {
+            match c.ft_on_transfer(sender.clone(), U128(amount), msg) {
+                PromiseOrValue::Value(u) => u.0,
+                PromiseOrValue::Promise(_) => panic!("deposits settle synchronously"),
+            }
+        });
+        let used = amount - unused;
+        self.held_ft += used;
+        used
     }
 
     fn view<R>(&self, f: impl FnOnce(&Recourse) -> R) -> R {
         f(&self.c)
     }
 
-    fn setup() -> Self {
+    fn setup(ft: bool) -> Self {
         let mut w = World {
             c: {
                 // Every run starts from empty storage: `testing_env!` would
@@ -206,9 +249,12 @@ impl World {
                     Default::default(),
                     None,
                 ));
-                Recourse::new(config(), owner())
+                Recourse::new(config(ft), owner())
             },
             now: T0,
+            ft,
+            held_ft: 0,
+            ft_in_flight: VecDeque::new(),
             held: 0,
             worker: TeeKey::new(7),
             judge: TeeKey::new(9),
@@ -243,11 +289,16 @@ impl World {
             w.call(&acc(a), STORAGE, |c| {
                 c.register_agent("ipfs://a".into(), owner())
             });
-            w.call(&acc(a), 20 * NEAR, |c| c.post_bond());
+            w.bond(&acc(a), 20 * NEAR);
+        }
+        if ft {
+            for who in LPS.iter().chain(CLIENTS.iter()) {
+                w.call(&acc(who), 100 * NEAR, |c| c.storage_deposit(None));
+            }
         }
         for (i, v) in VAULTS.iter().enumerate() {
             w.call(&acc(v), STORAGE, |c| c.create_vault());
-            w.call(&acc(LPS[i]), 100 * NEAR, |c| c.deposit_vault(acc(v), None));
+            w.vault_deposit(&acc(LPS[i]), &acc(v), 100 * NEAR);
             let agent = acc(AGENTS[i]);
             w.call(&acc(v), STORAGE, |c| {
                 c.bind_coverage(agent, U128(60 * NEAR), 200, U64(T0 + 365 * 24 * 60 * MIN))
@@ -255,6 +306,52 @@ impl World {
         }
         w
     }
+}
+
+impl World {
+    fn bond(&mut self, agent: &AccountId, amount: u128) {
+        if self.ft {
+            self.ft_in(agent, amount, "bond".into());
+        } else {
+            self.call(agent, amount, |c| c.post_bond());
+        }
+    }
+
+    /// Returns the shares minted.
+    fn vault_deposit(&mut self, lp: &AccountId, vault: &AccountId, amount: u128) -> u128 {
+        if !self.ft {
+            return self
+                .call(lp, amount, |c| c.deposit_vault(vault.clone(), None))
+                .0;
+        }
+        let before = self
+            .view(|c| c.get_vault_shares(vault.clone(), lp.clone()))
+            .0;
+        assert_eq!(self.ft_in(lp, amount, format!("vault:{vault}")), amount);
+        self.view(|c| c.get_vault_shares(vault.clone(), lp.clone()))
+            .0
+            - before
+    }
+}
+
+/// Every `ft_transfer` the last call scheduled, as (receiver, amount).
+fn ft_transfers() -> Vec<(AccountId, u128)> {
+    get_created_receipts()
+        .into_iter()
+        .flat_map(|r| r.actions)
+        .filter_map(|a| match a {
+            MockAction::FunctionCallWeight {
+                method_name, args, ..
+            } if method_name == b"ft_transfer" => {
+                let v: serde_json::Value = serde_json::from_slice(&args).unwrap();
+                Some((
+                    v["receiver_id"].as_str().unwrap().parse().unwrap(),
+                    v["amount"].as_str().unwrap().parse().unwrap(),
+                ))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 fn transfers() -> Vec<u128> {
@@ -293,6 +390,8 @@ enum Op {
     CloseStale(usize),
     ExecutePayout(usize),
     SettleTransfer(bool),
+    SettleFt(bool),
+    ClaimOwed(usize),
 }
 
 fn op() -> impl Strategy<Value = Op> {
@@ -317,9 +416,11 @@ fn op() -> impl Strategy<Value = Op> {
         3 => pick.clone().prop_map(Op::ResolveObjective),
         2 => (pick.clone(), any::<bool>(), frac.clone()).prop_map(|(c, u, f)| Op::Rule(c, u, f)),
         3 => pick.clone().prop_map(Op::Finalize),
-        1 => pick.clone().prop_map(Op::CloseStale),
+        2 => pick.clone().prop_map(Op::CloseStale),
         3 => pick.clone().prop_map(Op::ExecutePayout),
         3 => any::<bool>().prop_map(Op::SettleTransfer),
+        3 => any::<bool>().prop_map(Op::SettleFt),
+        1 => (0usize..6).prop_map(Op::ClaimOwed),
     ]
 }
 
@@ -365,7 +466,7 @@ impl World {
             Op::PostBond(a, amt) => {
                 let b = self.view(|c| c.get_bond(acc(AGENTS[a]))).unwrap();
                 if b.amount.0 + amt >= 5 * NEAR {
-                    self.call(&acc(AGENTS[a]), amt, |c| c.post_bond());
+                    self.bond(&acc(AGENTS[a]), amt);
                 }
             }
             Op::RequestWithdrawal(a, f) => {
@@ -393,9 +494,7 @@ impl World {
                 let before = self
                     .view(|c| c.get_vault_shares(vault.clone(), acc(LPS[l])))
                     .0;
-                let shares = self
-                    .call(&acc(LPS[l]), amt, |c| c.deposit_vault(vault.clone(), None))
-                    .0;
+                let shares = self.vault_deposit(&acc(LPS[l]), &vault, amt);
                 let after = self.view(|c| c.get_vault(vault.clone())).unwrap();
                 // I7: what the new shares could be redeemed for right now is
                 // never more than what was paid in.
@@ -431,7 +530,18 @@ impl World {
                 let q = self
                     .view(|c| c.quote_job(agent.clone(), U128(cap), Some(U128(price))))
                     .unwrap();
-                if q.can_open {
+                if q.can_open && self.ft {
+                    let msg = json!({
+                        "agent": agent,
+                        "terms_hash": HexBytes([3; 32]),
+                        "liability_cap": U128(cap),
+                        "deadline": U64(now + 10 * MIN),
+                        "price": U128(price),
+                    });
+                    let deposit = q.total_deposit.unwrap().0;
+                    let used = self.ft_in(&acc(CLIENTS[cl]), deposit, format!("engagement:{msg}"));
+                    assert_eq!(used, deposit, "the quote is exactly what is kept");
+                } else if q.can_open {
                     let deposit = q.total_deposit.unwrap().0;
                     self.call(&acc(CLIENTS[cl]), deposit, |c| {
                         c.open_engagement(
@@ -516,7 +626,8 @@ impl World {
                 };
                 let amount = 1 + bps(e.liability_cap.0 - 1, f);
                 let fee = self.view(|c| c.get_storage_fees()).claim.0;
-                let deposit = recourse::math::bps_ceil(amount, 500) + fee;
+                let stake = recourse::math::bps_ceil(amount, 500);
+                let deposit = stake + fee;
                 let ok_quality = quality
                     && e.status == EngagementStatus::Delivered
                     && now <= e.delivered_at.unwrap().0 + CLAIM_WINDOW;
@@ -534,6 +645,19 @@ impl World {
                         asset_id: "near".into(),
                         recipient: e.client.to_string(),
                     };
+                    if self.ft {
+                        let msg = json!({
+                            "engagement_id": U64(id),
+                            "kind": kind,
+                            "amount": U128(amount),
+                            "evidence_hash": HexBytes([4; 32]),
+                            "evidence_uri": "ipfs://e",
+                            "destination": dest,
+                        });
+                        let used = self.ft_in(&e.client, stake + 1, format!("claim:{msg}"));
+                        assert_eq!(used, stake, "only the stake is kept");
+                        return;
+                    }
                     self.call(&e.client, deposit, |c| {
                         c.file_claim(
                             id,
@@ -587,6 +711,47 @@ impl World {
                 let stale = cl.filed_at.0 + CLAIM_WINDOW + APPEAL_WINDOW;
                 if cl.kind == ClaimKind::Quality && cl.status == ClaimStatus::Filed && now > stale {
                     self.call(&acc("anyone.near"), 0, |c| c.close_stale_claim(id));
+                }
+            }
+            Op::ExecutePayout(_) if self.ft => {}
+            Op::SettleFt(ok) => {
+                let Some((to, amount)) = self.ft_in_flight.pop_front() else {
+                    return;
+                };
+                if !ok {
+                    // The token contract keeps a refused transfer's tokens
+                    // with the sender.
+                    self.held_ft += amount;
+                }
+                let outcome = if ok {
+                    PromiseResult::Successful(vec![])
+                } else {
+                    PromiseResult::Failed
+                };
+                let mut b = VMContextBuilder::new();
+                b.current_account_id(contract())
+                    .predecessor_account_id(contract())
+                    .account_balance(NearToken::from_yoctonear(self.held))
+                    .block_timestamp(self.now);
+                testing_env!(
+                    b.build(),
+                    near_sdk::test_vm_config(),
+                    near_parameters::RuntimeFeesConfig::test(),
+                    Default::default(),
+                    vec![outcome],
+                );
+                self.c.on_ft_paid(to, U128(amount));
+                self.record_events();
+            }
+            Op::ClaimOwed(k) => {
+                let who = acc(AGENTS
+                    .iter()
+                    .chain(LPS.iter())
+                    .chain(CLIENTS.iter())
+                    .nth(k)
+                    .unwrap());
+                if self.view(|c| c.get_owed(who.clone())).0 > 0 {
+                    self.call(&who, 0, |c| c.claim_owed());
                 }
             }
             Op::ExecutePayout(p) => {
@@ -743,6 +908,21 @@ impl World {
         // I1: what the contract holds covers every liability. Money in flight
         // (a sent payout awaiting its callback) has already left.
         let s = c.solvency();
+        if self.ft {
+            assert_eq!(
+                c.get_ft_held().0,
+                self.held_ft,
+                "ft_held drifted from the token model"
+            );
+            assert!(
+                self.held_ft >= s.liabilities.0,
+                "I1 (USDC): held {} < liabilities {}",
+                self.held_ft,
+                s.liabilities.0
+            );
+            assert!(s.ok, "I1 (USDC): solvency() reports a shortfall");
+            return;
+        }
         assert!(
             self.held >= s.liabilities.0,
             "I1: held {} < liabilities {}",
@@ -790,6 +970,15 @@ fn reachable<T: Copy + PartialEq>(from: T, to: T, all: &[T], edge: impl Fn(T, T)
 /// every way an engagement, claim and payout can end — actually executed.
 #[test]
 fn random_runs_reach_every_settlement_path() {
+    reach_every_path(false);
+}
+
+#[test]
+fn random_usdc_runs_reach_every_settlement_path() {
+    reach_every_path(true);
+}
+
+fn reach_every_path(ft: bool) {
     use proptest::strategy::ValueTree;
     use proptest::test_runner::{Config, TestRng, TestRunner};
     let mut runner = TestRunner::new_with_rng(
@@ -802,7 +991,7 @@ fn random_runs_reach_every_settlement_path() {
             .new_tree(&mut runner)
             .unwrap()
             .current();
-        let mut w = World::setup();
+        let mut w = World::setup(ft);
         for op in &ops {
             w.apply(op);
             w.check();
@@ -811,6 +1000,11 @@ fn random_runs_reach_every_settlement_path() {
             *seen.entry(k).or_default() += v;
         }
     }
+    let payouts: &[&str] = if ft {
+        &["payment_failed", "owed_claimed"]
+    } else {
+        &["payout_sent", "payout_confirmed", "payout_retry"]
+    };
     for path in [
         "withdrawal_requested",
         "bond_withdrawn",
@@ -827,12 +1021,12 @@ fn random_runs_reach_every_settlement_path() {
         "claim_finalized",
         "slashed",
         "claim_timed_out",
-        "payout_sent",
-        "payout_confirmed",
-        "payout_retry",
-    ] {
+    ]
+    .iter()
+    .chain(payouts)
+    {
         assert!(
-            seen.get(path).copied().unwrap_or(0) > 0,
+            seen.get(*path).copied().unwrap_or(0) > 0,
             "path never exercised: {path}; saw {seen:?}"
         );
     }
@@ -843,7 +1037,17 @@ proptest! {
 
     #[test]
     fn eight_invariants_hold_after_every_step(ops in prop::collection::vec(op(), 50)) {
-        let mut w = World::setup();
+        let mut w = World::setup(false);
+        w.check();
+        for op in &ops {
+            w.apply(op);
+            w.check();
+        }
+    }
+
+    #[test]
+    fn eight_invariants_hold_in_usdc_mode(ops in prop::collection::vec(op(), 50)) {
+        let mut w = World::setup(true);
         w.check();
         for op in &ops {
             w.apply(op);

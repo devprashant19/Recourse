@@ -402,3 +402,73 @@ fn native_file_claim_is_refused_in_ft_mode() {
         destination(),
     );
 }
+
+#[test]
+fn usdc_quotes_ask_for_price_and_premium_only() {
+    let c = ft_ready();
+    let q = c.quote_job(agent(), U128(CAP), Some(U128(PRICE))).unwrap();
+    assert_eq!(
+        q.total_deposit,
+        Some(U128(PRICE + q.premium.unwrap().0)),
+        "storage comes from the NEP-145 balance, not the token deposit"
+    );
+    assert!(q.storage_fee.0 > 0);
+}
+
+// ----- adversarial messages -------------------------------------------------
+
+#[test]
+#[should_panic(expected = "bad engagement message")]
+fn engagement_amounts_must_be_strings_not_json_numbers() {
+    let mut c = ft_ready();
+    let msg = json!({
+        "agent": agent(),
+        "terms_hash": "09".repeat(32),
+        "liability_cap": CAP as u64,
+        "deadline": DEADLINE,
+        "price": PRICE as u64,
+    });
+    deposit(&mut c, &client(), 10 * USDC, format!("engagement:{msg}"));
+}
+
+#[test]
+#[should_panic(expected = "agent has no coverage")]
+fn usdc_engagement_for_an_uncovered_agent_is_refused() {
+    let mut c = ft_contract();
+    register(&mut c, &agent());
+    deposit(&mut c, &agent(), BOND, "bond".into());
+    prepay_storage(&mut c, &client());
+    deposit(&mut c, &client(), 10 * USDC, engagement_msg(CAP, PRICE));
+}
+
+#[test]
+#[should_panic(expected = "engagement not found")]
+fn usdc_claim_on_an_unknown_engagement_is_refused() {
+    let mut c = ft_ready();
+    deposit(&mut c, &client(), USDC, claim_msg(42, CAP));
+}
+
+#[test]
+#[should_panic(expected = "bad vault account")]
+fn vault_message_with_an_invalid_account_is_refused() {
+    let mut c = ft_ready();
+    deposit(&mut c, &lp(), USDC, "vault:UW.near ".into());
+}
+
+#[test]
+fn deposits_of_every_kind_add_up_in_ft_held_and_totals() {
+    let mut c = ft_ready();
+    let id = ft_open_job(&mut c);
+    let t = c.get_totals();
+    let s = c.solvency();
+    assert_eq!(
+        c.get_ft_held().0,
+        t.bonds.0 + t.vault_capital.0 + t.escrow.0,
+        "every unit held is someone's"
+    );
+    assert_eq!(s.held, c.get_ft_held());
+    assert_eq!(s.storage_reserved, U128(0), "NEAR storage is not the token");
+    assert_eq!(s.surplus, U128(0));
+    assert!(s.ok);
+    assert_eq!(c.get_engagement(id).unwrap().status, EngagementStatus::Open);
+}
