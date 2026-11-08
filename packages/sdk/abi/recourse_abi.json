@@ -7,7 +7,7 @@
       "compiler": "rustc 1.95.0",
       "builder": "cargo-near cargo-near-build 0.11.5"
     },
-    "wasm_hash": "6BMr81beGEu7MqAZmBrCQo4CkkP54ughdz76RW5wk9tp"
+    "wasm_hash": "Hvig58WhEMTpSctWnAKqpTZQuG83JhjudSGegTm34MSr"
   },
   "body": {
     "functions": [
@@ -192,6 +192,33 @@
                 "type": "integer",
                 "format": "uint64",
                 "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "commit_bid",
+        "doc": " The caller's vault commits a sealed bid: `commitment` is\n `bid_commitment(premium_bps, salt, caller)`. Attach\n `BID_COMMIT_DEPOSIT` plus storage for the bid (the rest is refunded).\n Only before the commit deadline, once per underwriter, never on the\n caller's own round, at most `MAX_BIDS_PER_ROUND` bids.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "round",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "commitment",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes32"
               }
             }
           ]
@@ -626,6 +653,36 @@
         }
       },
       {
+        "name": "get_bid_capacity",
+        "doc": " Most `vault` could newly promise `agent` now (what a reveal or a\n settlement checks the round's limit against).",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "vault",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "agent",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
         "name": "get_bond",
         "kind": "view",
         "params": {
@@ -800,6 +857,34 @@
         }
       },
       {
+        "name": "get_open_round",
+        "doc": " The agent's open (unsettled) round, if any.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "agent",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
         "name": "get_owed",
         "doc": " Bond-asset units owed to `account` after refused transfers.",
         "kind": "view",
@@ -849,6 +934,29 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      {
+        "name": "get_pending_limit",
+        "doc": " Limits of `vault`'s revealed bids in rounds not yet settled.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "vault",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
           }
         }
       },
@@ -1293,6 +1401,33 @@
         }
       },
       {
+        "name": "open_bond_request",
+        "doc": " The caller, a registered and bonded agent, asks underwriters to bid\n for its coverage up to `limit`. Commits are taken until\n `now + bid_commit_window`, reveals for `bid_reveal_window` after\n that. Attach storage for the round (the rest is refunded). One open\n round per agent; none while paused.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
         "name": "open_engagement",
         "doc": " Proposes one job to `agent`. Attach `price + premium + storage fee`\n (`quote_job` returns the exact figure); any excess is refunded. The\n money is escrowed; liability is locked only when the agent accepts.\n\n `price` is explicit rather than inferred from the deposit so that a\n premium change between quoting and signing makes the call fail instead\n of silently shrinking what the agent is paid.",
         "kind": "call",
@@ -1652,6 +1787,62 @@
         }
       },
       {
+        "name": "reveal_bid",
+        "doc": " Reveals the caller's bid: `bid_commitment(premium_bps, salt, caller)`\n must equal its commitment. Only between the commit and reveal\n deadlines (inclusive), once. The premium must be at least the agent's\n floor from `pricing.rs` and at most 100%, and the vault must be able\n to cover the round's limit (see `bid_capacity`). A valid reveal\n refunds the commit deposit at once and reserves the limit against the\n vault until the round settles.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "round",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "premium_bps",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "salt",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes32"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "settle_round",
+        "doc": " Anyone, after the reveal deadline. The lowest revealed premium wins,\n ties going to the earliest commit, among bids still valid now: the\n premium at least the agent's current floor and the vault still able\n to cover the limit (`bid_capacity`, after releasing this round's own\n promises). The winner's coverage is written as `bind_coverage` writes\n it, for `COVERAGE_TERM_NS`; no valid bid means `Failed`. Unrevealed\n commit deposits are forfeited to the agent. Works while paused, so\n deposits and promises are never stuck.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "round",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/BidRound"
+          }
+        }
+      },
+      {
         "name": "solvency",
         "doc": " Both sides of invariant I1. `ok` holds when what the contract holds,\n less what the runtime reserves for storage, covers every liability.",
         "kind": "view",
@@ -1950,16 +2141,56 @@
             }
           }
         },
+        "Bid": {
+          "description": "One underwriter's sealed bid in a round.",
+          "type": "object",
+          "required": [
+            "commitment",
+            "committed_at",
+            "deposit",
+            "underwriter"
+          ],
+          "properties": {
+            "commitment": {
+              "description": "`sha256(premium_bps (u32 BE) || salt (32 B) || underwriter)` (T12).",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/HexBytes32"
+                }
+              ]
+            },
+            "committed_at": {
+              "type": "string"
+            },
+            "deposit": {
+              "description": "Commit deposit (yoctoNEAR) still held: refunded on a valid reveal, forfeited to the round's agent if never revealed. 0 once returned.",
+              "type": "string"
+            },
+            "premium_bps": {
+              "description": "Set by a valid reveal.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "underwriter": {
+              "description": "The vault's underwriter (vaults are keyed by their underwriter).",
+              "type": "string"
+            }
+          }
+        },
         "BidRound": {
-          "description": "Sealed-bid round for coverage. Defined now so the state layout is final; the methods that use it arrive in Phase 4.",
+          "description": "Sealed-bid round for an agent's coverage (`open_bond_request`).",
           "type": "object",
           "required": [
             "agent",
+            "bids",
             "commit_deadline",
-            "commits",
+            "opened_at",
             "requested_limit",
             "reveal_deadline",
-            "reveals",
             "status"
           ],
           "properties": {
@@ -1967,26 +2198,18 @@
               "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
               "type": "string"
             },
+            "bids": {
+              "description": "In commit order, which is the tie-break (earliest wins).",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Bid"
+              }
+            },
             "commit_deadline": {
               "type": "string"
             },
-            "commits": {
-              "description": "sha256(premium_bps || salt || underwriter) — commit-reveal blocks bid copying (T12).",
-              "type": "array",
-              "items": {
-                "type": "array",
-                "items": [
-                  {
-                    "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
-                    "type": "string"
-                  },
-                  {
-                    "$ref": "#/definitions/HexBytes32"
-                  }
-                ],
-                "maxItems": 2,
-                "minItems": 2
-              }
+            "opened_at": {
+              "type": "string"
             },
             "requested_limit": {
               "type": "string"
@@ -1994,27 +2217,18 @@
             "reveal_deadline": {
               "type": "string"
             },
-            "reveals": {
-              "type": "array",
-              "items": {
-                "type": "array",
-                "items": [
-                  {
-                    "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer",
-                    "format": "uint32",
-                    "minimum": 0.0
-                  }
-                ],
-                "maxItems": 2,
-                "minItems": 2
-              }
-            },
             "status": {
               "$ref": "#/definitions/RoundStatus"
+            },
+            "winner": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/RoundWinner"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           }
         },
@@ -2818,13 +3032,48 @@
           }
         },
         "RoundStatus": {
-          "type": "string",
-          "enum": [
-            "Committing",
-            "Revealing",
-            "Settled",
-            "Failed"
+          "description": "Stored state of a round. Whether it is committing, revealing or ready to settle follows from the block time (`BidRound::phase`).",
+          "oneOf": [
+            {
+              "description": "Accepting commits, then reveals, until settled.",
+              "type": "string",
+              "enum": [
+                "Open"
+              ]
+            },
+            {
+              "description": "A winner's coverage was written.",
+              "type": "string",
+              "enum": [
+                "Settled"
+              ]
+            },
+            {
+              "description": "Settled with no valid, coverable bid.",
+              "type": "string",
+              "enum": [
+                "Failed"
+              ]
+            }
           ]
+        },
+        "RoundWinner": {
+          "type": "object",
+          "required": [
+            "premium_bps",
+            "vault"
+          ],
+          "properties": {
+            "premium_bps": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "vault": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            }
+          }
         },
         "SignatureKind": {
           "oneOf": [
@@ -2872,6 +3121,7 @@
           "description": "Both sides of invariant I1, as returned by `solvency()`.",
           "type": "object",
           "required": [
+            "bid_deposits",
             "bonds",
             "claim_stakes",
             "escrow",
@@ -2887,6 +3137,10 @@
             "vault_capital"
           ],
           "properties": {
+            "bid_deposits": {
+              "description": "Underwriting commit deposits held (yoctoNEAR).",
+              "type": "string"
+            },
             "bonds": {
               "type": "string"
             },
@@ -2986,6 +3240,7 @@
           "description": "Running sums of every bucket of money the contract owes someone — the right-hand side of invariant I1. Kept in step with the individual records on every write; the invariant tests check both agree.",
           "type": "object",
           "required": [
+            "bid_deposits",
             "bonds",
             "claim_stakes",
             "escrow",
@@ -2993,6 +3248,10 @@
             "vault_capital"
           ],
           "properties": {
+            "bid_deposits": {
+              "description": "Underwriting commit deposits held (always yoctoNEAR, whatever the bond asset): refunded on reveal or forfeited to the round's agent.",
+              "type": "string"
+            },
             "bonds": {
               "description": "Sum of `Bond::amount`.",
               "type": "string"
