@@ -18,10 +18,11 @@
 
 use near_sdk::json_types::{U128, U64};
 use near_sdk::serde_json::json;
-use near_sdk::{env, near, require, AccountId};
+use near_sdk::{env, near, require, AccountId, NearToken, Promise};
 
 use crate::events::Event;
-use crate::math::add;
+use crate::math::{add, bps_floor, sub};
+use crate::pricing::premium_floor_bps;
 use crate::storage::refund;
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
@@ -138,6 +139,10 @@ impl Recourse {
             premium_bps: None,
         });
         self.rounds.insert(round, r);
+        if !self.pending_limits.contains_key(&underwriter) {
+            // Created now so the committer pays its storage; reveal updates it.
+            self.pending_limits.insert(underwriter.clone(), 0);
+        }
         self.totals.bid_deposits = U128(add(
             self.totals.bid_deposits.0,
             BID_COMMIT_DEPOSIT,
@@ -154,6 +159,69 @@ impl Recourse {
         refund(unused);
     }
 
+    /// Reveals the caller's bid: `bid_commitment(premium_bps, salt, caller)`
+    /// must equal its commitment. Only between the commit and reveal
+    /// deadlines (inclusive), once. The premium must be at least the agent's
+    /// floor from `pricing.rs` and at most 100%, and the vault must be able
+    /// to cover the round's limit (see `bid_capacity`). A valid reveal
+    /// refunds the commit deposit at once and reserves the limit against the
+    /// vault until the round settles.
+    pub fn reveal_bid(&mut self, round: RoundId, premium_bps: u32, salt: Hash) {
+        let underwriter = env::predecessor_account_id();
+        let mut r = self.round_of(round);
+        let now = env::block_timestamp();
+        match r.phase(now) {
+            RoundPhase::Revealing => {}
+            RoundPhase::Committing => env::panic_str("reveals open after the commit deadline"),
+            _ => env::panic_str("reveal window closed"),
+        }
+        let i = r
+            .bids
+            .iter()
+            .position(|b| b.underwriter == underwriter)
+            .unwrap_or_else(|| env::panic_str("no bid from this underwriter"));
+        require!(r.bids[i].premium_bps.is_none(), "already revealed");
+        require!(
+            bid_commitment(premium_bps, &salt, &underwriter) == r.bids[i].commitment,
+            "reveal does not match the commitment"
+        );
+        let floor = premium_floor_bps(&self.agent_of(&r.agent).stats);
+        require!(
+            premium_bps >= floor,
+            format!("premium_bps below the agent's floor of {floor}")
+        );
+        require!(premium_bps <= BPS_DENOM, "premium_bps above 100%");
+        let limit = r.requested_limit.0;
+        require!(
+            limit <= self.bid_capacity(&underwriter, &r.agent),
+            "vault cannot cover the limit"
+        );
+
+        let deposit = r.bids[i].deposit.0;
+        r.bids[i].premium_bps = Some(premium_bps);
+        r.bids[i].deposit = U128(0);
+        self.rounds.insert(round, r);
+        let pending = self.pending_limits.get(&underwriter).copied().unwrap_or(0);
+        self.pending_limits
+            .insert(underwriter.clone(), add(pending, limit, "pending limits"));
+        self.totals.bid_deposits = U128(sub(self.totals.bid_deposits.0, deposit, "bid deposits"));
+
+        Event::BidRevealed.emit(json!({
+            "round": U64(round),
+            "underwriter": underwriter,
+            "premium_bps": premium_bps,
+            "deposit_refunded": U128(deposit),
+        }));
+        Promise::new(underwriter)
+            .transfer(NearToken::from_yoctonear(deposit))
+            .detach();
+    }
+
+    /// Limits of `vault`'s revealed bids in rounds not yet settled.
+    pub fn get_pending_limit(&self, vault: AccountId) -> U128 {
+        U128(self.pending_limits.get(&vault).copied().unwrap_or(0))
+    }
+
     /// The agent's open (unsettled) round, if any.
     pub fn get_open_round(&self, agent: AccountId) -> Option<RoundId> {
         self.open_rounds.get(&agent).copied()
@@ -161,6 +229,30 @@ impl Recourse {
 }
 
 impl Recourse {
+    /// Most `vault` can newly promise `agent`: within the per-agent exposure
+    /// cap (`max_vault_exposure_bps` of capital, less what is already locked
+    /// for this agent there) and within unlocked capital not already
+    /// promised to other unsettled rounds.
+    pub(crate) fn bid_capacity(&self, vault: &AccountId, agent: &AccountId) -> u128 {
+        let Some(v) = self.vaults.get(vault) else {
+            return 0;
+        };
+        let exposure = self
+            .agent_exposure
+            .get(&(vault.clone(), agent.clone()))
+            .copied()
+            .unwrap_or(0);
+        let cap =
+            bps_floor(v.capital.0, self.config.max_vault_exposure_bps).saturating_sub(exposure);
+        let pending = self.pending_limits.get(vault).copied().unwrap_or(0);
+        let free = v
+            .capital
+            .0
+            .saturating_sub(v.locked.0)
+            .saturating_sub(pending);
+        cap.min(free)
+    }
+
     pub(crate) fn round_of(&self, round: RoundId) -> BidRound {
         self.rounds
             .get(&round)

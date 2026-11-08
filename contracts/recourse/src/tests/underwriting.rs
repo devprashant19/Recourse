@@ -387,3 +387,197 @@ fn rounds_are_bounded() {
         commit(&mut c, r, &u, 300, 1, T0 + 1);
     }
 }
+
+// ----- commit 4: reveal_bid --------------------------------------------------
+
+/// First moment of the reveal window for a round opened at `T0`.
+pub fn reveal_at(c: &crate::Recourse, r: RoundId) -> u64 {
+    c.get_round(r).unwrap().commit_deadline.0 + 1
+}
+
+pub fn reveal(
+    c: &mut crate::Recourse,
+    r: RoundId,
+    who: &near_sdk::AccountId,
+    premium: u32,
+    s: u8,
+    at: u64,
+) {
+    ctx(who, 0, at);
+    c.reveal_bid(r, premium, salt(s));
+}
+
+/// Round for `limit` with `uw` committed at 300 bps (salt 1).
+fn committed(limit: u128) -> (crate::Recourse, RoundId) {
+    let mut c = market();
+    let r = open_round(&mut c, limit);
+    commit(&mut c, r, &uw(), 300, 1, T0 + 1);
+    (c, r)
+}
+
+#[test]
+fn a_matching_reveal_records_the_premium_and_refunds_the_deposit() {
+    let (mut c, r) = committed(10 * ONE_NEAR);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), 300, 1, at);
+    let b = c.get_round(r).unwrap().bids[0].clone();
+    assert_eq!(b.premium_bps, Some(300));
+    assert_eq!(b.deposit, U128(0));
+    assert_eq!(c.get_totals().bid_deposits, U128(0));
+    assert_eq!(transfers(), vec![(uw(), BID_COMMIT_DEPOSIT)]);
+    assert_eq!(c.get_pending_limit(uw()), U128(10 * ONE_NEAR));
+    assert_eq!(events()[0]["event"], "bid_revealed");
+    assert!(c.solvency().ok);
+}
+
+#[test]
+#[should_panic(expected = "reveal does not match the commitment")]
+fn a_reveal_with_another_premium_fails() {
+    let (mut c, r) = committed(ONE_NEAR);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), 299, 1, at);
+}
+
+#[test]
+#[should_panic(expected = "reveal does not match the commitment")]
+fn a_reveal_with_another_salt_fails() {
+    let (mut c, r) = committed(ONE_NEAR);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), 300, 9, at);
+}
+
+#[test]
+#[should_panic(expected = "no bid from this underwriter")]
+fn only_committed_underwriters_reveal() {
+    let (mut c, r) = committed(ONE_NEAR);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw2(), 300, 1, at);
+}
+
+#[test]
+#[should_panic(expected = "reveals open after the commit deadline")]
+fn no_reveal_during_the_commit_window() {
+    let (mut c, r) = committed(ONE_NEAR);
+    reveal(&mut c, r, &uw(), 300, 1, T0 + 2);
+}
+
+#[test]
+fn a_reveal_exactly_at_the_reveal_deadline_counts() {
+    let (mut c, r) = committed(ONE_NEAR);
+    let at = c.get_round(r).unwrap().reveal_deadline.0;
+    reveal(&mut c, r, &uw(), 300, 1, at);
+}
+
+#[test]
+#[should_panic(expected = "reveal window closed")]
+fn a_reveal_after_the_deadline_fails() {
+    let (mut c, r) = committed(ONE_NEAR);
+    let at = c.get_round(r).unwrap().reveal_deadline.0 + 1;
+    reveal(&mut c, r, &uw(), 300, 1, at);
+}
+
+#[test]
+#[should_panic(expected = "already revealed")]
+fn a_bid_is_revealed_once() {
+    let (mut c, r) = committed(ONE_NEAR);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), 300, 1, at);
+    reveal(&mut c, r, &uw(), 300, 1, at);
+}
+
+#[test]
+#[should_panic(expected = "premium_bps below the agent's floor")]
+fn a_bid_under_the_premium_floor_fails() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    let floor = c.get_agent_score(agent()).unwrap().premium_floor_bps;
+    commit(&mut c, r, &uw(), floor - 1, 1, T0 + 1);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), floor - 1, 1, at);
+}
+
+#[test]
+fn a_bid_at_exactly_the_floor_is_valid() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    let floor = c.get_agent_score(agent()).unwrap().premium_floor_bps;
+    commit(&mut c, r, &uw(), floor, 1, T0 + 1);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), floor, 1, at);
+}
+
+#[test]
+#[should_panic(expected = "premium_bps above 100%")]
+fn a_premium_above_100_percent_fails() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    commit(&mut c, r, &uw(), 10_001, 1, T0 + 1);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), 10_001, 1, at);
+}
+
+/// 25% of `uw`'s actual capital (a little over 100 NEAR: the LP's surplus
+/// storage money stays in the vault).
+fn cap_of_uw(c: &crate::Recourse) -> u128 {
+    crate::math::bps_floor(c.get_vault(uw()).unwrap().capital.0, 2_500)
+}
+
+/// Round for `uw`'s cap plus `extra`, with `uw` committed at 300 bps.
+fn committed_at_cap(extra: u128) -> (crate::Recourse, RoundId) {
+    let mut c = market();
+    let limit = cap_of_uw(&c) + extra;
+    let r = open_round(&mut c, limit);
+    commit(&mut c, r, &uw(), 300, 1, T0 + 1);
+    (c, r)
+}
+
+#[test]
+#[should_panic(expected = "vault cannot cover the limit")]
+fn a_limit_above_the_25_percent_exposure_cap_fails() {
+    let (mut c, r) = committed_at_cap(1);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), 300, 1, at);
+}
+
+#[test]
+fn a_limit_at_exactly_the_exposure_cap_is_coverable() {
+    let (mut c, r) = committed_at_cap(0);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), 300, 1, at);
+}
+
+#[test]
+#[should_panic(expected = "vault cannot cover the limit")]
+fn concurrent_rounds_cannot_promise_the_same_capital_twice() {
+    // Five agents each ask for the per-agent cap (25%) from one vault: four
+    // reveals promise all its unlocked capital, the fifth must fail.
+    let mut c = market();
+    let mut rounds = Vec::new();
+    for i in 0..5 {
+        let a = acc(&format!("agent{i}.near"));
+        register_bonded(&mut c, &a, 10 * ONE_NEAR);
+        ctx(&a, STORAGE_DEPOSIT, T0);
+        let r = c.open_bond_request(U128(cap_of_uw(&c)));
+        commit(&mut c, r, &uw(), 300, i as u8, T0 + 1);
+        rounds.push(r);
+    }
+    for (i, r) in rounds.into_iter().enumerate() {
+        let at = reveal_at(&c, r);
+        reveal(&mut c, r, &uw(), 300, i as u8, at);
+    }
+}
+
+#[test]
+#[should_panic(expected = "vault cannot cover the limit")]
+fn locked_capital_is_not_offered_again() {
+    let mut c = market();
+    // Lock 80 NEAR of uw's capital directly.
+    let mut v = c.get_vault(uw()).unwrap();
+    v.locked = U128(80 * ONE_NEAR);
+    c.vaults.insert(uw(), v);
+    let cap = cap_of_uw(&c);
+    let r = open_round(&mut c, cap);
+    commit(&mut c, r, &uw(), 300, 1, T0 + 1);
+    let at = reveal_at(&c, r);
+    reveal(&mut c, r, &uw(), 300, 1, at);
+}
