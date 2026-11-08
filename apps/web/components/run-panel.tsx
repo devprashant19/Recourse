@@ -5,12 +5,18 @@ import { useEffect, useRef, useState } from "react";
 
 import { Pill } from "@/components/ui";
 import { api, type RunScenario, type RunStatus } from "@/lib/api";
+import { amount } from "@/lib/format";
 
 const SOURCE: Record<string, string> = {
   "fixture:genuine": "genuine NEAR AI Cloud recordings (TEE-signed, Intel-verified)",
   "fixture:dev": "dev fixtures (no TEE; labelled dev-fixture)",
   live: "live NEAR AI Cloud",
 };
+
+/** Scenario reports carry raw yocto amounts ("premium 40000000000000000000000"); show them as NEAR. */
+function readable(s: string): string {
+  return s.replace(/-?\d{19,}/g, (m) => amount(m));
+}
 
 function time(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—";
@@ -114,7 +120,7 @@ export function RunPanel() {
                     <td className="py-2 pr-3 font-mono text-xs">{s.id}</td>
                     <td className="py-2 pr-3 font-medium">{s.name}</td>
                     <td className="hidden py-2 pr-3 text-xs text-dim md:table-cell">{s.expected}</td>
-                    <td className="py-2 pr-3 text-xs">{s.actual ?? (s.state === "running" ? "in progress…" : "")}</td>
+                    <td className="py-2 pr-3 text-xs">{s.actual ? readable(s.actual) : s.state === "running" ? "in progress…" : ""}</td>
                     <td className="py-2 pr-3 text-right text-xs">{s.txs ?? ""}</td>
                     <td className="py-2 text-right">
                       <Result s={s} />

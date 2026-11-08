@@ -55,7 +55,7 @@ export function Money({ value, moving = false, className = "" }: { value: string
 
 export function Pill({ children, tone = "plain" }: { children: ReactNode; tone?: "plain" | "good" | "bad" | "warn" }) {
   const c = { plain: "border-line text-dim", good: "border-money/40 text-money", bad: "border-bad/40 text-bad", warn: "border-warn/40 text-warn" }[tone];
-  return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${c}`}>{children}</span>;
+  return <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${c}`}>{children}</span>;
 }
 
 export function statusTone(s: string | undefined): "plain" | "good" | "bad" | "warn" {

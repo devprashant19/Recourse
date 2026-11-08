@@ -38,8 +38,10 @@ body {
 .btn {
   @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-panel px-3 py-2 text-sm font-medium hover:border-ink/40 disabled:opacity-50;
 }
+/* Spelled out, not `@apply btn`: inheriting .btn brought its bg-panel along, and Tailwind ordered it
+   after bg-ink, so primary buttons rendered light text on a white background (invisible). */
 .btn-primary {
-  @apply btn border-ink bg-ink text-bg hover:opacity-90;
+  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-ink bg-ink px-3 py-2 text-sm font-medium text-bg hover:opacity-90 disabled:opacity-50;
 }
 .label {
   @apply text-xs font-medium uppercase tracking-wide text-dim;
