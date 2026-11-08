@@ -459,7 +459,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 19. `test(integration): validate bogus claim rejection and stake distribution`
 
-- **Commit:** (this commit)
+- **Commit:** `dae15a4`
 - **Did:** `demo/scenarios/04-bogus-claim.ts` (`pnpm scenario:04`) on the local sandbox with the real
   worker and arbiter in-process. Flow:
   1. The worker delivers correct work on document 03; the receipt is verified on-chain.
@@ -481,6 +481,35 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   this run proves the plumbing, the on-chain verification and the money flow. It does not prove that a
   real LLM resists the injection; that is what `t15` tests at the code layer, and what live recordings
   will measure.
+
+### 20. `chore(deploy): add Phase 2 testnet service configuration`
+
+- **Commit:** (this commit)
+- **Did:**
+  - **Least-privilege keys** (`scripts/lib/service-keys.ts`):
+    - worker: `accept_engagement` and `submit_receipt`;
+    - arbiter: `resolve_claim`;
+    - keeper: `execute_payout` and `register_signer`.
+
+    A test proves no service key includes a payable method. Function-call keys cannot attach deposits,
+    and the old `.env.example` comment listing `register_agent` / `post_bond` for the agent key is
+    corrected.
+  - **`pnpm setup-service-keys`** adds each function-call key with a bounded 2 NEAR gas allowance,
+    writes the private keys to `.data/<network>-fc-keys.json` (mode 600), and prints none.
+  - **`pnpm register-tee-signer`** attests the live model with a fresh nonce and verifies the TDX quote
+    (dcap-qvl) plus the signer and nonce binding. It refuses to register anything unless a TEE verified,
+    then calls `register_signer` with `attestation_hash = sha256(report)` and saves the report locally.
+  - **`.env.example`**: placeholders for every Phase 2 variable (polling, state files, documents, admin
+    token and port), with a test that no secret-like variable has a value.
+  - **`docs/services.md`**: per-mode backends, keys, the testnet sequence, logs, health, state,
+    artifacts and the sabotage switch. Mainnet: live only, fixtures and sabotage refused, never
+    deployed automatically.
+- **Files:** `scripts/{setup-service-keys,register-tee-signer}.ts`, `scripts/lib/service-keys.ts`,
+  `.env.example`, `docs/services.md`, `packages/adapters/test/config-hygiene.test.ts`, `package.json`
+- **Tests:** 3 (no secret values in `.env.example`; every service variable documented; per-service
+  method lists exact and deposit-free). `register-tee-signer` without credentials refuses (run).
+- **Ran:** `vitest` (3 passed), root `tsc --noEmit`, `eslint`: clean.
+- **Evidence:** unit-tested. **Not run against testnet** (no testnet account or NEAR AI key here).
 
 ---
 
