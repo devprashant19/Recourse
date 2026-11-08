@@ -314,7 +314,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 14. `feat(arbiter): add verdict replay and injection resistance tests`
 
-- **Commit:** (this commit)
+- **Commit:** `e25ce3c`
 - **Did:**
   - **Grounding tightened.** Writing T15 showed that a model persuaded "the agent was correct" could
     still emit a self-consistent verdict. `checkVerdict` now also checks facts the code knows:
@@ -344,6 +344,30 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   - Real-model injection resistance is not measured here; that needs a live NEAR AI model.
   - The CLI entry point (`pnpm rerun-verdict`) is wired with the mode backends.
 
+### 15. `feat(adapters): introduce live and fixture service adapters`
+
+- **Commit:** (this commit)
+- **Did:** `@recourse/adapters`: fixture-set format (`demo/fixtures/<set>/fixtures.json`; `kind`
+  `genuine` or `dev`; per model the recorded nonce, report and Intel verdicts by quote hash; per
+  interaction the request hash, chat id, raw response and signature payload) with strict validation;
+  `FixtureNearAiClient` replays **only** recorded requests (by exact request hash; missing → error,
+  never an invented response) and a report only for its recorded nonce; `RecordedQuoteVerifier`
+  (genuine: Intel's recorded dcap-qvl verdict, `report_data` re-read from the quote) and
+  `DevFixtureQuoteVerifier` (no Intel signature; binding still checked); both name themselves in every
+  receipt's `attestation.verifier`. `selectBackend(mode)`: sandbox → fixtures (genuine set preferred,
+  else dev set; keyless), testnet → live NEAR AI Cloud + dcap-qvl, mainnet → live only (fixtures refused).
+  Receipt policy travels with the backend (`requireAttestation: false` only for dev fixtures).
+  `NearAiClient.fixedNonce?` hook added in receipts: replay must use the recorded nonce; the live client
+  never implements it, so live attestation always uses a fresh CSPRNG nonce.
+- **Files:** `packages/adapters/{package.json,src/{fixtures,verifiers,select,index}.ts,test/adapters.test.ts}`,
+  `packages/receipts/src/{types,attestation}.ts`, `pnpm-lock.yaml`
+- **Tests:** 10 (genuine replay through the full verified flow; tampered recorded response refused by
+  the signature check; missing fixture / chat id; wrong nonce; dev verifier labelled in receipt;
+  unrecorded quote not trusted; four malformed-set rejections; sandbox selection genuine-vs-dev
+  keyless; testnet/mainnet live-only and key required; sandbox without fixtures fails clearly).
+- **Ran:** `vitest run packages` (136 passed), `tsc --noEmit` (packages), `eslint` — clean.
+- **Evidence:** unit-tested.
+
 ---
 
 ## Deviations from the spec
@@ -355,6 +379,14 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   document against `terms_hash` before consenting, so it never locks liability for work it cannot verify.
 - **Job terms live in `@recourse/jobs`**, a new small package, because worker, arbiter and scenarios
   all need the same terms, hashing and award rule.
+- **Fixture replay pins the recorded nonce.** A recorded attestation report binds the nonce sent when it
+  was recorded, so a replay cannot bind a fresh one. Fixture mode exercises every other check
+  (signature, hashes, binding) against recorded bytes; fresh-nonce attestation is exercised in live mode.
+- **Dev fixtures.** With no NEAR AI Cloud key available, sandbox runs on a `dev` set signed by the
+  repo's throwaway test-TEE key; its receipts say `dev-fixture: no Intel signature, no TEE` and are
+  verified with `requireAttestation: false`, in sandbox only. A genuine set (`demo/fixtures/near-ai/`)
+  takes precedence automatically once recorded.
+- **Intents adapters** (spec section 5 mentions `intents/`) arrive with Phase 3, where 1Click exists.
 
 ## Open items
 

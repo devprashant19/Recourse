@@ -114,6 +114,12 @@ export interface NearAiClient {
   /** POSTs exactly `requestBody`; returns exactly the bytes received. */
   chatCompletion(requestBody: Uint8Array): Promise<Uint8Array>;
   signature(chatId: string, model: string): Promise<SignaturePayload>;
+  /**
+   * Replay adapters only: the nonce a recorded report is bound to. A live
+   * client never implements this, so live attestation always uses a fresh
+   * CSPRNG nonce.
+   */
+  fixedNonce?(model: string): string | undefined;
 }
 
 /** Where raw artifacts are kept; returns the URI to put in the receipt. */

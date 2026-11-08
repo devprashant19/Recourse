@@ -96,7 +96,8 @@ export interface FetchedAttestation {
 
 /** Generates a fresh nonce, then fetches and parses the report bound to it. */
 export async function fetchAttestation(client: NearAiClient, model: string): Promise<FetchedAttestation> {
-  const nonce = newNonce();
+  const nonce = client.fixedNonce?.(model) ?? newNonce();
+  if (!isNonce(nonce)) throw new Error("nonce must be 64 lowercase hex chars");
   const bytes = await client.attestationReport(model, nonce);
   const report = parseAttestationReport(bytes);
   return { nonce, model, bytes, report_hash: sha256Hex(bytes), report };

@@ -1,11 +1,11 @@
 /**
- * @recourse/adapters
+ * @recourse/adapters — live and fixture implementations of the NEAR AI
+ * Cloud receipt services, chosen by RECOURSE_MODE. Fixtures change where
+ * bytes come from, never whether they are verified. (The 1Click / Intents
+ * twins arrive with Phase 3.)
  *
- * Live vs fixture implementations of receipts/ and intents/, chosen by RECOURSE_MODE.
- *
- * Built in: Phase 2
- * Spec: phases/phase-02-receipts-worker-arbiter.md
+ * Spec: phases/phase-02-receipts-worker-arbiter.md section 5.
  */
-
-export const PLACEHOLDER = true;
-// TODO(Phase 2): implement.
+export * from "./fixtures.js";
+export * from "./verifiers.js";
+export * from "./select.js";

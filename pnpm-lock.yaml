@@ -38,7 +38,11 @@ importers:
 
   apps/web: {}
 
-  packages/adapters: {}
+  packages/adapters:
+    dependencies:
+      '@recourse/receipts':
+        specifier: workspace:^
+        version: link:../receipts
 
   packages/config: {}
 
