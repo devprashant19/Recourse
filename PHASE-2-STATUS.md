@@ -132,7 +132,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 6. `feat(receipts): build canonical receipts and export verification API`
 
-- **Commit:** (this commit)
+- **Commit:** `55fd12c`
 - **Did:** `receiptHash = sha256(JCS(receipt))` (RFC 8785 via `canonicalize`). `attestedCompletion`
   runs the four steps in the spec's order (fresh-nonce attestation, verified signers required →
   raw-byte completion → signature checked against those exact hashes and signers → receipt) and
@@ -159,6 +159,28 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 - **Ran:** `vitest run packages/receipts` (61 passed), `tsc --noEmit` (package and root), `eslint` —
   clean. One test first failed because a `JSON.stringify` replacer array also filtered nested keys;
   the test was fixed, not the code.
+- **Evidence:** unit-tested.
+
+### 7. `feat(demo): add structured extraction documents and ground truth`
+
+- **Commit:** (this commit)
+- **Did:** five fictional invoices in `demo/documents` with deliberately different layouts (Markdown
+  tables, dotted plain text with long-form dates, usage statement, fixed-width freight invoice, prose
+  letter), two without a PO number so an invented PO is unambiguously wrong, varied currencies, a 0%
+  tax case and thousands separators. Beside each, `*.truth.json`; plus `schema.json` (strict JSON
+  Schema, `additionalProperties: false`, two-decimal amount strings, ISO dates) and `weights.json`
+  (bps per field, sums to 10 000; `total` 3000). New focused package **`@recourse/jobs`** shared by
+  worker, arbiter and scenarios (instead of duplicating it in each): `JobTerms` committing to the
+  document SHA-256, schema SHA-256 and weights; `terms_hash = sha256(JCS(terms))`; strict `parseTerms`
+  (no path traversal in the document name); `checkJobInputs`; ajv schema validation; `wrongFields`;
+  `awardBps`; `awardAmount = floor(cap × bps / 10 000)` capped at the claim (bigint).
+- **Files:** `demo/documents/*`, `packages/jobs/{package.json,tsconfig.json,src/*,test/jobs.test.ts}`,
+  `pnpm-lock.yaml`
+- **Tests:** 11 (five documents, truths schema-valid, "fictional" marker; every truth amount/id
+  appears in the document text; two PO-less documents; weights; terms hash stable and binding; swapped
+  document/schema/hash rejected; malformed terms incl. `../` name; schema violations; 10% total change
+  = 3000 bps; invented PO detected; award rounding and caps).
+- **Ran:** `vitest run packages/jobs` (11 passed), `tsc --noEmit`, `eslint` — clean.
 - **Evidence:** unit-tested.
 
 ---

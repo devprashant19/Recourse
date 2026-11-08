@@ -1,0 +1,12 @@
+{
+  "invoice_number": "AFS-31-2207",
+  "issue_date": "2026-08-21",
+  "due_date": "2026-10-05",
+  "vendor_name": "Amberline Freight Services",
+  "customer_name": "Copperleaf Farms Ltd",
+  "po_number": "PO-0099-CF",
+  "currency": "CAD",
+  "subtotal": "3860.00",
+  "tax": "193.00",
+  "total": "4053.00"
+}

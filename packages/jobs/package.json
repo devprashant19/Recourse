@@ -1,0 +1,16 @@
+{
+  "name": "@recourse/jobs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@recourse/receipts": "workspace:^",
+    "ajv": "8.20.0",
+    "canonicalize": "5.1.0"
+  }
+}

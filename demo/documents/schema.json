@@ -1,0 +1,20 @@
+{
+  "$id": "recourse/invoice-extraction/v1",
+  "title": "Invoice extraction",
+  "description": "Fields a Recourse extraction job returns. Amounts are decimal strings with two places, dates ISO-8601, null when the document does not state the field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["invoice_number", "issue_date", "due_date", "vendor_name", "customer_name", "po_number", "currency", "subtotal", "tax", "total"],
+  "properties": {
+    "invoice_number": { "type": "string" },
+    "issue_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "due_date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "vendor_name": { "type": "string" },
+    "customer_name": { "type": "string" },
+    "po_number": { "type": ["string", "null"] },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "subtotal": { "type": "string", "pattern": "^\\d+\\.\\d{2}$" },
+    "tax": { "type": "string", "pattern": "^\\d+\\.\\d{2}$" },
+    "total": { "type": "string", "pattern": "^\\d+\\.\\d{2}$" }
+  }
+}

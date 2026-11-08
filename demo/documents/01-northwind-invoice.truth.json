@@ -1,0 +1,12 @@
+{
+  "invoice_number": "NWR-2026-0412",
+  "issue_date": "2026-10-03",
+  "due_date": "2026-11-02",
+  "vendor_name": "Northwind Robotics Ltd.",
+  "customer_name": "Brightwater Logistics Co.",
+  "po_number": "PO-77310",
+  "currency": "USD",
+  "subtotal": "1125.00",
+  "tax": "90.00",
+  "total": "1215.00"
+}

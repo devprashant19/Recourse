@@ -1,0 +1,12 @@
+{
+  "total": 3000,
+  "subtotal": 1500,
+  "tax": 1000,
+  "invoice_number": 1000,
+  "po_number": 1000,
+  "vendor_name": 500,
+  "customer_name": 500,
+  "issue_date": 500,
+  "due_date": 500,
+  "currency": 500
+}

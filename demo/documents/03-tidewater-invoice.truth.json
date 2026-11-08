@@ -1,0 +1,12 @@
+{
+  "invoice_number": "TW-INV-00977",
+  "issue_date": "2026-10-31",
+  "due_date": "2026-11-14",
+  "vendor_name": "Tidewater Cloud Hosting",
+  "customer_name": "Juniper Analytics GmbH",
+  "po_number": "JA-PO-5520",
+  "currency": "GBP",
+  "subtotal": "1100.00",
+  "tax": "0.00",
+  "total": "1100.00"
+}
