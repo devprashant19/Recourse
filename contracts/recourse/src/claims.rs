@@ -209,6 +209,107 @@ impl Recourse {
         refund(attached - stake);
     }
 
+    /// Council overturns or confirms an appealed arbiter verdict.
+    /// Callable only by the configured Sputnik DAO council.
+    /// If the arbiter is overturned, the arbiter is fined `min_bond` from its bond,
+    /// which is paid to the appellant, and the appellant's appeal stake is refunded.
+    /// If the arbiter is confirmed, the appellant loses its appeal stake to the other party.
+    /// Slashes/finalizes the claim according to the council's verdict.
+    pub fn council_decide(
+        &mut self,
+        claim_id: ClaimId,
+        upheld: bool,
+        award: U128,
+    ) -> Verdict {
+        self.assert_council();
+        let mut claim = self.claim_of(claim_id);
+        require!(
+            claim.status == ClaimStatus::Appealed,
+            "claim is not appealed"
+        );
+        let mut verdict = claim
+            .verdict
+            .clone()
+            .unwrap_or_else(|| env::panic_str("claim has no verdict"));
+        let appellant = verdict
+            .appealed_by
+            .clone()
+            .unwrap_or_else(|| env::panic_str("no appellant"));
+
+        let eid = claim.engagement_id;
+        let e = self.engagement_of(eid);
+
+        if upheld {
+            require!(award.0 > 0, "an upheld claim needs a positive award");
+            require!(
+                award.0 <= claim.amount.0,
+                "award exceeds the claimed amount"
+            );
+        } else {
+            require!(award.0 == 0, "a rejected claim has no award");
+        }
+
+        let appeal_stake = bps_ceil(claim.amount.0, self.config.claim_stake_bps);
+        // Deduct the appeal stake from tracked liabilities
+        self.totals.claim_stakes = U128(sub(
+            self.totals.claim_stakes.0,
+            appeal_stake,
+            "appeal stake",
+        ));
+
+        let arbiter_upheld = verdict.upheld;
+        let overturned = upheld != arbiter_upheld;
+
+        let other_party = if appellant == claim.claimant {
+            e.agent.clone()
+        } else {
+            claim.claimant.clone()
+        };
+
+        let mut fine = 0u128;
+        if overturned {
+            // Appellant's stake is returned
+            self.pay(&appellant, appeal_stake);
+
+            // Arbiter is fined from its bond to the appellant
+            if let Some(ref arbiter) = verdict.arbiter {
+                let mut arb_bond = self.bond_of(arbiter);
+                let fine_amount = std::cmp::min(self.config.min_bond.0, arb_bond.amount.0);
+                if fine_amount > 0 {
+                    fine = fine_amount;
+                    arb_bond.amount = U128(sub(arb_bond.amount.0, fine, "arbiter fine"));
+                    self.bonds.insert(arbiter.clone(), arb_bond);
+                    self.totals.bonds = U128(sub(self.totals.bonds.0, fine, "total bonds"));
+                    self.pay(&appellant, fine);
+                }
+            }
+        } else {
+            // Arbiter confirmed: appeal stake goes to the other party
+            self.pay(&other_party, appeal_stake);
+        }
+
+        verdict.upheld = upheld;
+        verdict.award = award;
+        verdict.decided_at = U64(env::block_timestamp());
+        claim.verdict = Some(verdict.clone());
+        self.claims.insert(claim_id, claim.clone());
+
+        Event::CouncilDecided.emit(json!({
+            "claim_id": U64(claim_id),
+            "engagement_id": U64(eid),
+            "upheld": upheld,
+            "award": award,
+            "overturned": overturned,
+            "arbiter_fined": U128(fine),
+            "appellant": appellant,
+        }));
+
+        // Settle the claim (slashing or rejecting based on the new verdict)
+        self.apply_verdict(claim_id);
+
+        verdict
+    }
+
     /// Applies an arbiter's verdict once the appeal window has passed. Anyone
     /// may call it. Upheld: the agent's bond and then the vault are slashed
     /// for the award, which becomes a pending payout to the claimant; the

@@ -618,3 +618,42 @@ fn ft_mode_appeal_via_transfer_call() {
     );
     assert_eq!(c.get_ft_held().0, held_before + stake);
 }
+
+#[test]
+fn ft_mode_council_overturns_and_fines_arbiter() {
+    let mut c = ft_ready();
+    let eid = ft_open_job(&mut c);
+    deliver(&mut c, eid, DELIVERED_AT);
+
+    // Arbiter is added and posts USDC bond
+    setup_arbiter(&mut c);
+    deposit(&mut c, &arbiter(), 10 * USDC, "bond".into());
+    let arb_bond_before = c.get_bond(arbiter()).unwrap().amount.0;
+
+    let cid = c.get_counters().claim;
+    let claim_stake = bps_ceil(CAP, c.get_config().claim_stake_bps);
+    deposit(&mut c, &client(), claim_stake, claim_msg(eid, CAP));
+    rule(&mut c, cid, false, 0, DELIVERED_AT + 2);
+    let stake = bps_ceil(CAP, c.get_config().claim_stake_bps);
+
+    deposit(&mut c, &client(), stake, format!("appeal:{cid}"));
+    assert_eq!(c.get_claim(cid).unwrap().status, ClaimStatus::Appealed);
+
+    ctx(&council(), 0, DELIVERED_AT + 4);
+    let v = c.council_decide(cid, true, U128(CAP));
+    assert!(v.upheld);
+    assert_eq!(c.get_claim(cid).unwrap().status, ClaimStatus::Finalized);
+
+    // Arbiter was fined min_bond in USDC (2 USDC)
+    let min_bond = c.get_config().min_bond.0;
+    let arb_bond_after = c.get_bond(arbiter()).unwrap().amount.0;
+    assert_eq!(arb_bond_after, arb_bond_before - min_bond);
+
+    // Payout created
+    let p = c.get_payout(cid).unwrap();
+    assert_eq!(p.amount.0, CAP);
+    assert_eq!(p.status, PayoutStatus::Pending);
+
+    // Solvency holds
+    assert!(c.solvency().ok);
+}

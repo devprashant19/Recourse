@@ -76,6 +76,18 @@ impl Recourse {
         );
     }
 
+    pub(crate) fn assert_council(&self) {
+        let council = self
+            .roles
+            .council
+            .as_ref()
+            .unwrap_or_else(|| env::panic_str("no council configured"));
+        require!(
+            env::predecessor_account_id() == *council,
+            "council only"
+        );
+    }
+
     fn add_member(list: &mut Vec<AccountId>, who: &AccountId, role: &str) {
         require!(
             !list.contains(who),

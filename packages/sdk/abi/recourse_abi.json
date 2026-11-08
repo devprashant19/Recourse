@@ -7,7 +7,7 @@
       "compiler": "rustc 1.95.0",
       "builder": "cargo-near cargo-near-build 0.11.5"
     },
-    "wasm_hash": "6tT2z23fb1jJJuQN8o1oa2qN1PACFKe2yHSMtNdzpGRa"
+    "wasm_hash": "6BMr81beGEu7MqAZmBrCQo4CkkP54ughdz76RW5wk9tp"
   },
   "body": {
     "functions": [
@@ -263,6 +263,42 @@
       {
         "name": "contract_source_metadata",
         "kind": "view"
+      },
+      {
+        "name": "council_decide",
+        "doc": " Council overturns or confirms an appealed arbiter verdict.\n Callable only by the configured Sputnik DAO council.\n If the arbiter is overturned, the arbiter is fined `min_bond` from its bond,\n which is paid to the appellant, and the appellant's appeal stake is refunded.\n If the arbiter is confirmed, the appellant loses its appeal stake to the other party.\n Slashes/finalizes the claim according to the council's verdict.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "claim_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "upheld",
+              "type_schema": {
+                "type": "boolean"
+              }
+            },
+            {
+              "name": "award",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Verdict"
+          }
+        }
       },
       {
         "name": "create_vault",

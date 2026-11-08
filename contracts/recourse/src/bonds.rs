@@ -38,7 +38,7 @@ impl Recourse {
     /// request replaces any earlier one and restarts the cooldown.
     pub fn request_withdrawal(&mut self, amount: U128) -> Bond {
         let agent_id = env::predecessor_account_id();
-        self.assert_registered(&agent_id);
+        self.assert_can_bond(&agent_id);
         let mut bond = self.bond_of(&agent_id);
         require!(amount.0 > 0, "amount must be positive");
         require!(
@@ -67,7 +67,7 @@ impl Recourse {
     /// claim is open and the amount is still unlocked.
     pub fn withdraw(&mut self) -> U128 {
         let agent_id = env::predecessor_account_id();
-        self.assert_registered(&agent_id);
+        self.assert_can_bond(&agent_id);
         let mut bond = self.bond_of(&agent_id);
         let requested_at = bond
             .withdrawal_requested_at
@@ -108,7 +108,7 @@ impl Recourse {
     /// Adds `amount` to a registered agent's bond, enforcing the minimum on the
     /// resulting total. Shared by `post_bond` (NEAR) and `ft_on_transfer("bond")`.
     pub(crate) fn add_to_bond(&mut self, agent_id: &AccountId, amount: u128) -> Bond {
-        self.assert_registered(agent_id);
+        self.assert_can_bond(agent_id);
         let mut bond = self.bond_of(agent_id);
         bond.amount = U128(add(bond.amount.0, amount, "bond"));
         require!(
@@ -125,15 +125,26 @@ impl Recourse {
         bond
     }
 
-    pub(crate) fn assert_registered(&self, agent: &AccountId) {
-        require!(self.agents.contains_key(agent), "agent not registered");
+    pub(crate) fn assert_can_bond(&self, agent: &AccountId) {
+        require!(
+            self.agents.contains_key(agent)
+                || self.roles.arbiters.contains(agent)
+                || self.roles.keepers.contains(agent),
+            "agent not registered"
+        );
     }
 
-    /// The bond of a registered agent. Registration always creates one.
+    /// The bond of a registered agent or role holder.
     pub(crate) fn bond_of(&self, agent: &AccountId) -> Bond {
         self.bonds
             .get(agent)
             .cloned()
-            .unwrap_or_else(|| env::panic_str("agent not registered"))
+            .unwrap_or_else(|| {
+                if self.roles.arbiters.contains(agent) || self.roles.keepers.contains(agent) {
+                    Bond::default()
+                } else {
+                    env::panic_str("agent not registered")
+                }
+            })
     }
 }

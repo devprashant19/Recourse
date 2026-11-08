@@ -563,3 +563,204 @@ fn appealed_claim_cannot_be_finalized() {
     ctx(&stranger(), 0, v.appeal_deadline.0 + 1);
     c.finalize(cid);
 }
+
+// ----- council_decide -----------------------------------------------------
+
+#[test]
+#[should_panic(expected = "council only")]
+fn stranger_cannot_call_council_decide() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&client(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+    ctx(&stranger(), 0, RULED_AT + 2 * MINUTE);
+    c.council_decide(cid, true, U128(CLAIM));
+}
+
+#[test]
+#[should_panic(expected = "claim is not appealed")]
+fn council_cannot_decide_unappealed_claim() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, false, 0, RULED_AT);
+    ctx(&council(), 0, RULED_AT + MINUTE);
+    c.council_decide(cid, true, U128(CLAIM));
+}
+
+#[test]
+#[should_panic(expected = "an upheld claim needs a positive award")]
+fn council_upheld_with_zero_award_fails() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&client(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+    ctx(&council(), 0, RULED_AT + 2 * MINUTE);
+    c.council_decide(cid, true, U128(0));
+}
+
+#[test]
+#[should_panic(expected = "award exceeds the claimed amount")]
+fn council_award_above_claim_amount_fails() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&client(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+    ctx(&council(), 0, RULED_AT + 2 * MINUTE);
+    c.council_decide(cid, true, U128(CLAIM + 1));
+}
+
+#[test]
+#[should_panic(expected = "a rejected claim has no award")]
+fn council_rejected_with_positive_award_fails() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&client(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+    ctx(&council(), 0, RULED_AT + 2 * MINUTE);
+    c.council_decide(cid, false, U128(1));
+}
+
+#[test]
+fn council_overturns_rejected_claim_fines_arbiter_and_settles() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+
+    // Arbiter posts a bond so it can be fined
+    setup_arbiter(&mut c);
+    ctx(&arbiter(), 10 * ONE_NEAR, T0);
+    c.post_bond();
+    let arb_bond_before = c.get_bond(arbiter()).unwrap().amount.0;
+
+    rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&client(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+
+    ctx(&council(), 0, RULED_AT + 2 * MINUTE);
+    let v = c.council_decide(cid, true, U128(CLAIM));
+    assert!(v.upheld);
+    assert_eq!(v.award.0, CLAIM);
+
+    let cl = c.get_claim(cid).unwrap();
+    assert_eq!(cl.status, ClaimStatus::Finalized);
+
+    // Arbiter fined min_bond (5 NEAR)
+    let min_bond = c.get_config().min_bond.0;
+    let arb_bond_after = c.get_bond(arbiter()).unwrap().amount.0;
+    assert_eq!(arb_bond_after, arb_bond_before - min_bond);
+
+    // Payout created for claimant
+    let p = c.get_payout(cid).unwrap();
+    assert_eq!(p.amount.0, CLAIM);
+    assert_eq!(p.status, PayoutStatus::Pending);
+
+    // Invariant I1 holds
+    assert!(c.solvency().ok);
+
+    let evs = events();
+    let cd = evs.iter().find(|e| e["event"] == "council_decided").unwrap();
+    assert_eq!(cd["data"][0]["overturned"], true);
+    assert_eq!(cd["data"][0]["arbiter_fined"], min_bond.to_string());
+}
+
+#[test]
+fn council_confirms_rejected_claim_forfeits_stake_to_agent() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+
+    setup_arbiter(&mut c);
+    ctx(&arbiter(), 10 * ONE_NEAR, T0);
+    c.post_bond();
+    let arb_bond_before = c.get_bond(arbiter()).unwrap().amount.0;
+
+    rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&client(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+
+    ctx(&council(), 0, RULED_AT + 2 * MINUTE);
+    let v = c.council_decide(cid, false, U128(0));
+    assert!(!v.upheld);
+    assert_eq!(v.award.0, 0);
+
+    let cl = c.get_claim(cid).unwrap();
+    assert_eq!(cl.status, ClaimStatus::Rejected);
+
+    // Arbiter was NOT fined
+    let arb_bond_after = c.get_bond(arbiter()).unwrap().amount.0;
+    assert_eq!(arb_bond_after, arb_bond_before);
+
+    assert!(c.solvency().ok);
+
+    let evs = events();
+    let cd = evs.iter().find(|e| e["event"] == "council_decided").unwrap();
+    assert_eq!(cd["data"][0]["overturned"], false);
+    assert_eq!(cd["data"][0]["arbiter_fined"], "0");
+}
+
+#[test]
+fn council_overturns_upheld_claim_on_agent_appeal() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+
+    setup_arbiter(&mut c);
+    ctx(&arbiter(), 10 * ONE_NEAR, T0);
+    c.post_bond();
+    let arb_bond_before = c.get_bond(arbiter()).unwrap().amount.0;
+
+    rule(&mut c, cid, true, ONE_NEAR, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&agent(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+
+    ctx(&council(), 0, RULED_AT + 2 * MINUTE);
+    let v = c.council_decide(cid, false, U128(0));
+    assert!(!v.upheld);
+
+    let cl = c.get_claim(cid).unwrap();
+    assert_eq!(cl.status, ClaimStatus::Rejected);
+
+    // Arbiter was fined min_bond to agent
+    let min_bond = c.get_config().min_bond.0;
+    let arb_bond_after = c.get_bond(arbiter()).unwrap().amount.0;
+    assert_eq!(arb_bond_after, arb_bond_before - min_bond);
+
+    assert!(c.solvency().ok);
+}
+
+#[test]
+fn council_confirms_upheld_claim_on_agent_appeal() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+
+    setup_arbiter(&mut c);
+    ctx(&arbiter(), 10 * ONE_NEAR, T0);
+    c.post_bond();
+    let arb_bond_before = c.get_bond(arbiter()).unwrap().amount.0;
+
+    rule(&mut c, cid, true, ONE_NEAR, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&agent(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+
+    ctx(&council(), 0, RULED_AT + 2 * MINUTE);
+    let v = c.council_decide(cid, true, U128(ONE_NEAR));
+    assert!(v.upheld);
+
+    let cl = c.get_claim(cid).unwrap();
+    assert_eq!(cl.status, ClaimStatus::Finalized);
+
+    // Arbiter was not fined
+    let arb_bond_after = c.get_bond(arbiter()).unwrap().amount.0;
+    assert_eq!(arb_bond_after, arb_bond_before);
+
+    assert!(c.solvency().ok);
+}

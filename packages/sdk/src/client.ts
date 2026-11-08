@@ -116,6 +116,7 @@ export const METHODS = {
   resolve_objective: { kind: "call", args: ["claim_id"] },
   resolve_claim: { kind: "call", args: ["claim_id", "upheld", "award", "reasons_hash", "verdict_receipt"] },
   appeal: { kind: "call", args: ["claim_id"] },
+  council_decide: { kind: "call", args: ["claim_id", "upheld", "award"] },
   finalize: { kind: "call", args: ["claim_id"] },
   close_stale_claim: { kind: "call", args: ["claim_id"] },
   execute_payout: { kind: "call", args: ["claim_id", "deposit_address", "quote_id", "quote_hash"] },
@@ -298,6 +299,8 @@ export class RecourseClient {
     const stake = ceilBps(BigInt(claim.amount), cfg.claim_stake_bps);
     return this.call<void>("appeal", { claim_id }, stake);
   };
+  councilDecide = (claim_id: ClaimId, upheld: boolean, award: U128) =>
+    this.call<Verdict>("council_decide", { claim_id, upheld, award });
   finalize = (claim_id: ClaimId) => this.call<void>("finalize", { claim_id });
   closeStaleClaim = (claim_id: ClaimId) => this.call<void>("close_stale_claim", { claim_id });
   /** Direct mode: the contract fixes amount and recipient; Intents arguments must be null. */

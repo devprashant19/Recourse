@@ -23,6 +23,9 @@ pub fn acc(name: &str) -> AccountId {
 pub fn owner() -> AccountId {
     acc("owner.near")
 }
+pub fn council() -> AccountId {
+    acc("council.sputnik-dao.near")
+}
 pub fn contract_id() -> AccountId {
     acc("recourse.near")
 }
