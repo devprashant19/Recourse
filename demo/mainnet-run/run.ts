@@ -16,13 +16,12 @@
  * Spec: phases/phase-03-money-out.md section 6, phases/phase-06-mainnet-video-submission.md
  */
 
-import { existsSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import readline from "node:readline";
 import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
 
 import { OneClickClient } from "../../packages/intents/src/index.js";
-import { RecourseClient } from "../../packages/sdk/src/index.js";
 import {
   USDC_CONTRACTS,
   BASE_USDC_ASSET_ID,
@@ -76,6 +75,7 @@ async function main() {
 
   const p = new JsonRpcProvider({ url: "https://free.rpc.fastnear.com" });
   const owner = new Account(ownerId, p, ownerKey as KeyPairString);
+  void owner;
   const contractId = process.env.RECOURSE_CONTRACT_ID ?? `recourse.${ownerId}`;
   const usdcTokenId = USDC_CONTRACTS.mainnet;
 

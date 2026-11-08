@@ -17,7 +17,6 @@ import {
   quoteWithConfidentialityFallback,
   type OneClickApi,
   type QuoteRequest,
-  type ReceivedQuote,
   type TokenInfo,
 } from "@recourse/intents";
 import type { Hash, Payout, PayoutStatus } from "@recourse/sdk";

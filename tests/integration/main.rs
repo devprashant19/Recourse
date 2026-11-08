@@ -436,11 +436,32 @@ async fn scenario_05_arbiter_overturned_by_council() -> anyhow::Result<()> {
     assert!(init.is_success(), "init: {:?}", init.into_result().err());
 
     let storage = 10u128.pow(23); // 0.1 NEAR
-    call(&owner, &contract, "add_keeper", json!({ "account_id": keeper.id() }), 0).await?;
-    call(&owner, &contract, "add_arbiter", json!({ "account_id": arbiter.id() }), 0).await?;
+    call(
+        &owner,
+        &contract,
+        "add_keeper",
+        json!({ "account_id": keeper.id() }),
+        0,
+    )
+    .await?;
+    call(
+        &owner,
+        &contract,
+        "add_arbiter",
+        json!({ "account_id": arbiter.id() }),
+        0,
+    )
+    .await?;
 
     // Arbiter posts a 10 NEAR bond
-    call(&arbiter, &contract, "post_bond", json!({}), 10 * 10u128.pow(24)).await?;
+    call(
+        &arbiter,
+        &contract,
+        "post_bond",
+        json!({}),
+        10 * 10u128.pow(24),
+    )
+    .await?;
 
     // Register signer for agent and arbiter
     call(
@@ -472,12 +493,33 @@ async fn scenario_05_arbiter_overturned_by_council() -> anyhow::Result<()> {
     .await?;
 
     // Agent registers, posts 10 NEAR bond
-    call(&agent, &contract, "register_agent", json!({ "metadata_uri": "ipfs://agent", "operator": agent.id() }), storage).await?;
-    call(&agent, &contract, "post_bond", json!({}), 10 * 10u128.pow(24)).await?;
+    call(
+        &agent,
+        &contract,
+        "register_agent",
+        json!({ "metadata_uri": "ipfs://agent", "operator": agent.id() }),
+        storage,
+    )
+    .await?;
+    call(
+        &agent,
+        &contract,
+        "post_bond",
+        json!({}),
+        10 * 10u128.pow(24),
+    )
+    .await?;
 
     // Underwriter creates vault and deposits 50 NEAR
     call(&uw, &contract, "create_vault", json!({}), storage).await?;
-    call(&uw, &contract, "deposit_vault", json!({ "vault": uw.id() }), 50 * 10u128.pow(24) + storage).await?;
+    call(
+        &uw,
+        &contract,
+        "deposit_vault",
+        json!({ "vault": uw.id() }),
+        50 * 10u128.pow(24) + storage,
+    )
+    .await?;
 
     let t = now(&worker).await?;
     call(
@@ -519,7 +561,14 @@ async fn scenario_05_arbiter_overturned_by_council() -> anyhow::Result<()> {
     let eid = open.as_u64().unwrap();
 
     // Agent accepts
-    call(&agent, &contract, "accept_engagement", json!({ "id": eid }), 0).await?;
+    call(
+        &agent,
+        &contract,
+        "accept_engagement",
+        json!({ "id": eid }),
+        0,
+    )
+    .await?;
 
     // Agent delivers work with receipt
     call(
@@ -584,12 +633,20 @@ async fn scenario_05_arbiter_overturned_by_council() -> anyhow::Result<()> {
     .await?;
 
     // Client appeals inside the appeal window
-    call(&client, &contract, "appeal", json!({ "claim_id": cid }), stake).await?;
+    call(
+        &client,
+        &contract,
+        "appeal",
+        json!({ "claim_id": cid }),
+        stake,
+    )
+    .await?;
 
     let claim = view(&contract, "get_claim", json!({ "claim_id": cid })).await?;
     assert_eq!(claim["status"], "Appealed");
 
-    let arb_bond_before = u128_of(&view(&contract, "get_bond", json!({ "agent": arbiter.id() })).await?["amount"]);
+    let arb_bond_before =
+        u128_of(&view(&contract, "get_bond", json!({ "agent": arbiter.id() })).await?["amount"]);
 
     // Sputnik DAO votes to OVERTURN the arbiter's verdict
     dao::propose_and_approve_council_decide(&dao, contract.id(), cid, true, cap).await?;
@@ -602,7 +659,8 @@ async fn scenario_05_arbiter_overturned_by_council() -> anyhow::Result<()> {
     assert_eq!(eng_after["status"], "Slashed");
 
     // Arbiter was fined 5 NEAR (min_bond)
-    let arb_bond_after = u128_of(&view(&contract, "get_bond", json!({ "agent": arbiter.id() })).await?["amount"]);
+    let arb_bond_after =
+        u128_of(&view(&contract, "get_bond", json!({ "agent": arbiter.id() })).await?["amount"]);
     assert_eq!(arb_bond_before - arb_bond_after, 5 * 10u128.pow(24));
 
     // Payout created and can be executed by keeper
@@ -611,7 +669,14 @@ async fn scenario_05_arbiter_overturned_by_council() -> anyhow::Result<()> {
     assert_eq!(u128_of(&payout["amount"]), cap);
 
     // Keeper executes payout
-    call(&keeper, &contract, "execute_payout", json!({ "claim_id": cid }), 0).await?;
+    call(
+        &keeper,
+        &contract,
+        "execute_payout",
+        json!({ "claim_id": cid }),
+        0,
+    )
+    .await?;
 
     let payout_after = view(&contract, "get_payout", json!({ "claim_id": cid })).await?;
     assert_eq!(payout_after["status"], "Success");

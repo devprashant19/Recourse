@@ -666,7 +666,10 @@ fn council_overturns_rejected_claim_fines_arbiter_and_settles() {
     assert!(c.solvency().ok);
 
     let evs = events();
-    let cd = evs.iter().find(|e| e["event"] == "council_decided").unwrap();
+    let cd = evs
+        .iter()
+        .find(|e| e["event"] == "council_decided")
+        .unwrap();
     assert_eq!(cd["data"][0]["overturned"], true);
     assert_eq!(cd["data"][0]["arbiter_fined"], min_bond.to_string());
 }
@@ -701,7 +704,10 @@ fn council_confirms_rejected_claim_forfeits_stake_to_agent() {
     assert!(c.solvency().ok);
 
     let evs = events();
-    let cd = evs.iter().find(|e| e["event"] == "council_decided").unwrap();
+    let cd = evs
+        .iter()
+        .find(|e| e["event"] == "council_decided")
+        .unwrap();
     assert_eq!(cd["data"][0]["overturned"], false);
     assert_eq!(cd["data"][0]["arbiter_fined"], "0");
 }

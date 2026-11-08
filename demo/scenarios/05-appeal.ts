@@ -147,6 +147,8 @@ run("SCENARIO 05 claim appeal and council decision", async () => {
       ],
     });
     console.log(`  Sputnik DAO proposal ${pid} approved and executed council_decide`);
+    const arbBondAfter = BigInt((await c.as("client").getBond(arbiterId))!.amount);
+    expect(arbBondBefore - arbBondAfter === 5n * ONE_NEAR, "arbiter fined 5 NEAR min_bond");
   } else {
     console.log("  No live council DAO detected; scenario validates contract council_decide verification");
   }

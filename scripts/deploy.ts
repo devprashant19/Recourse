@@ -22,7 +22,7 @@ import { readFileSync } from "node:fs";
 import { actions } from "near-api-js";
 
 import { RecourseClient } from "../packages/sdk/src/index.js";
-import { getRecourseConfig, type RecourseConfig } from "../packages/config/src/index.js";
+import { getRecourseConfig } from "../packages/config/src/index.js";
 import { arg, network, ONE_NEAR, ownerAccount, provider, save } from "./lib/near.js";
 
 const DEFAULT_WASM = "target/near/recourse/recourse.wasm";

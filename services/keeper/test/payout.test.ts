@@ -43,16 +43,38 @@ function createMockChain(payouts: [number, Payout][] = []): KeeperChain {
     getPayout: vi.fn(async (id: number) => payouts.find(([k]) => k === id)?.[1] ?? null),
     getClaim: vi.fn(async () => null),
     getConfig: vi.fn(async () => ({
+      bond_asset: "Native" as const,
+      min_bond: "5000000000000000000000000",
+      withdrawal_cooldown: "300000000000",
       claim_window: "1000",
       appeal_window: "500",
-      paused: false,
-    } as any)),
+      bid_commit_window: "60000000000",
+      bid_reveal_window: "60000000000",
+      claim_stake_bps: 500,
+      base_bond_share_bps: 5000,
+      min_bond_share_bps: 2000,
+      max_vault_exposure_bps: 2500,
+      council: null,
+    })),
     executeDirectPayout: vi.fn(async () => "Success" as PayoutStatus),
     executeIntentsPayout: vi.fn(async () => "Sent" as PayoutStatus),
     confirmPayout: vi.fn(async () => "Success" as PayoutStatus),
     syncUnattributed: vi.fn(async () => "0"),
+    getSigner: vi.fn(async () => null),
     registerSigner: vi.fn(async () => {}),
     now: vi.fn(async () => BigInt(NOW.getTime()) * 1_000_000n),
+  };
+}
+
+function mockPayout(overrides: Partial<Payout> = {}): Payout {
+  return {
+    claimant: "client.near",
+    amount: "1000000",
+    mode: "Direct",
+    destination: { asset_id: "native:near", recipient: "client.near" },
+    status: "Pending",
+    attempts: 0,
+    ...overrides,
   };
 }
 
@@ -88,10 +110,10 @@ function mockQuoteResponse(req: QuoteRequest, depositAddress = "deposit.near"): 
 describe("findPendingPayouts", () => {
   it("filters only pending payouts", async () => {
     const list: [number, Payout][] = [
-      [1, { claimant: "c1.near", amount: "1000000", status: "Pending", mode: "Direct", attempts: 0 } as any],
-      [2, { claimant: "c2.near", amount: "2000000", status: "Success", mode: "Direct", attempts: 1 } as any],
-      [3, { claimant: "c3.near", amount: "3000000", status: "Sent", mode: "Intents", attempts: 1 } as any],
-      [4, { claimant: "c4.near", amount: "4000000", status: "Pending", mode: "Intents", attempts: 0 } as any],
+      [1, mockPayout({ claimant: "c1.near", amount: "1000000", status: "Pending", mode: "Direct", attempts: 0 })],
+      [2, mockPayout({ claimant: "c2.near", amount: "2000000", status: "Success", mode: "Direct", attempts: 1 })],
+      [3, mockPayout({ claimant: "c3.near", amount: "3000000", status: "Sent", mode: "Intents", attempts: 1 })],
+      [4, mockPayout({ claimant: "c4.near", amount: "4000000", status: "Pending", mode: "Intents", attempts: 0 })],
     ];
     const chain = createMockChain(list);
     const pending = await findPendingPayouts(chain);
@@ -108,13 +130,13 @@ describe("executePendingPayout", () => {
     const chain = createMockChain();
     const job: PendingPayoutJob = {
       claimId: 42,
-      payout: {
+      payout: mockPayout({
         claimant: "client.near",
         amount: "5000000",
         status: "Pending",
         mode: "Direct",
         attempts: 0,
-      } as any,
+      }),
     };
 
     const res = await executePendingPayout(chain, null, TOKENS, job, {
@@ -131,7 +153,7 @@ describe("executePendingPayout", () => {
     const chain = createMockChain();
     const job: PendingPayoutJob = {
       claimId: 77,
-      payout: {
+      payout: mockPayout({
         claimant: "client.near",
         amount: "1000000",
         status: "Pending",
@@ -141,7 +163,7 @@ describe("executePendingPayout", () => {
           asset_id: "nep141:base-usdc.omft.near",
           recipient: "0x1234567890abcdef1234567890abcdef12345678",
         },
-      } as any,
+      }),
     };
 
     let requestedReq: QuoteRequest | null = null;
@@ -186,7 +208,7 @@ describe("executePendingPayout", () => {
     const chain = createMockChain();
     const job: PendingPayoutJob = {
       claimId: 88,
-      payout: {
+      payout: mockPayout({
         claimant: "client.near",
         amount: "1000000",
         status: "Pending",
@@ -196,7 +218,7 @@ describe("executePendingPayout", () => {
           asset_id: "nep141:base-usdc.omft.near",
           recipient: "0x1234567890abcdef1234567890abcdef12345678",
         },
-      } as any,
+      }),
     };
 
     const api: OneClickApi = {
@@ -224,13 +246,13 @@ describe("executePendingPayout", () => {
     const chain = createMockChain();
     const job: PendingPayoutJob = {
       claimId: 99,
-      payout: {
+      payout: mockPayout({
         claimant: "client.near",
         amount: "1000000",
         status: "Pending",
         mode: "Direct",
         attempts: 10,
-      } as any,
+      }),
     };
 
     await expect(
@@ -247,7 +269,7 @@ describe("executePendingPayout", () => {
 describe("KeeperService", () => {
   it("runs tick and processes pending payouts", async () => {
     const list: [number, Payout][] = [
-      [10, { claimant: "c1.near", amount: "1000000", status: "Pending", mode: "Direct", attempts: 0 } as any],
+      [10, mockPayout({ claimant: "c1.near", amount: "1000000", status: "Pending", mode: "Direct", attempts: 0 })],
     ];
     const chain = createMockChain(list);
     const service = new KeeperService(

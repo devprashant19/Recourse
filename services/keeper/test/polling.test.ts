@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { OneClickApi, StatusResponse } from "@recourse/intents";
+import type { OneClickApi, QuoteResponse, StatusResponse } from "@recourse/intents";
 import type { Payout } from "@recourse/sdk";
 
 import type { KeeperChain } from "../src/chain.js";
@@ -114,7 +114,7 @@ describe("submitPendingDeposits and pollActivePayouts", () => {
     const api: Partial<OneClickApi> = {
       submitDeposit: vi.fn(async () => ({
         correlationId: "q50",
-        quoteResponse: {} as any,
+        quoteResponse: {} as unknown as QuoteResponse,
         status: "PROCESSING",
         updatedAt: new Date().toISOString(),
         swapDetails: {
@@ -145,7 +145,7 @@ describe("submitPendingDeposits and pollActivePayouts", () => {
 
     const statusResp: StatusResponse = {
       correlationId: "q60",
-      quoteResponse: {} as any,
+      quoteResponse: {} as unknown as QuoteResponse,
       status: "SUCCESS",
       updatedAt: new Date().toISOString(),
       swapDetails: {
@@ -191,7 +191,7 @@ describe("submitPendingDeposits and pollActivePayouts", () => {
         if (addr === "dep71.near") {
           return {
             correlationId: "q71",
-            quoteResponse: {} as any,
+            quoteResponse: {} as unknown as QuoteResponse,
             status: "REFUNDED",
             updatedAt: new Date().toISOString(),
             swapDetails: {
@@ -206,7 +206,7 @@ describe("submitPendingDeposits and pollActivePayouts", () => {
         } else {
           return {
             correlationId: "q72",
-            quoteResponse: {} as any,
+            quoteResponse: {} as unknown as QuoteResponse,
             status: "FAILED",
             updatedAt: new Date().toISOString(),
             swapDetails: {

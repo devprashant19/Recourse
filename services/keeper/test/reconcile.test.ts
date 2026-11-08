@@ -4,7 +4,7 @@ import type { Payout, PayoutStatus } from "@recourse/sdk";
 
 import type { KeeperChain } from "../src/chain.js";
 import { KeeperLogger } from "../src/logger.js";
-import { PayoutReconciler, SYNC_GAP_MS } from "../src/reconcile.js";
+import { PayoutReconciler } from "../src/reconcile.js";
 import { PayoutTracker } from "../src/tracker.js";
 
 describe("PayoutReconciler", () => {

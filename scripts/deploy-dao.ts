@@ -7,7 +7,6 @@
 
 import { createHash } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
 import { actions } from "near-api-js";
 
 import { arg, network, ONE_NEAR, ownerAccount, provider, save } from "./lib/near.js";

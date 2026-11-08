@@ -12,7 +12,6 @@
 
 import {
   fetchAttestation,
-  LiveNearAiClient,
   verifyAttestation,
   type NearAiClient,
   type QuoteVerifier,

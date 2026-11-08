@@ -117,7 +117,8 @@ export async function quoteWithConfidentialityFallback(
     return { quote: await api.quote({ ...req, confidentiality: "basic" }), confidentiality: "basic" };
   } catch (e) {
     if (!(e instanceof OneClickHttpError) || !confidentialityRejected(e)) throw e;
-    const { confidentiality: _drop, ...plain } = req;
+    const plain = { ...req };
+    delete plain.confidentiality;
     return { quote: await api.quote(plain), confidentiality: "public" };
   }
 }

@@ -546,7 +546,14 @@ async fn usdc_appeal_dao_overturn_and_intents_payout_on_the_sandbox() -> anyhow:
         0,
     )
     .await?;
-    call(&arbiter, &u.e.contract, "storage_deposit", json!({}), storage).await?;
+    call(
+        &arbiter,
+        &u.e.contract,
+        "storage_deposit",
+        json!({}),
+        storage,
+    )
+    .await?;
     ft_call(&u, &arbiter, 10 * USDC, "bond".into()).await?;
 
     let arb_bond = view(&u.e.contract, "get_bond", json!({ "agent": arbiter.id() })).await?;
@@ -619,20 +626,30 @@ async fn usdc_appeal_dao_overturn_and_intents_payout_on_the_sandbox() -> anyhow:
     assert_eq!(claim_app["status"], "Appealed");
 
     // 6. Sputnik DAO council votes to overturn the arbiter's verdict with full award
-    let arb_bond_before = u128_of(&view(&u.e.contract, "get_bond", json!({ "agent": arbiter.id() })).await?["amount"]);
+    let arb_bond_before = u128_of(
+        &view(&u.e.contract, "get_bond", json!({ "agent": arbiter.id() })).await?["amount"],
+    );
     assert_eq!(arb_bond_before, 10 * USDC);
 
-    super::dao::propose_and_approve_council_decide(&dao, u.e.contract.id(), claim_id, true, cap).await?;
+    super::dao::propose_and_approve_council_decide(&dao, u.e.contract.id(), claim_id, true, cap)
+        .await?;
 
     // 7. Verify post-overturn state:
     // - Arbiter was fined min_bond (2 USDC)
-    let arb_bond_after = u128_of(&view(&u.e.contract, "get_bond", json!({ "agent": arbiter.id() })).await?["amount"]);
+    let arb_bond_after = u128_of(
+        &view(&u.e.contract, "get_bond", json!({ "agent": arbiter.id() })).await?["amount"],
+    );
     assert_eq!(arb_bond_before - arb_bond_after, 2 * USDC);
 
     // - Claim finalized, engagement slashed
     let claim_fin = view(&u.e.contract, "get_claim", json!({ "claim_id": claim_id })).await?;
     assert_eq!(claim_fin["status"], "Finalized");
-    let eng_slashed = view(&u.e.contract, "get_engagement", json!({ "engagement_id": eid })).await?;
+    let eng_slashed = view(
+        &u.e.contract,
+        "get_engagement",
+        json!({ "engagement_id": eid }),
+    )
+    .await?;
     assert_eq!(eng_slashed["status"], "Slashed");
 
     // - Payout in Intents mode is Pending for 2 USDC

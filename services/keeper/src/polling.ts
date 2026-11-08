@@ -6,7 +6,7 @@ import type { OneClickApi, StatusResponse } from "@recourse/intents";
 
 import type { KeeperChain } from "./chain.js";
 import { KeeperLogger } from "./logger.js";
-import type { PayoutTracker, TrackedPayout } from "./tracker.js";
+import type { PayoutTracker } from "./tracker.js";
 
 export interface PollResult {
   claimId: number;

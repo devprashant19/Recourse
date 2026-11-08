@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { NearAiClient, QuoteVerifier } from "@recourse/receipts";
 import type { Signer } from "@recourse/sdk";
 
 import type { KeeperChain } from "../src/chain.js";
@@ -24,6 +25,7 @@ vi.mock("@recourse/receipts", async (importOriginal) => {
 
 describe("SignerRegistrar", () => {
   const log = new KeeperLogger("test");
+  const dummyVerifier = {} as unknown as QuoteVerifier;
 
   it("skips cleanly when no NearAiClient is configured", async () => {
     const chain: Partial<KeeperChain> = {
@@ -36,7 +38,7 @@ describe("SignerRegistrar", () => {
       ["model-worker-1"],
       1000,
       log,
-      {} as any,
+      dummyVerifier,
     );
 
     const res = await registrar.registerSignersOnce();
@@ -50,7 +52,7 @@ describe("SignerRegistrar", () => {
       registerSigner: vi.fn(),
     };
 
-    const mockAiClient: any = {
+    const mockAiClient: NearAiClient = {
       attestation: vi.fn(),
     };
 
@@ -60,7 +62,7 @@ describe("SignerRegistrar", () => {
       [],
       1000,
       log,
-      {} as any,
+      dummyVerifier,
     );
 
     const res = await registrar.registerSignersOnce();
@@ -74,14 +76,14 @@ describe("SignerRegistrar", () => {
       registerSigner: vi.fn(),
     };
 
-    const mockAiClient: any = {};
+    const mockAiClient = {} as unknown as NearAiClient;
     const registrar = new SignerRegistrar(
       chain as KeeperChain,
       mockAiClient,
       ["model-worker-1"],
       1000,
       log,
-      {} as any,
+      dummyVerifier,
     );
 
     const res = await registrar.registerSignersOnce();
@@ -105,14 +107,14 @@ describe("SignerRegistrar", () => {
       registerSigner: vi.fn(),
     };
 
-    const mockAiClient: any = {};
+    const mockAiClient = {} as unknown as NearAiClient;
     const registrar = new SignerRegistrar(
       chain as KeeperChain,
       mockAiClient,
       ["model-worker-1"],
       1000,
       log,
-      {} as any,
+      dummyVerifier,
     );
 
     const res = await registrar.registerSignersOnce();

@@ -4,7 +4,6 @@
  */
 
 import type {
-  AccountId,
   Claim,
   Config,
   Hash,

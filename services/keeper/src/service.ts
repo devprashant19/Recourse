@@ -4,7 +4,6 @@
  */
 
 import {
-  OneClickClient,
   resolveUsdc,
   type OneClickApi,
   type TokenInfo,

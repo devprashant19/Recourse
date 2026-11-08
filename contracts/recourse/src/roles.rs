@@ -82,10 +82,7 @@ impl Recourse {
             .council
             .as_ref()
             .unwrap_or_else(|| env::panic_str("no council configured"));
-        require!(
-            env::predecessor_account_id() == *council,
-            "council only"
-        );
+        require!(env::predecessor_account_id() == *council, "council only");
     }
 
     fn add_member(list: &mut Vec<AccountId>, who: &AccountId, role: &str) {

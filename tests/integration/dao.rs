@@ -18,9 +18,8 @@ pub async fn deploy_sputnik_dao(
     worker: &Worker<Sandbox>,
     council_member: Account,
 ) -> anyhow::Result<SputnikDao> {
-    let wasm = std::fs::read(SPUTNIK_WASM).map_err(|e| {
-        anyhow::anyhow!("{SPUTNIK_WASM}: {e}. Ensure sputnikdao2.wasm is present")
-    })?;
+    let wasm = std::fs::read(SPUTNIK_WASM)
+        .map_err(|e| anyhow::anyhow!("{SPUTNIK_WASM}: {e}. Ensure sputnikdao2.wasm is present"))?;
     let contract = worker.dev_deploy(&wasm).await?;
 
     let config = json!({
@@ -36,7 +35,11 @@ pub async fn deploy_sputnik_dao(
         .args_json(json!({ "config": config, "policy": policy }))
         .transact()
         .await?;
-    assert!(init.is_success(), "sputnik new: {:?}", init.into_result().err());
+    assert!(
+        init.is_success(),
+        "sputnik new: {:?}",
+        init.into_result().err()
+    );
 
     Ok(SputnikDao {
         contract,
@@ -83,7 +86,11 @@ pub async fn propose_and_approve_council_decide(
         .gas(Gas::from_tgas(50))
         .transact()
         .await?;
-    assert!(add.is_success(), "add_proposal: {:?}", add.into_result().err());
+    assert!(
+        add.is_success(),
+        "add_proposal: {:?}",
+        add.into_result().err()
+    );
     let proposal_id: u64 = add.json()?;
 
     let act = dao
@@ -93,8 +100,11 @@ pub async fn propose_and_approve_council_decide(
         .gas(Gas::from_tgas(250))
         .transact()
         .await?;
-    assert!(act.is_success(), "act_proposal: {:?}", act.into_result().err());
+    assert!(
+        act.is_success(),
+        "act_proposal: {:?}",
+        act.into_result().err()
+    );
 
     Ok(())
 }
-

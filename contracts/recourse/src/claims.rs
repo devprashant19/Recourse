@@ -215,12 +215,7 @@ impl Recourse {
     /// which is paid to the appellant, and the appellant's appeal stake is refunded.
     /// If the arbiter is confirmed, the appellant loses its appeal stake to the other party.
     /// Slashes/finalizes the claim according to the council's verdict.
-    pub fn council_decide(
-        &mut self,
-        claim_id: ClaimId,
-        upheld: bool,
-        award: U128,
-    ) -> Verdict {
+    pub fn council_decide(&mut self, claim_id: ClaimId, upheld: bool, award: U128) -> Verdict {
         self.assert_council();
         let mut claim = self.claim_of(claim_id);
         require!(
@@ -571,10 +566,7 @@ impl Recourse {
             .as_ref()
             .cloned()
             .unwrap_or_else(|| env::panic_str("claim has no verdict"));
-        require!(
-            verdict.appealed_by.is_none(),
-            "claim is already appealed"
-        );
+        require!(verdict.appealed_by.is_none(), "claim is already appealed");
         let now = env::block_timestamp();
         require!(
             now <= verdict.appeal_deadline.0,
@@ -582,11 +574,8 @@ impl Recourse {
         );
 
         let stake = bps_ceil(claim.amount.0, self.config.claim_stake_bps);
-        self.totals.claim_stakes = U128(add(
-            self.totals.claim_stakes.0,
-            stake,
-            "total claim stakes",
-        ));
+        self.totals.claim_stakes =
+            U128(add(self.totals.claim_stakes.0, stake, "total claim stakes"));
 
         verdict.appealed_by = Some(appellant.clone());
         claim.verdict = Some(verdict);

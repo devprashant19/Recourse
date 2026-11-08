@@ -136,15 +136,12 @@ impl Recourse {
 
     /// The bond of a registered agent or role holder.
     pub(crate) fn bond_of(&self, agent: &AccountId) -> Bond {
-        self.bonds
-            .get(agent)
-            .cloned()
-            .unwrap_or_else(|| {
-                if self.roles.arbiters.contains(agent) || self.roles.keepers.contains(agent) {
-                    Bond::default()
-                } else {
-                    env::panic_str("agent not registered")
-                }
-            })
+        self.bonds.get(agent).cloned().unwrap_or_else(|| {
+            if self.roles.arbiters.contains(agent) || self.roles.keepers.contains(agent) {
+                Bond::default()
+            } else {
+                env::panic_str("agent not registered")
+            }
+        })
     }
 }

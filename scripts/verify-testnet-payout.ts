@@ -15,11 +15,10 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { JsonRpcProvider } from "near-api-js";
 
 import { OneClickClient } from "../packages/intents/src/index.js";
 import { RecourseClient } from "../packages/sdk/src/index.js";
-import { USDC_CONTRACTS, BASE_USDC_ASSET_ID } from "../packages/config/src/index.js";
+import { BASE_USDC_ASSET_ID } from "../packages/config/src/index.js";
 import { network, provider, save, type Deployment } from "./lib/near.js";
 
 async function main() {
