@@ -1,11 +1,18 @@
 /**
  * @recourse/receipts
  *
- * NEAR AI Cloud wrapper: attest, complete, sign, buildReceipt, verifyReceipt.
+ * NEAR AI Cloud receipts: attest with a fresh nonce, call the model keeping the
+ * exact bytes, fetch the TEE signature, build the receipt, verify it.
  *
- * Built in: Phase 2
- * Spec: phases/phase-02-receipts-worker-arbiter.md
+ * A receipt proves which model produced which bytes inside an attested TEE.
+ * It does not prove the output is correct. That is the arbiter's job.
+ *
+ * This entry point is browser-safe. The Intel TDX collateral check, which
+ * needs a native module and network access to Intel, lives in
+ * `@recourse/receipts/dcap`.
+ *
+ * Spec: phases/phase-02-receipts-worker-arbiter.md section 2.
  */
 
-export const PLACEHOLDER = true;
-// TODO(Phase 2): implement.
+export * from "./types.js";
+export * from "./bytes.js";
