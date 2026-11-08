@@ -46,7 +46,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 2. `feat(receipts): implement nonce-bound TEE attestation`
 
-- **Commit:** (this commit)
+- **Commit:** `76828d0`
 - **Did:** `newNonce()` — 32 bytes from the platform CSPRNG (`crypto.getRandomValues`), 64 lowercase
   hex chars; `fetchAttestation()` generates the nonce *before* calling, keeps the exact report bytes
   and their SHA-256; `LiveNearAiClient.attestationReport` sends `model`, `provider=near`,
@@ -62,6 +62,30 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   rejections; signer normalisation; binding accepted, wrong nonce, wrong signer, short report_data).
 - **Ran:** `vitest run packages/receipts` (17 passed), `tsc --noEmit`, `eslint` — clean.
 - **Evidence:** unit-tested (HTTP mocked). Not yet run against the live endpoint (no key).
+
+### 3. `feat(receipts): integrate attestation quote verification`
+
+- **Commit:** (this commit)
+- **Did:** `DcapQuoteVerifier` (entry `@recourse/receipts/dcap`) uses `@phala/dcap-qvl-node` 0.3.3 —
+  the library NEAR's own TypeScript verifier uses — to fetch Intel PCS collateral for the quote and
+  verify it, accepting only `UpToDate` / `OutOfDate` (NEAR's rule) and a 64-byte `report_data`; any
+  library error becomes `verified: false` with an `Invalid: …` status, never an acceptance.
+  `verifyAttestation(fetched, verifier)` checks every model TEE: a signer is verified only if its quote
+  verifies **and** its `report_data` binds its address **and** this request's nonce.
+- **Why not a subprocess:** the spec allows one "if it is not a JS library". NEAR's verifier repo is not
+  published as a package (the npm package of the same name is unaffiliated: personal maintainer, no
+  repository link, so it is not used), but its TypeScript version is a thin wrapper over
+  `@phala/dcap-qvl-node`, which is pure Rust compiled to wasm. Using it in-process is the same
+  verification without a shell boundary.
+- **Files:** `packages/receipts/src/{dcap,attestation}.ts`, `package.json` (exports `.` and `./dcap`),
+  `test/verify-attestation.test.ts`, `pnpm-lock.yaml`
+- **Tests:** 6 (valid quote + binding; failed quote with correct-looking report_data rejected; stale
+  nonce rejected; quote binding another signer rejected; missing quote skipped; the real dcap-qvl
+  rejects a malformed quote). The first five use a test-double `QuoteVerifier` standing in for Intel;
+  it exists only in tests.
+- **Ran:** `vitest run packages/receipts` (23 passed), `tsc --noEmit`, `eslint` — clean.
+- **Evidence:** unit-tested. **A genuine TDX quote has not been verified** (needs a NEAR AI Cloud key
+  for the report and network access to Intel PCS); that happens in the live recording / testnet steps.
 
 ---
 

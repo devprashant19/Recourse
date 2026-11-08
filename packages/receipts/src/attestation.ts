@@ -16,7 +16,14 @@
  */
 
 import { bytesEqual, fromHex, sha256Hex, toHex } from "./bytes.js";
-import type { AttestationReport, NearAiClient, TeeAttestation } from "./types.js";
+import type {
+  AttestationReport,
+  AttestationVerification,
+  NearAiClient,
+  QuoteVerifier,
+  TeeAttestation,
+  TeeCheck,
+} from "./types.js";
 
 const ADDRESS = /^0x[0-9a-f]{40}$/;
 const NONCE = /^[0-9a-f]{64}$/;
@@ -110,4 +117,37 @@ export function checkReportData(
   const binds_address = bytesEqual(reportData.subarray(0, 32), expectedAddr);
   const embeds_nonce = isNonce(nonce) && bytesEqual(reportData.subarray(32, 64), fromHex(nonce));
   return { binds_address, embeds_nonce };
+}
+
+/**
+ * Verifies every model TEE in a fetched report: its TDX quote (via
+ * `verifier`) AND that the quote's report_data binds its signing address and
+ * this request's nonce. A signer counts as verified only if all three hold.
+ * An HTTP 200 alone proves nothing.
+ */
+export async function verifyAttestation(
+  fetched: FetchedAttestation,
+  verifier: QuoteVerifier,
+  now: () => Date = () => new Date(),
+): Promise<AttestationVerification> {
+  const checks: TeeCheck[] = [];
+  for (const tee of fetched.report.model_attestations ?? []) {
+    if (!tee.intel_quote) {
+      checks.push({ signing_address: tee.signing_address, tdx_status: null, quote_verified: false, binds_address: false, embeds_nonce: false });
+      continue;
+    }
+    const q = await verifier.verifyQuote(fromHex(tee.intel_quote));
+    const b = q.verified ? checkReportData(tee.signing_address, fetched.nonce, q.reportData) : { binds_address: false, embeds_nonce: false };
+    checks.push({ signing_address: tee.signing_address, tdx_status: q.status, quote_verified: q.verified, ...b });
+  }
+  const verified_signers = checks
+    .filter((c) => c.quote_verified && c.binds_address && c.embeds_nonce)
+    .map((c) => c.signing_address);
+  return {
+    verifier: verifier.name,
+    verified_at: now().toISOString(),
+    report_hash: fetched.report_hash,
+    checks,
+    verified_signers,
+  };
 }
