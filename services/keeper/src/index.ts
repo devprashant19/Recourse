@@ -7,4 +7,6 @@ export * from "./logger.js";
 export * from "./chain.js";
 export * from "./sdk-chain.js";
 export * from "./payout.js";
+export * from "./tracker.js";
+export * from "./polling.js";
 export * from "./service.js";

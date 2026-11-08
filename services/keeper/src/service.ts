@@ -1,6 +1,6 @@
 /**
  * The Keeper Service: manages contract connection, token discovery,
- * and the pending payout processing loop.
+ * pending payout execution, deposit submission, and status polling.
  */
 
 import {
@@ -18,20 +18,30 @@ import {
   findPendingPayouts,
   type ExecutePayoutResult,
 } from "./payout.js";
+import {
+  pollActivePayouts,
+  recoverActivePayouts,
+  submitPendingDeposits,
+  type PollResult,
+} from "./polling.js";
+import { PayoutTracker } from "./tracker.js";
 
 export class KeeperService {
   private running = false;
   private timer?: NodeJS.Timeout;
   private tokens: TokenInfo[] = [];
   readonly log: KeeperLogger;
+  readonly tracker: PayoutTracker;
 
   constructor(
     readonly config: KeeperConfig,
     readonly chain: KeeperChain,
     readonly api: OneClickApi | null = null,
     logger?: KeeperLogger,
+    tracker?: PayoutTracker,
   ) {
     this.log = logger ?? new KeeperLogger("keeper");
+    this.tracker = tracker ?? new PayoutTracker(config.stateFile);
   }
 
   /**
@@ -39,6 +49,7 @@ export class KeeperService {
    * 1. Fetches the live token list from 1Click (if API available).
    * 2. Resolves USDC on NEAR and Base, logging them dynamically.
    * 3. Validates connection to the contract.
+   * 4. Recovers active payouts awaiting confirmation across restarts.
    */
   async init(): Promise<void> {
     this.log.info("keeper_init_started", {
@@ -77,11 +88,17 @@ export class KeeperService {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+
+    // Recover any active Intents payouts from the contract
+    await recoverActivePayouts(this.chain, this.tracker, this.log);
   }
 
-  /** Runs a single discovery and execution cycle. */
-  async tick(): Promise<ExecutePayoutResult[]> {
-    const results: ExecutePayoutResult[] = [];
+  /** Runs a single discovery, execution, submission, and polling cycle. */
+  async tick(): Promise<{ executed: ExecutePayoutResult[]; polled: PollResult[] }> {
+    const executed: ExecutePayoutResult[] = [];
+    let polled: PollResult[] = [];
+
+    // 1. Discover and execute new pending payouts
     try {
       const pending = await findPendingPayouts(this.chain);
       if (pending.length > 0) {
@@ -101,7 +118,16 @@ export class KeeperService {
               logger: this.log,
             },
           );
-          results.push(res);
+          executed.push(res);
+
+          // Track newly sent Intents payout for polling
+          if (res.mode === "Intents" && res.depositAddress && res.quoteId) {
+            this.tracker.track(
+              job.claimId,
+              res.quoteId,
+              res.depositAddress,
+            );
+          }
         } catch (jobErr) {
           this.log.error("execute_payout_failed", {
             claimId: job.claimId,
@@ -114,7 +140,20 @@ export class KeeperService {
         error: tickErr instanceof Error ? tickErr.message : String(tickErr),
       });
     }
-    return results;
+
+    // 2. Submit deposits and poll status for active payouts
+    if (this.api) {
+      try {
+        await submitPendingDeposits(this.api, this.tracker, this.config.contractId, this.log);
+        polled = await pollActivePayouts(this.api, this.tracker, this.log);
+      } catch (pollErr) {
+        this.log.error("keeper_poll_error", {
+          error: pollErr instanceof Error ? pollErr.message : String(pollErr),
+        });
+      }
+    }
+
+    return { executed, polled };
   }
 
   /** Starts the continuous polling loop. */

@@ -266,8 +266,8 @@ describe("KeeperService", () => {
     );
 
     const results = await service.tick();
-    expect(results).toHaveLength(1);
-    expect(results[0]?.claimId).toBe(10);
+    expect(results.executed).toHaveLength(1);
+    expect(results.executed[0]?.claimId).toBe(10);
     expect(chain.executeDirectPayout).toHaveBeenCalledWith(10);
   });
 });
