@@ -12,3 +12,5 @@ export * from "./sdk-chain.js";
 export * from "./judge.js";
 export * from "./arbiter.js";
 export * from "./rerun.js";
+export * from "./config.js";
+export * from "./main.js";

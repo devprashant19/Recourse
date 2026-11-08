@@ -370,7 +370,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 16. `feat(fixtures): record verified NEAR AI Cloud responses and signatures`
 
-- **Commit:** (this commit)
+- **Commit:** `40602bb`
 - **Did:**
   - **`scripts/record-fixtures.ts`.**
     - `--live` needs `NEARAI_API_KEY`, `NEARAI_MODEL_WORKER` and `NEARAI_MODEL_ARBITER`. It wraps the
@@ -398,6 +398,34 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 - **Evidence:**
   - Unit-tested.
   - **`--live` has not been run** (no NEAR AI Cloud key); no genuine fixtures exist yet.
+
+### 17. `feat(demo): enable deterministic keyless sandbox execution`
+
+- **Commit:** (this commit)
+- **Did:**
+  - **Dev fixture set.** Generated and committed `demo/fixtures/dev/fixtures.json` with
+    `pnpm record-fixtures --dev`: 8 interactions (5 correct extractions, 1 `wrong_total`, 2 verdicts),
+    all 8 receipts verified on replay before writing, signer `0xa8559c…5b61`.
+  - **Runnable services.** `pnpm --filter @recourse/worker-agent start` and
+    `pnpm --filter @recourse/arbiter start` pick their backend with `selectBackend(mode)`: fixtures in
+    sandbox (no key read), live elsewhere. The worker's admin server starts only with a token and never
+    in mainnet.
+  - **Arbiter wiring.** New arbiter config with the same validation as the worker. The arbiter
+    receives the backend's receipt policy, so dev-fixture receipts are checked without TEE attestation,
+    in sandbox only.
+  - **`pnpm rerun-verdict <claim_id>`** compares `upheld` / `award_bps` and exits 0, 1 or 2.
+  - **README:** `demo/fixtures/README.md` states exactly what the dev set is and is not.
+- **Files:**
+  - `demo/fixtures/{dev/fixtures.json,README.md}`
+  - `services/worker-agent/{src/{run,main}.ts,package.json}`
+  - `services/arbiter/{src/{config,main,run,rerun-verdict,case,index}.ts,package.json,test/keyless.test.ts}`
+  - `pnpm-lock.yaml`
+- **Tests:** 5 keyless (backend chosen with no key; scenario 02 path upheld at 30% of cap; scenario 04
+  path, with an injection in the evidence, rejected; deterministic response bytes; **judge check: 5
+  recorded receipts verify, 5 tampered copies fail**). These run the real worker and arbiter code over
+  the committed fixtures, which proves their request builders produce byte-identical requests.
+- **Ran:** `pnpm test:services` (20 files, 210 passed), `pnpm typecheck`, `pnpm lint`: clean.
+- **Evidence:** dev-fixture. No genuine set exists yet.
 
 ---
 

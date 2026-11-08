@@ -6,9 +6,11 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "tsx src/run.ts"
   },
   "dependencies": {
+    "@recourse/adapters": "workspace:^",
     "@recourse/jobs": "workspace:^",
     "@recourse/receipts": "workspace:^",
     "@recourse/sdk": "workspace:^",

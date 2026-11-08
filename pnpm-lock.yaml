@@ -89,6 +89,9 @@ importers:
 
   services/arbiter:
     dependencies:
+      '@recourse/adapters':
+        specifier: workspace:^
+        version: link:../../packages/adapters
       '@recourse/jobs':
         specifier: workspace:^
         version: link:../../packages/jobs
@@ -113,6 +116,9 @@ importers:
 
   services/worker-agent:
     dependencies:
+      '@recourse/adapters':
+        specifier: workspace:^
+        version: link:../../packages/adapters
       '@recourse/jobs':
         specifier: workspace:^
         version: link:../../packages/jobs

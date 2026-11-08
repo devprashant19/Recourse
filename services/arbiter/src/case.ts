@@ -21,6 +21,7 @@ import {
   verifyReceipt,
   type ArtifactStore,
   type ReceiptRegistry,
+  type VerifyOptions,
 } from "@recourse/receipts";
 import type { Claim, Engagement } from "@recourse/sdk";
 
@@ -46,6 +47,8 @@ export interface CaseDeps {
   documents: DocumentSource;
   registry: ReceiptRegistry;
   store: ArtifactStore;
+  /** Receipt policy from the backend; dev fixtures carry no TEE attestation. Defaults to requiring it. */
+  verifyOptions?: VerifyOptions;
 }
 
 /** Is this a claim the arbiter should rule on now? */
@@ -84,7 +87,7 @@ export async function gatherCase(d: CaseDeps, claimId: number): Promise<CaseFile
     response: await d.store.get(r.artifacts.response_uri),
     report: await d.store.get(pub.report_uri),
   };
-  const v = verifyReceipt(r, bytes, { allowedSigners: [r.signing_address] });
+  const v = verifyReceipt(r, bytes, { ...d.verifyOptions, allowedSigners: [r.signing_address] });
   if (!v.ok) throw new Error(`the agent's receipt does not verify: ${v.errors.join("; ")}`);
 
   return {
