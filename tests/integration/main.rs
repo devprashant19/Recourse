@@ -11,6 +11,7 @@
 //! `near-workspaces` downloads the sandbox binary (nearcore 2.14.0) on first
 //! use — Linux x64 or macOS arm64 only, see PHASE-0-STATUS.md.
 
+mod dao;
 mod usdc;
 
 use near_workspaces::network::Sandbox;
