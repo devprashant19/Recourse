@@ -115,6 +115,7 @@ export const METHODS = {
   },
   resolve_objective: { kind: "call", args: ["claim_id"] },
   resolve_claim: { kind: "call", args: ["claim_id", "upheld", "award", "reasons_hash", "verdict_receipt"] },
+  appeal: { kind: "call", args: ["claim_id"] },
   finalize: { kind: "call", args: ["claim_id"] },
   close_stale_claim: { kind: "call", args: ["claim_id"] },
   execute_payout: { kind: "call", args: ["claim_id", "deposit_address", "quote_id", "quote_hash"] },
@@ -291,6 +292,12 @@ export class RecourseClient {
   resolveObjective = (claim_id: ClaimId) => this.call<Verdict>("resolve_objective", { claim_id });
   resolveClaim = (claim_id: ClaimId, upheld: boolean, award: U128, reasons_hash: Hash, verdict_receipt: ReceiptInput) =>
     this.call<Verdict>("resolve_claim", { claim_id, upheld, award, reasons_hash, verdict_receipt });
+  appeal = async (claim_id: ClaimId) => {
+    const [claim, cfg] = await Promise.all([this.getClaim(claim_id), this.getConfig()]);
+    if (!claim) throw new Error(`claim ${claim_id} not found`);
+    const stake = ceilBps(BigInt(claim.amount), cfg.claim_stake_bps);
+    return this.call<void>("appeal", { claim_id }, stake);
+  };
   finalize = (claim_id: ClaimId) => this.call<void>("finalize", { claim_id });
   closeStaleClaim = (claim_id: ClaimId) => this.call<void>("close_stale_claim", { claim_id });
   /** Direct mode: the contract fixes amount and recipient; Intents arguments must be null. */

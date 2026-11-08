@@ -193,6 +193,22 @@ impl Recourse {
         verdict
     }
 
+    /// Appeals a resolved quality claim. Only the client or the agent may appeal.
+    /// Attaches the appeal stake (`claim_stake_bps` of the claim amount).
+    /// Can only be called within the appeal window. Freezes the claim for council decision.
+    #[payable]
+    pub fn appeal(&mut self, claim_id: ClaimId) {
+        self.assert_native_mode();
+        let appellant = env::predecessor_account_id();
+        let stake = self.record_appeal(&appellant, claim_id);
+        let attached = env::attached_deposit().as_yoctonear();
+        require!(
+            attached >= stake,
+            format!("attach {stake} yocto: appeal stake")
+        );
+        refund(attached - stake);
+    }
+
     /// Applies an arbiter's verdict once the appeal window has passed. Anyone
     /// may call it. Upheld: the agent's bond and then the vault are slashed
     /// for the award, which becomes a pending payout to the claimant; the
@@ -429,6 +445,60 @@ impl Recourse {
             "destination": r.destination,
         }));
         (claim_id, stake)
+    }
+
+    /// Records an appeal by `appellant` and adds its stake to `totals.claim_stakes`.
+    /// Freezes the claim for council decision.
+    pub(crate) fn record_appeal(&mut self, appellant: &AccountId, claim_id: ClaimId) -> u128 {
+        let mut claim = self.claim_of(claim_id);
+        require!(
+            claim.status != ClaimStatus::Appealed,
+            "claim is already appealed"
+        );
+        require!(
+            claim.status == ClaimStatus::Resolved,
+            "claim is not in resolved status"
+        );
+        let eid = claim.engagement_id;
+        let e = self.engagement_of(eid);
+        require!(
+            *appellant == claim.claimant || *appellant == e.agent,
+            "only client or agent can appeal"
+        );
+        let mut verdict = claim
+            .verdict
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("claim has no verdict"));
+        require!(
+            verdict.appealed_by.is_none(),
+            "claim is already appealed"
+        );
+        let now = env::block_timestamp();
+        require!(
+            now <= verdict.appeal_deadline.0,
+            "appeal window has expired"
+        );
+
+        let stake = bps_ceil(claim.amount.0, self.config.claim_stake_bps);
+        self.totals.claim_stakes = U128(add(
+            self.totals.claim_stakes.0,
+            stake,
+            "total claim stakes",
+        ));
+
+        verdict.appealed_by = Some(appellant.clone());
+        claim.verdict = Some(verdict);
+        self.set_claim_status(claim_id, &mut claim, ClaimStatus::Appealed);
+
+        Event::ClaimAppealed.emit(json!({
+            "claim_id": U64(claim_id),
+            "engagement_id": U64(eid),
+            "appellant": appellant,
+            "stake": U128(stake),
+        }));
+
+        stake
     }
 
     pub(crate) fn claim_of(&self, id: ClaimId) -> Claim {

@@ -255,7 +255,16 @@ impl Recourse {
                 self.prepay_storage_from_balance(sender, before, claim_storage_fee());
                 stake
             }
-            FtAction::Appeal(_) => env::panic_str("appeal deposits are not supported yet"),
+            FtAction::Appeal(cid) => {
+                let before = env::storage_usage();
+                let stake = self.record_appeal(sender, cid);
+                require!(
+                    amount >= stake,
+                    format!("send at least {stake}: the appeal stake")
+                );
+                self.charge_storage_balance(sender, before);
+                stake
+            }
         }
     }
 

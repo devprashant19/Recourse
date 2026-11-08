@@ -10,6 +10,7 @@ use near_sdk::{testing_env, AccountId, NearToken, PromiseOrValue, PromiseResult}
 
 use super::common::*;
 use super::ft::{ft_contract, usdc};
+use crate::math::bps_ceil;
 use crate::types::*;
 use crate::Recourse;
 
@@ -592,4 +593,28 @@ fn usdc_on_near_to_someone_else_goes_through_intents() {
         },
     );
     assert_eq!(c.get_payout(cid).unwrap().mode, PayoutMode::Intents);
+}
+
+#[test]
+fn ft_mode_appeal_via_transfer_call() {
+    let mut c = ft_ready();
+    let eid = ft_open_job(&mut c);
+    deliver(&mut c, eid, DELIVERED_AT);
+    let cid = c.get_counters().claim;
+    let claim_stake = bps_ceil(CAP, c.get_config().claim_stake_bps);
+    let unused_claim = deposit(&mut c, &client(), claim_stake, claim_msg(eid, CAP));
+    assert_eq!(unused_claim, 0);
+    rule(&mut c, cid, false, 0, DELIVERED_AT + 2);
+    let stake = bps_ceil(CAP, c.get_config().claim_stake_bps);
+    let held_before = c.get_ft_held().0;
+
+    ctx(&usdc(), 0, DELIVERED_AT + 3);
+    let unused_appeal = deposit(&mut c, &client(), stake + 500, format!("appeal:{cid}"));
+    assert_eq!(unused_appeal, 500);
+    assert_eq!(c.get_claim(cid).unwrap().status, ClaimStatus::Appealed);
+    assert_eq!(
+        c.get_claim(cid).unwrap().verdict.unwrap().appealed_by,
+        Some(client())
+    );
+    assert_eq!(c.get_ft_held().0, held_before + stake);
 }

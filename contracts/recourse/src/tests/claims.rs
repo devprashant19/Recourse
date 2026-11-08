@@ -3,6 +3,7 @@
 use near_sdk::json_types::{U128, U64};
 
 use super::common::*;
+use crate::math::bps_ceil;
 use crate::types::*;
 
 const CLAIM: u128 = 2 * ONE_NEAR;
@@ -467,4 +468,98 @@ fn arbiter_cannot_rule_on_its_own_engagement() {
     setup_arbiter(&mut c);
     ctx(&client(), 0, RULED_AT);
     c.resolve_claim(cid, false, U128(0), HexBytes([6; 32]), verdict_receipt());
+}
+
+// ----- appeal -------------------------------------------------------------
+
+#[test]
+fn client_can_appeal_quality_claim_inside_window() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    let stakes_before = c.get_totals().claim_stakes.0;
+
+    ctx(&client(), stake + 10, RULED_AT + MINUTE);
+    c.appeal(cid);
+
+    let cl = c.get_claim(cid).unwrap();
+    assert_eq!(cl.status, ClaimStatus::Appealed);
+    assert_eq!(cl.verdict.unwrap().appealed_by, Some(client()));
+    assert_eq!(c.get_totals().claim_stakes.0, stakes_before + stake);
+    assert_eq!(events().last().unwrap()["event"], "claim_appealed");
+}
+
+#[test]
+fn agent_can_appeal_quality_claim_inside_window() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, true, ONE_NEAR, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+
+    ctx(&agent(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+
+    let cl = c.get_claim(cid).unwrap();
+    assert_eq!(cl.status, ClaimStatus::Appealed);
+    assert_eq!(cl.verdict.unwrap().appealed_by, Some(agent()));
+}
+
+#[test]
+#[should_panic(expected = "only client or agent can appeal")]
+fn stranger_cannot_appeal() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&stranger(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+}
+
+#[test]
+#[should_panic(expected = "appeal window has expired")]
+fn appeal_after_window_fails() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    let v = rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&client(), stake, v.appeal_deadline.0 + 1);
+    c.appeal(cid);
+}
+
+#[test]
+#[should_panic(expected = "claim is already appealed")]
+fn duplicate_appeal_fails() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&client(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+    ctx(&agent(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+}
+
+#[test]
+#[should_panic(expected = "attach")]
+fn appeal_with_insufficient_stake_fails() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&client(), stake - 1, RULED_AT + MINUTE);
+    c.appeal(cid);
+}
+
+#[test]
+#[should_panic(expected = "claim is not resolved")]
+fn appealed_claim_cannot_be_finalized() {
+    let mut c = ready();
+    let cid = quality_claim(&mut c);
+    let v = rule(&mut c, cid, false, 0, RULED_AT);
+    let stake = bps_ceil(CLAIM, c.get_config().claim_stake_bps);
+    ctx(&client(), stake, RULED_AT + MINUTE);
+    c.appeal(cid);
+    ctx(&stranger(), 0, v.appeal_deadline.0 + 1);
+    c.finalize(cid);
 }

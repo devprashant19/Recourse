@@ -7,7 +7,7 @@
       "compiler": "rustc 1.95.0",
       "builder": "cargo-near cargo-near-build 0.11.5"
     },
-    "wasm_hash": "HVbCHkc3oFV5pqe1wAxyhGF8QoDVcgvrbTMxzykQvtXJ"
+    "wasm_hash": "6tT2z23fb1jJJuQN8o1oa2qN1PACFKe2yHSMtNdzpGRa"
   },
   "body": {
     "functions": [
@@ -56,6 +56,27 @@
               "type_schema": {
                 "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
                 "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "appeal",
+        "doc": " Appeals a resolved quality claim. Only the client or the agent may appeal.\n Attaches the appeal stake (`claim_stake_bps` of the claim amount).\n Can only be called within the appeal window. Freezes the claim for council decision.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "claim_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
               }
             }
           ]

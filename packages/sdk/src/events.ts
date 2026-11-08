@@ -28,6 +28,8 @@ export const EVENT_NAMES = [
   "engagement_expired",
   "claim_filed",
   "claim_resolved",
+  "claim_appealed",
+  "council_decided",
   "claim_finalized",
   "claim_timed_out",
   "slashed",
