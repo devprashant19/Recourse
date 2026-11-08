@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 250 250 249;
+  --panel: 255 255 255;
+  --line: 228 228 231;
+  --ink: 24 24 27;
+  --dim: 113 113 122;
+  --money: 5 150 105;
+  --bad: 220 38 38;
+  --warn: 202 138 4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: 12 12 14;
+    --panel: 22 22 26;
+    --line: 45 45 52;
+    --ink: 236 236 240;
+    --dim: 150 150 160;
+    --money: 52 211 153;
+    --bad: 248 113 113;
+    --warn: 250 204 21;
+  }
+}
+
+html,
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
+}
+
+.card {
+  @apply rounded-xl border border-line bg-panel p-4 sm:p-5;
+}
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-panel px-3 py-2 text-sm font-medium hover:border-ink/40 disabled:opacity-50;
+}
+.btn-primary {
+  @apply btn border-ink bg-ink text-bg hover:opacity-90;
+}
+.label {
+  @apply text-xs font-medium uppercase tracking-wide text-dim;
+}

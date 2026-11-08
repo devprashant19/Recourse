@@ -11,6 +11,8 @@ export default tseslint.config(
       "**/target/**",
       "**/.data/**",
       "phases/**",
+      "apps/web/next-env.d.ts",
+      "apps/web/.next/**",
     ],
   },
   ...tseslint.configs.recommended,
