@@ -41,3 +41,9 @@ Thumbs.db
 # Local archives — phases.zip duplicates phases/ exactly, so it is not tracked.
 # Drop the line below if you want it downloadable from the repo.
 *.zip
+
+# Local-only phase trackers
+PHASE-1-STATUS.md
+PHASE-2-STATUS.md
+PHASE-0-STATUS.md
+
