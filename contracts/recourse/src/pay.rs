@@ -8,6 +8,9 @@
 //!   callback puts it back in `ft_held` and credits it to `owed[recipient]`,
 //!   a tracked liability the recipient pulls with `claim_owed` once it has
 //!   registered. Money is never lost to a failed transfer and never paid twice.
+//!
+//! An `owed` entry's storage is paid by the contract. It is bounded by one
+//! entry per recipient of a real payment and removed by `claim_owed`.
 
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
@@ -22,7 +25,7 @@ use crate::{Recourse, RecourseExt};
 /// Gas for the token's `ft_transfer`.
 pub const FT_TRANSFER_GAS: Gas = Gas::from_tgas(10);
 /// Gas for `on_ft_paid`.
-pub const FT_PAID_CALLBACK_GAS: Gas = Gas::from_tgas(5);
+pub const FT_PAID_CALLBACK_GAS: Gas = Gas::from_tgas(10);
 
 #[ext_contract(ext_ft)]
 pub trait FungibleToken {

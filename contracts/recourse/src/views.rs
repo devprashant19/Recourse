@@ -125,7 +125,7 @@ impl Recourse {
         // Ft mode: the money is the token, tracked in `ft_held`; NEAR only pays
         // for storage. Native mode: the account balance, less what storage
         // locks, and prepaid NEP-145 storage balances are owed back too.
-        let ft = self.ft_token().is_some();
+        let ft = self.is_ft_mode();
         let held = if ft {
             self.ft_held
         } else {
@@ -149,6 +149,13 @@ impl Recourse {
         .into_iter()
         .fold(0, |acc, x| add(acc, x, "liabilities"));
         let free = held.saturating_sub(storage_reserved);
+        // NEAR side: the account balance covers the storage the runtime
+        // locks plus every prepaid NEP-145 balance (in native mode this is
+        // already part of the check above).
+        let near_needed = u128::from(env::storage_usage())
+            .saturating_mul(env::storage_byte_cost().as_yoctonear())
+            .saturating_add(self.storage_balance_total);
+        let storage_ok = env::account_balance().as_yoctonear() >= near_needed;
         Solvency {
             held: U128(held),
             storage_reserved: U128(storage_reserved),
@@ -161,7 +168,8 @@ impl Recourse {
             owed: U128(self.owed_total),
             liabilities: U128(liabilities),
             surplus: U128(free.saturating_sub(liabilities)),
-            ok: free >= liabilities,
+            storage_ok,
+            ok: free >= liabilities && storage_ok,
         }
     }
 }

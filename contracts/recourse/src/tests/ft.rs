@@ -87,29 +87,100 @@ fn deposit_messages_parse_strictly() {
 
 #[test]
 fn storage_balance_deposit_and_withdraw() {
-    let mut c = new_contract();
+    let mut c = ft_contract();
+    let min = c.storage_balance_bounds().min.0;
+    assert!(min > 0);
     ctx(&client(), ONE_NEAR, T0);
-    let b = c.storage_deposit(None);
-    assert_eq!(b.total, U128(ONE_NEAR));
+    let b = c.storage_deposit(None, None);
     assert_eq!(
-        c.solvency().liabilities,
-        U128(ONE_NEAR),
-        "prepaid storage is owed back in native mode"
+        b.available,
+        U128(ONE_NEAR - min),
+        "the entry's own storage is kept"
     );
-    ctx(&client(), 0, T0);
+    assert_eq!(b.total, U128(ONE_NEAR));
+    assert_eq!(c.storage_balance_of(client()), Some(b));
+    ctx(&client(), 1, T0);
     let left = c.storage_withdraw(Some(U128(ONE_NEAR / 4)));
-    assert_eq!(left.total, U128(ONE_NEAR * 3 / 4));
+    assert_eq!(left.available, U128(ONE_NEAR * 3 / 4 - min));
     assert_eq!(transfers(), vec![(client(), ONE_NEAR / 4)]);
+    ctx(&client(), 1, T0);
+    let empty = c.storage_withdraw(None);
+    assert_eq!(empty.available, U128(0));
+    ctx(&client(), 1, T0);
+    assert_eq!(
+        c.storage_withdraw(None).available,
+        U128(0),
+        "nothing left is not an error"
+    );
+    assert!(transfers().is_empty());
+}
+
+#[test]
+#[should_panic(expected = "to register for storage")]
+fn registering_must_pay_for_the_entry_itself() {
+    let mut c = ft_contract();
+    ctx(&stranger(), 1, T0);
+    c.storage_deposit(Some(acc("never-existed.near")), None);
+}
+
+#[test]
+fn registration_only_keeps_just_the_minimum() {
+    let mut c = ft_contract();
+    let min = c.storage_balance_bounds().min.0;
+    ctx(&client(), ONE_NEAR, T0);
+    let b = c.storage_deposit(None, Some(true));
+    assert_eq!(b.available, U128(0));
+    assert_eq!(transfers(), vec![(client(), ONE_NEAR - min)]);
+    ctx(&client(), ONE_NEAR, T0);
+    c.storage_deposit(None, Some(true));
+    assert_eq!(
+        transfers(),
+        vec![(client(), ONE_NEAR)],
+        "already registered: all back"
+    );
+}
+
+#[test]
+fn the_storage_minimum_covers_a_64_character_account() {
+    let mut c = ft_contract();
+    let long = acc(&"f".repeat(64));
+    let before = near_sdk::env::storage_usage();
+    ctx(&long, c.storage_balance_bounds().min.0, T0);
+    c.storage_deposit(None, None);
+    c.flush();
+    let used = near_sdk::env::storage_usage() - before;
+    assert!(
+        used <= crate::ft::STORAGE_BALANCE_ENTRY_BYTES,
+        "{used} bytes"
+    );
+}
+
+#[test]
+#[should_panic(expected = "Requires attached deposit of exactly 1 yoctoNEAR")]
+fn storage_withdraw_requires_one_yocto() {
+    let mut c = ft_contract();
+    ctx(&client(), ONE_NEAR, T0);
+    c.storage_deposit(None, None);
+    ctx(&client(), 0, T0);
+    c.storage_withdraw(None);
 }
 
 #[test]
 #[should_panic(expected = "not enough storage balance")]
 fn storage_withdraw_cannot_exceed_the_balance() {
+    let mut c = ft_contract();
+    ctx(&client(), ONE_NEAR, T0);
+    c.storage_deposit(None, None);
+    ctx(&client(), 1, T0);
+    c.storage_withdraw(Some(U128(ONE_NEAR)));
+}
+
+#[test]
+#[should_panic(expected = "only used in token mode")]
+fn native_deployments_take_no_storage_balances() {
     let mut c = new_contract();
-    ctx(&client(), 10, T0);
-    c.storage_deposit(None);
-    ctx(&client(), 0, T0);
-    c.storage_withdraw(Some(U128(11)));
+    ctx(&client(), ONE_NEAR, T0);
+    c.storage_deposit(None, None);
 }
 
 #[test]
@@ -197,7 +268,7 @@ fn ft_vault() -> Recourse {
     ctx(&uw(), STORAGE_DEPOSIT, T0);
     c.create_vault();
     ctx(&lp(), ONE_NEAR / 10, T0);
-    c.storage_deposit(None);
+    c.storage_deposit(None, None);
     c
 }
 

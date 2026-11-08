@@ -293,7 +293,7 @@ impl World {
         }
         if ft {
             for who in LPS.iter().chain(CLIENTS.iter()) {
-                w.call(&acc(who), 100 * NEAR, |c| c.storage_deposit(None));
+                w.call(&acc(who), 100 * NEAR, |c| c.storage_deposit(None, None));
             }
         }
         for (i, v) in VAULTS.iter().enumerate() {
@@ -920,7 +920,8 @@ impl World {
                 self.held_ft,
                 s.liabilities.0
             );
-            assert!(s.ok, "I1 (USDC): solvency() reports a shortfall");
+            // (The NEAR side — storage — is not modelled here; `storage_ok`
+            // has its own unit tests.)
             return;
         }
         assert!(

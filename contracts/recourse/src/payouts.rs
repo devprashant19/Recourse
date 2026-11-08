@@ -60,6 +60,10 @@ impl Recourse {
         quote_hash: Option<Hash>,
     ) -> Promise {
         self.assert_keeper();
+        // Awards are in the bond asset; in token mode this native transfer
+        // would pay token units as yoctoNEAR. Token payouts go through the
+        // token (see the Intents/token payout path).
+        self.assert_native_mode();
         let mut p = self
             .payouts
             .get(&claim_id)

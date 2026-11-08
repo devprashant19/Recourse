@@ -19,7 +19,7 @@ use near_sdk::{env, near, require, AccountId, NearToken, Promise, PromiseOrValue
 
 use crate::events::Event;
 use crate::math::{add, sub};
-use crate::storage::{claim_storage_fee, engagement_storage_fee, storage_cost};
+use crate::storage::{claim_storage_fee, engagement_storage_fee, refund, storage_cost};
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
 
@@ -67,6 +67,13 @@ pub struct StorageBalance {
     pub available: U128,
 }
 
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StorageBalanceBounds {
+    pub min: U128,
+    pub max: Option<U128>,
+}
+
 #[near]
 impl Recourse {
     /// NEP-141 receiver. Returns the amount to refund to the sender (0 when
@@ -87,18 +94,42 @@ impl Recourse {
         );
         require!(amount.0 > 0, "amount must be positive");
         let action = FtAction::parse(&msg).unwrap_or_else(|e| env::panic_str(&e));
+        // The tokens are ours from here; whatever is not used goes back.
+        self.ft_held = add(self.ft_held, amount.0, "ft held");
         let used = self.apply_ft_deposit(&sender_id, amount.0, action);
         let unused = sub(amount.0, used, "ft refund");
-        self.ft_held = add(self.ft_held, used, "ft held");
+        self.ft_held = sub(self.ft_held, unused, "ft held");
         PromiseOrValue::Value(U128(unused))
     }
 
-    /// NEP-145: prepay storage for USDC-mode operations.
+    /// NEP-145: prepay storage for USDC-mode operations. A new account pays
+    /// `storage_balance_bounds().min` once for its own entry (kept as long as
+    /// the entry exists); the rest is its available balance. With
+    /// `registration_only`, only the minimum is kept and the rest refunded.
     #[payable]
-    pub fn storage_deposit(&mut self, account_id: Option<AccountId>) -> StorageBalance {
+    pub fn storage_deposit(
+        &mut self,
+        account_id: Option<AccountId>,
+        registration_only: Option<bool>,
+    ) -> StorageBalance {
+        self.ft_token()
+            .unwrap_or_else(|| env::panic_str("storage balances are only used in token mode"));
         let who = account_id.unwrap_or_else(env::predecessor_account_id);
-        let amount = env::attached_deposit().as_yoctonear();
-        require!(amount > 0, "attach NEAR to deposit for storage");
+        let mut amount = env::attached_deposit().as_yoctonear();
+        let registered = self.storage_balances.contains_key(&who);
+        if !registered {
+            let min = storage_balance_min();
+            require!(
+                amount >= min,
+                format!("attach at least {min} yoctoNEAR to register for storage")
+            );
+            amount -= min;
+            self.storage_balances.insert(who.clone(), 0);
+        }
+        if registration_only.unwrap_or(false) {
+            refund(amount);
+            amount = 0;
+        }
         let bal = add(
             self.storage_balances.get(&who).copied().unwrap_or(0),
             amount,
@@ -108,41 +139,68 @@ impl Recourse {
         self.storage_balance_total = add(self.storage_balance_total, amount, "storage balances");
         Event::StorageDeposit
             .emit(json!({ "account_id": who, "amount": U128(amount), "balance": U128(bal) }));
-        self.storage_balance_of(who).unwrap_or(StorageBalance {
-            total: U128(bal),
-            available: U128(bal),
-        })
+        storage_balance(bal)
     }
 
     pub fn storage_balance_of(&self, account_id: AccountId) -> Option<StorageBalance> {
         self.storage_balances
             .get(&account_id)
-            .map(|b| StorageBalance {
-                total: U128(*b),
-                available: U128(*b),
-            })
+            .map(|b| storage_balance(*b))
     }
 
-    /// NEP-145: return unused prepaid storage (all of it if `amount` is omitted).
+    pub fn storage_balance_bounds(&self) -> StorageBalanceBounds {
+        StorageBalanceBounds {
+            min: U128(storage_balance_min()),
+            max: None,
+        }
+    }
+
+    /// NEP-145: return unused prepaid storage (all of it if `amount` is
+    /// omitted). Requires exactly 1 yoctoNEAR, so it needs a full-access key.
+    #[payable]
     pub fn storage_withdraw(&mut self, amount: Option<U128>) -> StorageBalance {
+        near_sdk::assert_one_yocto();
         let who = env::predecessor_account_id();
-        let bal = self.storage_balances.get(&who).copied().unwrap_or(0);
+        let bal = self
+            .storage_balances
+            .get(&who)
+            .copied()
+            .unwrap_or_else(|| env::panic_str("not registered for storage"));
         let take = amount.map(|a| a.0).unwrap_or(bal);
-        require!(take > 0 && take <= bal, "not enough storage balance");
+        require!(take <= bal, "not enough storage balance");
+        if take == 0 {
+            return storage_balance(bal);
+        }
         let left = bal - take;
         self.storage_balances.insert(who.clone(), left);
         self.storage_balance_total = sub(self.storage_balance_total, take, "storage balances");
         Promise::new(who)
             .transfer(NearToken::from_yoctonear(take))
             .detach();
-        StorageBalance {
-            total: U128(left),
-            available: U128(left),
-        }
+        storage_balance(left)
+    }
+}
+
+/// Bytes an account's own `storage_balances` entry may take (a 64-byte
+/// account id, a u128 and trie overhead), paid once on registration.
+pub const STORAGE_BALANCE_ENTRY_BYTES: u64 = 200;
+
+pub fn storage_balance_min() -> u128 {
+    storage_cost(STORAGE_BALANCE_ENTRY_BYTES)
+}
+
+fn storage_balance(available: u128) -> StorageBalance {
+    StorageBalance {
+        total: U128(available + storage_balance_min()),
+        available: U128(available),
     }
 }
 
 impl Recourse {
+    pub(crate) fn is_ft_mode(&self) -> bool {
+        matches!(self.config.bond_asset, BondAsset::Ft(_))
+    }
+
     pub(crate) fn ft_token(&self) -> Option<AccountId> {
         match &self.config.bond_asset {
             BondAsset::Ft(t) => Some(t.clone()),
@@ -153,7 +211,7 @@ impl Recourse {
     /// Native-money methods refuse in Ft mode: every amount must be in the token.
     pub(crate) fn assert_native_mode(&self) {
         require!(
-            self.ft_token().is_none(),
+            !self.is_ft_mode(),
             "this deployment's money is a fungible token; use ft_transfer_call"
         );
     }
@@ -168,8 +226,8 @@ impl Recourse {
             FtAction::Vault(vault) => {
                 let before = env::storage_usage();
                 let held = self.open_lp_entry(&vault, sender);
-                self.charge_storage_balance(sender, before);
                 self.mint_vault_shares(&vault, sender, held, amount, None);
+                self.charge_storage_balance(sender, before);
                 amount
             }
             FtAction::Engagement(json) => {
@@ -196,7 +254,7 @@ impl Recourse {
                 self.prepay_storage_from_balance(sender, before, claim_storage_fee());
                 stake
             }
-            other => env::panic_str(&format!("deposit type not supported yet: {other:?}")),
+            FtAction::Appeal(_) => env::panic_str("appeal deposits are not supported yet"),
         }
     }
 

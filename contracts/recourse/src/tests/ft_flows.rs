@@ -56,7 +56,7 @@ fn deposit(c: &mut Recourse, from: &AccountId, amount: u128, msg: String) -> u12
 
 fn prepay_storage(c: &mut Recourse, who: &AccountId) {
     ctx(who, ONE_NEAR / 10, T0);
-    c.storage_deposit(None);
+    c.storage_deposit(None, None);
 }
 
 /// Ft-mode twin of `ready()`: bonded agent, funded vault, coverage bound.
@@ -471,4 +471,65 @@ fn deposits_of_every_kind_add_up_in_ft_held_and_totals() {
     assert_eq!(s.surplus, U128(0));
     assert!(s.ok);
     assert_eq!(c.get_engagement(id).unwrap().status, EngagementStatus::Open);
+}
+
+// ----- review-gate regressions ----------------------------------------------
+
+#[test]
+fn a_successful_transfer_that_returns_data_is_not_credited_back() {
+    let mut c = ft_ready();
+    let held = c.get_ft_held().0;
+    assert!(paid_callback(
+        &mut c,
+        &client(),
+        5,
+        PromiseResult::Successful(b"\"ok\"".to_vec())
+    ));
+    assert_eq!(c.get_owed(client()), U128(0));
+    assert_eq!(c.get_ft_held(), U128(held));
+}
+
+#[test]
+fn a_claim_owed_that_fails_again_is_owed_again() {
+    let mut c = ft_ready();
+    let held = c.get_ft_held().0;
+    paid_callback(&mut c, &client(), 7, PromiseResult::Failed);
+    ctx(&client(), 0, T0);
+    c.claim_owed();
+    assert_eq!(c.get_owed(client()), U128(0));
+    paid_callback(&mut c, &client(), 7, PromiseResult::Failed);
+    assert_eq!(c.get_owed(client()), U128(7));
+    assert_eq!(
+        c.get_ft_held(),
+        U128(held + 7),
+        "sent once by claim_owed, returned once"
+    );
+}
+
+#[test]
+#[should_panic(expected = "use ft_transfer_call")]
+fn native_payouts_are_refused_in_token_mode() {
+    let mut c = ft_ready();
+    ctx(&owner(), 0, T0);
+    c.add_keeper(keeper());
+    ctx(&keeper(), 0, T0);
+    let _ = c.execute_payout(0, None, None, None);
+}
+
+#[test]
+fn solvency_flags_a_near_balance_below_storage_needs() {
+    let c = ft_ready();
+    assert!(c.solvency().storage_ok);
+    ctx_with_balance(&client(), 0, T0, 1);
+    let s = c.solvency();
+    assert!(!s.storage_ok && !s.ok);
+}
+
+#[test]
+fn ft_held_is_credited_before_routing_and_the_refund_after() {
+    let mut c = ft_ready();
+    let held = c.get_ft_held().0;
+    let escrow = escrow_for(&c, CAP, PRICE);
+    deposit(&mut c, &client(), escrow + 50, engagement_msg(CAP, PRICE));
+    assert_eq!(c.get_ft_held(), U128(held + escrow));
 }

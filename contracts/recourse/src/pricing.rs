@@ -211,9 +211,12 @@ impl Recourse {
             total_deposit: price.and_then(|p| {
                 premium_amt
                     .and_then(|pr| p.0.checked_add(pr))
-                    .and_then(|x| match self.ft_token() {
-                        Some(_) => Some(x),
-                        None => x.checked_add(fee),
+                    .and_then(|x| {
+                        if self.is_ft_mode() {
+                            Some(x)
+                        } else {
+                            x.checked_add(fee)
+                        }
                     })
                     .map(U128)
             }),

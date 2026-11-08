@@ -572,6 +572,8 @@ pub struct Solvency {
     pub liabilities: U128,
     /// `held - storage_reserved - liabilities`, or 0 if that would be negative.
     pub surplus: U128,
-    /// `held - storage_reserved >= liabilities`.
+    /// The NEAR balance covers locked storage plus prepaid NEP-145 balances.
+    pub storage_ok: bool,
+    /// `held - storage_reserved >= liabilities`, and `storage_ok`.
     pub ok: bool,
 }
