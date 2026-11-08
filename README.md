@@ -8,11 +8,11 @@ Cloud **TEE**, and the Recourse contract checks that signature **on-chain with `
 receipt cannot be forged, even by the agent's own operator. If the work fails, the agent is **slashed**
 and the client is paid **in the token and on the chain they chose**, through NEAR Intents.
 
-> **Status: Phase 0 scaffold.** Built for NEAR HACKATHON 2026 (deadline 14 Nov 2026, 23:59 UTC).
-> The repository layout, toolchain pins, CI and the three de-risking spikes are in place; the contract
-> and services are stubs with their specs attached. Build plan: [`phases/`](phases/).
-> **Nothing below the "Do / See" line works yet** — it is the target, kept here so every phase is
-> written against the thing a judge will actually run.
+> **Status (8 Nov 2026):** protocol, services, demo, judge, indexer and web app are built and run end
+> to end. `pnpm demo` passes **7/7 with solvency OK** on a fresh sandbox. **Not done yet:** genuine NEAR AI
+> Cloud recordings (the sandbox replays a clearly labelled *dev* set until then), the recorded mainnet
+> run, and the live testnet deployment — all three need credentials and a human. Details:
+> [What is real today](#what-is-real-today).
 
 ---
 
@@ -20,20 +20,19 @@ and the client is paid **in the token and on the chain they chose**, through NEA
 
 | Do | See |
 |---|---|
-| `pnpm i && pnpm demo` | Seven scenarios run in about 3 minutes; a table ends 7/7 PASS, `solvency: OK` |
-| `npm run judge` | 30+ checks, ALL PASS, exit code 0 |
-| Open the hosted site, click "Watch an agent get slashed" | The claim timeline fills in step by step, each step with a testnet transaction link |
-| On any job page, click "Verify receipt" | The browser recomputes the hashes and recovers the TEE signer; all checks green |
-| `pnpm verify-receipt demo/fixtures/receipt-wrong-total.json` | The same checks in the terminal, plus the contract's own on-chain result |
-| `pnpm mainnet:verify` | The real mainnet slash and the USDC arriving on Base, checked from public data |
+| `pnpm i && pnpm demo` | A local NEAR sandbox boots, the DAO and contract deploy, seven scenarios run, and a table ends **7/7 PASS, `solvency: OK`** (about 6–7 minutes; no `.env`, no keys) |
+| `npm run judge` | 14 check groups, one row per threat, `ALL PASS`, exit code 0 |
+| `docker compose up`, open http://localhost:3000, click "Watch an agent get slashed" | The claim timeline, step by step: findings, the bond-first split, the payout — every step with its transaction |
+| On any job page, click "Verify receipt" | The browser re-hashes the exact bytes and recovers the TEE signer; every check green |
+| `pnpm verify-receipt demo/fixtures/receipts/01-northwind-invoice.wrong-total.receipt.json` | The same checks in the terminal: `VALID` |
+| `pnpm mainnet:verify` | The mainnet slash and the USDC on Base, checked from public data *(once the run is recorded)* |
 
-`pnpm demo` needs **no `.env` and no keys**. A local NEAR sandbox boots, the contracts deploy, seven
-scripted scenarios run against recorded signatures and quotes, and a pass/fail table prints.
+**On Windows**, nearcore publishes no sandbox binary, so run the demo and the judge in the clean room:
 
-> **Current state of the recordings:** genuine NEAR AI Cloud fixtures are produced by
-> `pnpm record-fixtures --live` and have **not been recorded yet**. Until they are, the sandbox replays
-> a clearly labelled **dev** set (`demo/fixtures/dev`) signed by a throwaway test key with no TEE behind
-> it; every receipt built on it says so. See [`demo/fixtures/README.md`](demo/fixtures/README.md).
+```bash
+docker compose -f docker-compose.judge.yml run --rm demo     # pnpm demo
+docker compose -f docker-compose.judge.yml run --rm judge    # npm run judge
+```
 
 ## The one technical claim worth checking first
 
@@ -113,14 +112,10 @@ so the TEE honestly signs bad work and the receipt's request bytes show the agen
 keys. Testnet and mainnet are live only; mainnet refuses fixtures and sabotage. A fixture changes where
 the bytes come from, never whether they are verified.
 
-**What has been verified so far.** Full status is in [`PHASE-2-STATUS.md`](PHASE-2-STATUS.md).
-
-- **Unit-tested:** all of the above.
-- **Sandbox-tested on dev fixtures:** scenarios 02 (wrong work is fined) and 04 (bogus claim), and one
-  receipt accepted with a tampered copy rejected. The real worker and arbiter run against the real
-  contract, which verifies every receipt and verdict on-chain.
-- **Not yet done:** recording genuine NEAR AI Cloud fixtures, a live receipt on testnet, and checking a
-  real NEAR AI Cloud signature (Spike A). These need credentials and are documented with exact commands.
+**What has been verified so far:** unit-tested throughout; scenarios 02 and 04 run the real worker and
+arbiter against the real contract on every `pnpm demo`, with every receipt and verdict verified on-chain.
+Still open: genuine NEAR AI Cloud recordings, a live receipt on testnet, and Spike A against a real NEAR
+AI Cloud signature — they need credentials; see [What is real today](#what-is-real-today).
 
 ## Trust assumptions
 
@@ -142,6 +137,7 @@ Full list of what is *not* defended against: [`THREAT_MODEL.md`](THREAT_MODEL.md
 | [`phases/`](phases/) | The build plan, phase by phase, with exit criteria |
 | [`HACKATHON_DISCLOSURE.md`](HACKATHON_DISCLOSURE.md) | Baseline, libraries, AI-generated code |
 | [`docs/services.md`](docs/services.md) | Running the worker and arbiter: modes, keys, testnet steps, operations |
+| [`docs/hosting.md`](docs/hosting.md) | Hosting: the keyless sandbox stack, the testnet deployment, the web app |
 | [`services/arbiter/rubric.md`](services/arbiter/rubric.md) | The published arbiter rubric |
 | [`demo/fixtures/README.md`](demo/fixtures/README.md) | What the recorded fixtures are (and the dev set is not) |
 
@@ -153,33 +149,51 @@ packages/             sdk, receipts (NEAR AI Cloud), intents (1Click), adapters,
 services/             worker-agent, arbiter, underwriters, keeper, indexer
 apps/web/             Next.js 15 app — agent profiles, hire flow, claim timeline
 demo/                 run-demo.ts, seven scenarios, recorded fixtures, the mainnet run
-scripts/              judge, deploy, seed, record-fixtures, verify-receipt
+scripts/              judge, deploy, seed, hosted stack, record/export/verify receipts
 spikes/               Phase 0 de-risking spikes (A: ecrecover, B: 1Click, C: sandbox)
+docker-compose*.yml   hosted stack + web; the judge's clean room
 tests/                integration, invariants, adversarial, e2e
 phases/               The build plan
 ```
 
-## Development
+## Running it
 
 ```bash
-pnpm i                 # Node 20, pnpm 9 (see .nvmrc / package.json engines)
-pnpm spike:a           # Spike A — recover a real TEE signer in TS, write fixture.json
-cargo test --manifest-path spikes/spike-a-ecrecover/Cargo.toml -- --nocapture
-                       # Spike A — the Rust half must recover the SAME address
-pnpm spike:b           # Spike B — one 1Click dry-run quote, prints the asset IDs
-pnpm spike:c           # Spike C — sandbox tooling check (boot, deploy, fast_forward)
+pnpm i
+pnpm demo                       # seven scenarios on a fresh sandbox, one table
+pnpm demo -- --keep             # …and leave the chain running afterwards
+pnpm test:adversarial           # one attack per THREAT_MODEL entry, against that chain
+npm run judge                   # everything, one table, exit code
+pnpm hosted                     # the whole system live on a sandbox, API on :8080, resets hourly
+pnpm web                        # the site on :3000 (NEXT_PUBLIC_API_URL, default :8080)
+docker compose up               # hosted + web in containers (what `pnpm dev` runs)
+pnpm export-receipts            # write the fixture receipts and their bytes to demo/fixtures/receipts/
+pnpm test:e2e                   # Playwright click-path, against a running stack
 ```
 
-Spikes A and B need keys: see [`.env.example`](.env.example).
+Live testnet and mainnet need credentials: [`docs/hosting.md`](docs/hosting.md) and
+[`docs/services.md`](docs/services.md). Every variable is in [`.env.example`](.env.example).
+`npm run judge` checks that every command named in this README exists in `package.json`.
 
-All commands: [`phases/reference-invariants-and-threats.md`](phases/reference-invariants-and-threats.md)
-section 5. `npm run judge` asserts that every command named in this README exists in `package.json`.
+## What is real today
+
+| | Status |
+|---|---|
+| Contract (bonds, vaults, engagements, on-chain receipt check, claims, slashing, appeals, USDC, Intents payouts, sealed-bid underwriting) | Built; unit, invariant, integration and adversarial tests |
+| `pnpm demo` | **7/7 PASS, solvency OK** on a fresh nearcore 2.14 sandbox, keyless |
+| Receipts | Full four-step flow; checked on-chain with `ecrecover`. **The sandbox replays the dev fixture set**: signed by a throwaway test key, no TEE, and every such receipt says `dev-fixture` |
+| Genuine NEAR AI Cloud recordings | **Not yet** — `pnpm record-fixtures --live` needs `NEARAI_API_KEY` |
+| Spike A (a real NEAR AI Cloud signature recovered by `env::ecrecover`) | **Not yet run** — same key |
+| Hosted demo | Keyless sandbox stack with hourly reset (`docker compose up`); the live testnet deployment needs accounts and keys |
+| Mainnet run | **Not yet recorded** — a human confirms every transaction (`demo/mainnet-run/RUN.md`) |
+| `pnpm demo` timing | About 6–7 minutes, longer than the 3 the plan targets; scenario 07 skips three bid windows and seven claim windows on the sandbox |
 
 ## Mainnet evidence
 
-*(Filled in during Phase 6. One real job, one real slash, about $2 of USDC arriving on Base through
-1Click — transaction hashes and the 1Click status JSON go here so anyone can re-check them, and
-`pnpm mainnet:verify` checks them from public data with no keys.)*
+Not recorded yet. The run is one real job, one real slash and about $2 of USDC arriving on Base through
+1Click; its transaction hashes and 1Click status JSON go in `demo/mainnet-run/run.json`, and
+`pnpm mainnet:verify` re-checks them from public data with no keys. The runbook is
+[`demo/mainnet-run/RUN.md`](demo/mainnet-run/RUN.md).
 
 ## Licence
 
