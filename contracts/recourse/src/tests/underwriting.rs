@@ -220,3 +220,170 @@ fn no_new_rounds_while_paused() {
     c.pause();
     open_round(&mut c, ONE_NEAR);
 }
+
+// ----- commit 3: commit_bid --------------------------------------------------
+
+pub fn uw2() -> near_sdk::AccountId {
+    acc("uw2.near")
+}
+pub fn uw3() -> near_sdk::AccountId {
+    acc("uw3.near")
+}
+
+/// Bonded agent plus three funded vaults (`uw`, `uw2`, `uw3`), 100 NEAR each.
+pub fn market() -> crate::Recourse {
+    let mut c = bonded();
+    for (i, u) in [uw(), uw2(), uw3()].into_iter().enumerate() {
+        ctx(&u, STORAGE_DEPOSIT, T0);
+        c.create_vault();
+        let lp = acc(&format!("lp{i}.near"));
+        ctx(&lp, 100 * ONE_NEAR + STORAGE_DEPOSIT, T0);
+        c.deposit_vault(u, None);
+    }
+    c
+}
+
+pub fn salt(n: u8) -> Hash {
+    HexBytes([n; 32])
+}
+
+/// Commit attaches the deposit plus generous storage (the rest is refunded).
+pub const COMMIT_ATTACH: u128 = BID_COMMIT_DEPOSIT + STORAGE_DEPOSIT;
+
+pub fn commit(
+    c: &mut crate::Recourse,
+    round: RoundId,
+    who: &near_sdk::AccountId,
+    premium: u32,
+    s: u8,
+    at: u64,
+) {
+    ctx(who, COMMIT_ATTACH, at);
+    c.commit_bid(round, bid_commitment(premium, &salt(s), who));
+}
+
+#[test]
+fn an_underwriter_commits_a_sealed_bid_with_a_deposit() {
+    let mut c = market();
+    let r = open_round(&mut c, 10 * ONE_NEAR);
+    commit(&mut c, r, &uw(), 300, 1, T0 + 1);
+    let round = c.get_round(r).unwrap();
+    assert_eq!(round.bids.len(), 1);
+    let b = &round.bids[0];
+    assert_eq!(b.underwriter, uw());
+    assert_eq!(b.commitment, bid_commitment(300, &salt(1), &uw()));
+    assert_eq!(b.committed_at, U64(T0 + 1));
+    assert_eq!(b.deposit, U128(BID_COMMIT_DEPOSIT));
+    assert_eq!(b.premium_bps, None, "the premium stays sealed");
+    assert_eq!(c.get_totals().bid_deposits, U128(BID_COMMIT_DEPOSIT));
+    let back: u128 = transfers()
+        .iter()
+        .filter(|t| t.0 == uw())
+        .map(|t| t.1)
+        .sum();
+    assert!(
+        back > 0 && back < STORAGE_DEPOSIT,
+        "deposit and storage kept: {back}"
+    );
+    assert_eq!(events()[0]["event"], "bid_committed");
+    assert!(c.solvency().ok);
+}
+
+#[test]
+fn bids_keep_commit_order() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    commit(&mut c, r, &uw2(), 300, 2, T0 + 5);
+    commit(&mut c, r, &uw(), 300, 1, T0 + 6);
+    let order: Vec<_> = c
+        .get_round(r)
+        .unwrap()
+        .bids
+        .into_iter()
+        .map(|b| b.underwriter)
+        .collect();
+    assert_eq!(order, vec![uw2(), uw()]);
+}
+
+#[test]
+fn a_commit_exactly_at_the_deadline_counts() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    let deadline = c.get_round(r).unwrap().commit_deadline.0;
+    commit(&mut c, r, &uw(), 300, 1, deadline);
+    assert_eq!(c.get_round(r).unwrap().bids.len(), 1);
+}
+
+#[test]
+#[should_panic(expected = "commit window closed")]
+fn a_commit_after_the_deadline_fails() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    let deadline = c.get_round(r).unwrap().commit_deadline.0;
+    commit(&mut c, r, &uw(), 300, 1, deadline + 1);
+}
+
+#[test]
+#[should_panic(expected = "already committed")]
+fn one_commit_per_underwriter_per_round() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    commit(&mut c, r, &uw(), 300, 1, T0 + 1);
+    commit(&mut c, r, &uw(), 250, 2, T0 + 2);
+}
+
+#[test]
+#[should_panic(expected = "vault not found")]
+fn only_vault_owners_can_bid() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    commit(&mut c, r, &stranger(), 300, 1, T0 + 1);
+}
+
+#[test]
+#[should_panic(expected = "an agent cannot underwrite itself")]
+fn an_agent_cannot_bid_on_its_own_round() {
+    let mut c = market();
+    ctx(&agent(), STORAGE_DEPOSIT, T0);
+    c.create_vault();
+    let r = open_round(&mut c, ONE_NEAR);
+    commit(&mut c, r, &agent(), 300, 1, T0 + 1);
+}
+
+#[test]
+#[should_panic(expected = "round not found")]
+fn commits_need_a_round() {
+    let mut c = market();
+    commit(&mut c, 7, &uw(), 300, 1, T0 + 1);
+}
+
+#[test]
+#[should_panic(expected = "attach the commit deposit")]
+fn the_commit_deposit_is_required() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    ctx(&uw(), BID_COMMIT_DEPOSIT - 1, T0 + 1);
+    c.commit_bid(r, bid_commitment(300, &salt(1), &uw()));
+}
+
+#[test]
+#[should_panic(expected = "attach at least")]
+fn the_deposit_alone_does_not_pay_for_storage() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    ctx(&uw(), BID_COMMIT_DEPOSIT, T0 + 1);
+    c.commit_bid(r, bid_commitment(300, &salt(1), &uw()));
+}
+
+#[test]
+#[should_panic(expected = "round is full")]
+fn rounds_are_bounded() {
+    let mut c = market();
+    let r = open_round(&mut c, ONE_NEAR);
+    for i in 0..=MAX_BIDS_PER_ROUND {
+        let u = acc(&format!("bidder{i}.near"));
+        ctx(&u, STORAGE_DEPOSIT, T0);
+        c.create_vault();
+        commit(&mut c, r, &u, 300, 1, T0 + 1);
+    }
+}

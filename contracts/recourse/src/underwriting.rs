@@ -21,6 +21,7 @@ use near_sdk::serde_json::json;
 use near_sdk::{env, near, require, AccountId};
 
 use crate::events::Event;
+use crate::math::add;
 use crate::storage::refund;
 use crate::types::*;
 use crate::{Recourse, RecourseExt};
@@ -101,8 +102,69 @@ impl Recourse {
         id
     }
 
+    /// The caller's vault commits a sealed bid: `commitment` is
+    /// `bid_commitment(premium_bps, salt, caller)`. Attach
+    /// `BID_COMMIT_DEPOSIT` plus storage for the bid (the rest is refunded).
+    /// Only before the commit deadline, once per underwriter, never on the
+    /// caller's own round, at most `MAX_BIDS_PER_ROUND` bids.
+    #[payable]
+    pub fn commit_bid(&mut self, round: RoundId, commitment: Hash) {
+        let underwriter = env::predecessor_account_id();
+        let mut r = self.round_of(round);
+        require!(underwriter != r.agent, "an agent cannot underwrite itself");
+        self.vault_of(&underwriter);
+        let now = env::block_timestamp();
+        require!(
+            r.phase(now) == RoundPhase::Committing,
+            "commit window closed"
+        );
+        require!(
+            r.bids.iter().all(|b| b.underwriter != underwriter),
+            "already committed to this round"
+        );
+        require!(r.bids.len() < MAX_BIDS_PER_ROUND, "round is full");
+        let attached = env::attached_deposit().as_yoctonear();
+        require!(
+            attached >= BID_COMMIT_DEPOSIT,
+            format!("attach the commit deposit of {BID_COMMIT_DEPOSIT} yoctoNEAR plus storage")
+        );
+
+        let before = env::storage_usage();
+        r.bids.push(Bid {
+            underwriter: underwriter.clone(),
+            commitment,
+            committed_at: U64(now),
+            deposit: U128(BID_COMMIT_DEPOSIT),
+            premium_bps: None,
+        });
+        self.rounds.insert(round, r);
+        self.totals.bid_deposits = U128(add(
+            self.totals.bid_deposits.0,
+            BID_COMMIT_DEPOSIT,
+            "bid deposits",
+        ));
+        let unused = self.charge_storage(before, attached - BID_COMMIT_DEPOSIT);
+
+        Event::BidCommitted.emit(json!({
+            "round": U64(round),
+            "underwriter": underwriter,
+            "commitment": commitment,
+            "deposit": U128(BID_COMMIT_DEPOSIT),
+        }));
+        refund(unused);
+    }
+
     /// The agent's open (unsettled) round, if any.
     pub fn get_open_round(&self, agent: AccountId) -> Option<RoundId> {
         self.open_rounds.get(&agent).copied()
+    }
+}
+
+impl Recourse {
+    pub(crate) fn round_of(&self, round: RoundId) -> BidRound {
+        self.rounds
+            .get(&round)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("round not found"))
     }
 }
