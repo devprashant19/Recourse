@@ -1,0 +1,16 @@
+{
+  "note": "Spike A fixture. The Rust test must recover the same address.",
+  "model_id": "Qwen/Qwen3.8-27B",
+  "chat_id": "ae97d0b3076f4596a341dff8fd814eb6",
+  "signature_kind": "provider_tee",
+  "text": "Qwen/Qwen3.8-27B:7855da6388afd98288b4706ab3340686edccedf3f3f7d572ccfd385816e4eab2:df460a06285b805b0fbb8ad4a84600c0a2cd6bde94db26d63928d72406aea72c",
+  "request_hash": "7855da6388afd98288b4706ab3340686edccedf3f3f7d572ccfd385816e4eab2",
+  "response_hash": "df460a06285b805b0fbb8ad4a84600c0a2cd6bde94db26d63928d72406aea72c",
+  "signature": "0xa9c5f3641e5b54a349159f424ea82c3d603984a38def523f32900e49d243d89f1b215f32cde94bde17cbdabd2a5dc5e98dc67710a5fffcd40a5a58ed02b02dcc1c",
+  "expected_address": "0x835AB53d20294Ef795906DFf21aE4C045336aa26",
+  "attestation": {
+    "nonce": "0025828f94ab7f8464c9b3d0da042d95d727243469094d06c89fd9d954e82eb6",
+    "report_hash": "30c4ea65dc75b11c30a552b07d75cbfec53d8a82444829b641474c385352a22c"
+  },
+  "captured_at": "2026-11-08T17:10:28.212Z"
+}

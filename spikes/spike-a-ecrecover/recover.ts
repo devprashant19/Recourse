@@ -20,7 +20,8 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const BASE = process.env.NEARAI_BASE_URL ?? "https://cloud-api.near.ai";
 const API_KEY = process.env.NEARAI_API_KEY;
@@ -131,7 +132,7 @@ async function main() {
     attestation: { nonce, report_hash: reportHash },
     captured_at: new Date().toISOString(),
   };
-  const out = join(import.meta.dirname, "fixture.json");
+  const out = join(dirname(fileURLToPath(import.meta.url)), "fixture.json");
   writeFileSync(out, JSON.stringify(fixture, null, 2));
 
   console.log(`\nwrote ${out}`);

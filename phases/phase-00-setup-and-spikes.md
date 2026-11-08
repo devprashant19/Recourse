@@ -96,7 +96,7 @@ recourse/
 - [ ] **Accounts (testnet):** `recourse-v1.testnet` (name to confirm), plus `agent`, `client`, three underwriters, `arbiter`, `keeper` — all from the faucet.
 - [ ] **Accounts (mainnet):** `recourse-demo.near`, funded with about 10 NEAR and 10 USDC.
 - [ ] **Keys:** NEAR AI Cloud API key (ask organisers for hackathon credits); request a 1Click JWT from the partner dashboard.
-- [ ] Spike A (below) — 2 h, critical.
+- [x] Spike A (below) — 2 h, critical. Passed 2026-11-08 on Qwen/Qwen3.8-27B.
 - [ ] Spike B (below) — 1 h.
 - [ ] Spike C (below) — 30 min.
 
@@ -157,7 +157,7 @@ Decide how the TypeScript demo runner drives a local NEAR sandbox: `near-workspa
 
 ## Exit criteria
 
-- [ ] Spike A recovers the right address in **both** Rust and TypeScript, and the two agree.
+- [x] Spike A recovers the right address in **both** Rust and TypeScript, and the two agree.
 - [ ] Spike B returns a quote.
 - [ ] The repo builds in CI.
 

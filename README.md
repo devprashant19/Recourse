@@ -114,8 +114,10 @@ the bytes come from, never whether they are verified.
 
 **What has been verified so far:** unit-tested throughout; scenarios 02 and 04 run the real worker and
 arbiter against the real contract on every `pnpm demo`, with every receipt and verdict verified on-chain.
-Still open: genuine NEAR AI Cloud recordings, a live receipt on testnet, and Spike A against a real NEAR
-AI Cloud signature — they need credentials; see [What is real today](#what-is-real-today).
+Spike A passes against a real NEAR AI Cloud signature: the contract's own `check_receipt` accepts a live
+receipt from `Qwen/Qwen3.8-27B` and rejects it with one byte changed or under another model name. Still
+open: genuine NEAR AI Cloud recordings for the demo and a live receipt on testnet; see
+[What is real today](#what-is-real-today).
 
 ## Trust assumptions
 
@@ -183,7 +185,7 @@ Live testnet and mainnet need credentials: [`docs/hosting.md`](docs/hosting.md) 
 | `pnpm demo` | **7/7 PASS, solvency OK** on a fresh nearcore 2.14 sandbox, keyless |
 | Receipts | Full four-step flow; checked on-chain with `ecrecover`. **The sandbox replays the dev fixture set**: signed by a throwaway test key, no TEE, and every such receipt says `dev-fixture` |
 | Genuine NEAR AI Cloud recordings | **Not yet** — `pnpm record-fixtures --live` needs `NEARAI_API_KEY` |
-| Spike A (a real NEAR AI Cloud signature recovered by `env::ecrecover`) | **Not yet run** — same key |
+| Spike A (a real NEAR AI Cloud signature recovered by `env::ecrecover`) | **PASS** — TypeScript and Rust recover the same signer, which matches the address in the model's attestation report; the contract's `check_receipt` accepts the live receipt and rejects tampered copies (`contracts/recourse/src/tests/tee.rs`) |
 | Hosted demo | Keyless sandbox stack with hourly reset (`docker compose up`); the live testnet deployment needs accounts and keys |
 | Mainnet run | **Not yet recorded** — a human confirms every transaction (`demo/mainnet-run/RUN.md`) |
 | `pnpm demo` timing | About 6–7 minutes, longer than the 3 the plan targets; scenario 07 skips three bid windows and seven claim windows on the sandbox |

@@ -213,3 +213,75 @@ fn zero_address_signer_is_rejected() {
         SignatureKind::ProviderTee,
     );
 }
+
+// ----- Spike A: a real NEAR AI Cloud receipt ---------------------------------
+//
+// fixtures/near_ai_live_receipt.json was captured from NEAR AI Cloud by
+// `pnpm spike:a` (one completion on a private TEE model, its /v1/signature
+// response, and the signer bound to that model's attestation report). These
+// tests run it through the same path `submit_receipt` uses.
+
+use near_sdk::serde_json;
+use crate::Recourse;
+
+fn live() -> serde_json::Value {
+    serde_json::from_str(include_str!("fixtures/near_ai_live_receipt.json")).expect("live fixture JSON")
+}
+
+fn live_str(key: &str) -> String {
+    live()[key].as_str().expect("live fixture field").to_string()
+}
+
+fn live_receipt() -> ReceiptInput {
+    assert_eq!(live_str("signature_kind"), "provider_tee");
+    ReceiptInput {
+        model_id: live_str("model_id"),
+        request_hash: Hash::from_hex(&live_str("request_hash")).unwrap(),
+        response_hash: Hash::from_hex(&live_str("response_hash")).unwrap(),
+        signature: Signature65::from_hex(&live_str("signature")).unwrap(),
+        kind: SignatureKind::ProviderTee,
+    }
+}
+
+fn allow_live_signer(c: &mut Recourse) -> EvmAddress {
+    let addr = EvmAddress::from_hex(&live_str("expected_address")).unwrap();
+    let report = Hash::from_hex(live()["attestation"]["report_hash"].as_str().unwrap()).unwrap();
+    ctx(&owner(), 0, T0);
+    c.register_signer(addr, live_str("model_id"), report, SignatureKind::ProviderTee);
+    addr
+}
+
+#[test]
+fn a_real_near_ai_cloud_receipt_verifies_on_chain() {
+    let mut c = new_contract();
+    let addr = allow_live_signer(&mut c);
+    let r = live_receipt();
+    assert_eq!(
+        signed_text(r.kind, &r.model_id, &r.request_hash, &r.response_hash),
+        live_str("text"),
+        "the contract rebuilds exactly the text NEAR AI Cloud signed"
+    );
+    let rec = c.check_receipt(r);
+    assert_eq!(rec.signer, addr);
+    assert_eq!(rec.model_id, live_str("model_id"));
+}
+
+#[test]
+#[should_panic(expected = "signer not allow-listed")]
+fn a_real_receipt_with_one_changed_response_byte_is_rejected() {
+    let mut c = new_contract();
+    allow_live_signer(&mut c);
+    let mut r = live_receipt();
+    r.response_hash.0[0] ^= 1;
+    c.check_receipt(r);
+}
+
+#[test]
+#[should_panic(expected = "signer not allow-listed")]
+fn a_real_receipt_claimed_for_another_model_is_rejected() {
+    let mut c = new_contract();
+    allow_live_signer(&mut c);
+    let mut r = live_receipt();
+    r.model_id = "z-ai/glm-5.3-flash".into();
+    c.check_receipt(r);
+}
