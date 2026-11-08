@@ -1,0 +1,40 @@
+# The judge's clean room. Everything runs inside the image built from
+# Dockerfile.judge — a fresh copy of the repo on Linux with Node, pnpm, Rust
+# and cargo-near — so results do not depend on what is installed locally.
+#
+#   docker compose -f docker-compose.judge.yml run --rm demo      # pnpm demo
+#   docker compose -f docker-compose.judge.yml run --rm judge     # npm run judge
+#   docker compose -f docker-compose.judge.yml run --rm demo pnpm demo -- --only 06,07
+#
+# `.data` (the ~100 MB sandbox binary and per-run state) is a named volume so
+# the download happens once per machine.
+
+services:
+  demo:
+    build:
+      context: .
+      dockerfile: Dockerfile.judge
+    image: recourse-judge
+    command: ["pnpm", "demo"]
+    environment:
+      RECOURSE_MODE: sandbox
+    volumes:
+      - judge-data:/w/.data
+
+  judge:
+    image: recourse-judge
+    build:
+      context: .
+      dockerfile: Dockerfile.judge
+    command: ["npm", "run", "judge"]
+    environment:
+      RECOURSE_MODE: sandbox
+    volumes:
+      - judge-data:/w/.data
+      - judge-target:/w/target
+      - judge-cargo-registry:/usr/local/cargo/registry
+
+volumes:
+  judge-data:
+  judge-target:
+  judge-cargo-registry:

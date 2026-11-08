@@ -1,0 +1,59 @@
+# A clean room for the judge: Node 20 + pnpm 9 + Rust 1.95 + cargo-near on
+# Linux, with the repository copied in (not mounted), so `pnpm demo` and
+# `npm run judge` run exactly as they would on a fresh clone.
+#
+#   docker compose -f docker-compose.judge.yml run --rm demo     # pnpm demo
+#   docker compose -f docker-compose.judge.yml run --rm judge    # npm run judge
+#
+# Windows cannot run the NEAR sandbox natively (no nearcore build for it);
+# this is the supported way to run the demo there.
+
+FROM node:20-bookworm AS base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PNPM_HOME=/pnpm \
+    PATH=/pnpm:/usr/local/cargo/bin:$PATH \
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    RECOURSE_MODE=sandbox \
+    CI=true
+
+RUN apt-get update -qq \
+ && apt-get install -y -qq --no-install-recommends curl ca-certificates tar git build-essential pkg-config libssl-dev python3 \
+ && rm -rf /var/lib/apt/lists/* \
+ && corepack enable \
+ && corepack prepare pnpm@9.12.3 --activate
+
+# Rust toolchain pinned to rust-toolchain.toml, plus cargo-near for the wasm.
+COPY rust-toolchain.toml /tmp/rust-toolchain.toml
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain none \
+ && rustup toolchain install "$(sed -nE 's/^channel = "([^"]+)".*/\1/p' /tmp/rust-toolchain.toml)" --profile minimal -c rustfmt -c clippy -t wasm32-unknown-unknown \
+ && curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh \
+ && cargo near --version
+
+WORKDIR /w
+
+# Dependencies first, so code changes do not re-download the world.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc* ./
+COPY packages/sdk/package.json packages/sdk/
+COPY packages/receipts/package.json packages/receipts/
+COPY packages/intents/package.json packages/intents/
+COPY packages/adapters/package.json packages/adapters/
+COPY packages/config/package.json packages/config/
+COPY packages/jobs/package.json packages/jobs/
+COPY services/worker-agent/package.json services/worker-agent/
+COPY services/arbiter/package.json services/arbiter/
+COPY services/underwriters/package.json services/underwriters/
+COPY services/keeper/package.json services/keeper/
+COPY services/indexer/package.json services/indexer/
+COPY apps/web/package.json apps/web/
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile
+
+COPY . .
+
+# The sandbox binary and per-run state live here; docker-compose mounts a
+# volume so the ~100 MB download happens once.
+VOLUME ["/w/.data"]
+
+CMD ["pnpm", "demo"]
