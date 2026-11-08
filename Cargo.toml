@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["contracts/recourse"]
+members = ["contracts/recourse", "contracts/test-token"]
 
 [profile.release]
 codegen-units = 1

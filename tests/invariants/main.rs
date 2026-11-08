@@ -165,6 +165,8 @@ struct World {
     held_ft: u128,
     /// Token transfers whose callback has not run yet.
     ft_in_flight: VecDeque<(AccountId, u128)>,
+    /// Tokens 1Click refunded by plain transfer that no payout has claimed.
+    refunds: u128,
     /// NEAR the contract holds, by the model: deposits in, transfers out.
     held: u128,
     worker: TeeKey,
@@ -255,6 +257,7 @@ impl World {
             ft,
             held_ft: 0,
             ft_in_flight: VecDeque::new(),
+            refunds: 0,
             held: 0,
             worker: TeeKey::new(7),
             judge: TeeKey::new(9),
@@ -392,6 +395,7 @@ enum Op {
     SettleTransfer(bool),
     SettleFt(bool),
     ClaimOwed(usize),
+    ConfirmPayout(usize, u8),
 }
 
 fn op() -> impl Strategy<Value = Op> {
@@ -421,6 +425,7 @@ fn op() -> impl Strategy<Value = Op> {
         3 => any::<bool>().prop_map(Op::SettleTransfer),
         3 => any::<bool>().prop_map(Op::SettleFt),
         1 => (0usize..6).prop_map(Op::ClaimOwed),
+        3 => (pick.clone(), 0u8..3).prop_map(|(p, o)| Op::ConfirmPayout(p, o)),
     ]
 }
 
@@ -713,7 +718,6 @@ impl World {
                     self.call(&acc("anyone.near"), 0, |c| c.close_stale_claim(id));
                 }
             }
-            Op::ExecutePayout(_) if self.ft => {}
             Op::SettleFt(ok) => {
                 let Some((to, amount)) = self.ft_in_flight.pop_front() else {
                     return;
@@ -754,6 +758,57 @@ impl World {
                     self.call(&who, 0, |c| c.claim_owed());
                 }
             }
+            Op::ConfirmPayout(p, outcome) => {
+                let n = self.view(|c| c.get_counters().claim);
+                let found = (0..n).map(|k| (k + p as u64) % n.max(1)).find_map(|id| {
+                    self.view(|c| c.get_payout(id))
+                        .filter(|pay| {
+                            pay.mode == PayoutMode::Intents
+                                && ((pay.status == PayoutStatus::Sent
+                                    && pay.final_status.as_deref() == Some("DELIVERED"))
+                                    || (pay.status == PayoutStatus::Failed && outcome == 2))
+                        })
+                        .map(|pay| (id, pay))
+                });
+                let Some((id, pay)) = found else { return };
+                let quote = pay.quote_id.clone().unwrap();
+                let status = ["SUCCESS", "FAILED", "REFUNDED"][usize::from(outcome)];
+                if status == "REFUNDED" {
+                    // 1Click sends the award back by plain ft_transfer; the
+                    // contract only learns of it from its balance.
+                    self.refunds += pay.amount.0;
+                    let flying: u128 = self.ft_in_flight.iter().map(|x| x.1).sum::<u128>()
+                        + self.in_flight.iter().map(|x| x.1).sum::<u128>();
+                    let balance = self.held_ft + flying + self.refunds;
+                    self.call(&acc("anyone.near"), 0, |c| {
+                        let _ = c.sync_unattributed();
+                    });
+                    let mut b = VMContextBuilder::new();
+                    b.current_account_id(contract())
+                        .predecessor_account_id(contract())
+                        .account_balance(NearToken::from_yoctonear(self.held))
+                        .block_timestamp(self.now);
+                    testing_env!(
+                        b.build(),
+                        near_sdk::test_vm_config(),
+                        near_parameters::RuntimeFeesConfig::test(),
+                        Default::default(),
+                        vec![PromiseResult::Successful(
+                            format!("\"{balance}\"").into_bytes()
+                        )],
+                    );
+                    let seen = self.c.on_ft_balance().0;
+                    assert_eq!(seen, self.refunds, "sync saw exactly the unmatched refunds");
+                    self.record_events();
+                }
+                self.call(&keeper(), 0, |c| {
+                    c.confirm_payout(id, quote, status.into(), Some("0xdest".into()))
+                });
+                if status == "REFUNDED" {
+                    self.refunds -= pay.amount.0;
+                    self.held_ft += pay.amount.0;
+                }
+            }
             Op::ExecutePayout(p) => {
                 // Like a real keeper: scan for a pending payout, starting
                 // from a random claim.
@@ -764,16 +819,36 @@ impl World {
                         .map(|pay| (id, pay.amount.0))
                 });
                 let Some((id, amount)) = pending else { return };
-                self.call(&keeper(), 0, |c| {
-                    let _ = c.execute_payout(id, None, None, None);
-                });
+                let intents = self.view(|c| c.get_payout(id)).unwrap().mode == PayoutMode::Intents;
+                if intents {
+                    self.nonce += 1;
+                    let addr = format!("{:064x}", self.nonce);
+                    let quote = format!("q-{}", self.nonce);
+                    self.call(&keeper(), recourse::payouts::INTENTS_STORAGE_DEPOSIT, |c| {
+                        let _ =
+                            c.execute_payout(id, Some(addr), Some(quote), Some(HexBytes([6; 32])));
+                    });
+                } else {
+                    self.call(&keeper(), 0, |c| {
+                        let _ = c.execute_payout(id, None, None, None);
+                    });
+                }
+                if self.ft {
+                    // `call` queued the token transfer; it settles through
+                    // the payout callback, not `on_ft_paid`.
+                    let (_, sent) = self.ft_in_flight.pop_back().expect("payout transfer");
+                    assert_eq!(sent, amount);
+                }
                 self.in_flight.push_back((id, amount));
             }
             Op::SettleTransfer(ok) => {
                 let Some((id, amount)) = self.in_flight.pop_front() else {
                     return;
                 };
-                if !ok {
+                if !ok && self.ft {
+                    // A refused token transfer never moved the tokens.
+                    self.held_ft += amount;
+                } else if !ok {
                     // The runtime refunds a failed transfer before the callback.
                     self.held += amount;
                 }
@@ -914,10 +989,18 @@ impl World {
                 self.held_ft,
                 "ft_held drifted from the token model"
             );
+            let flying: u128 = self.ft_in_flight.iter().map(|x| x.1).sum::<u128>()
+                + self.in_flight.iter().map(|x| x.1).sum::<u128>();
+            assert_eq!(c.get_ft_in_flight().0, flying, "in-flight tokens drifted");
             assert!(
-                self.held_ft >= s.liabilities.0,
+                s.unattributed.0 <= self.refunds,
+                "unattributed beyond real refunds"
+            );
+            let held = self.held_ft + s.unattributed.0;
+            assert!(
+                held >= s.liabilities.0,
                 "I1 (USDC): held {} < liabilities {}",
-                self.held_ft,
+                held,
                 s.liabilities.0
             );
             // (The NEAR side — storage — is not modelled here; `storage_ok`
@@ -1002,7 +1085,14 @@ fn reach_every_path(ft: bool) {
         }
     }
     let payouts: &[&str] = if ft {
-        &["payment_failed", "owed_claimed"]
+        &[
+            "payment_failed",
+            "owed_claimed",
+            "payout_sent",
+            "payout_confirmed",
+            "payout_retry",
+            "unattributed_synced",
+        ]
     } else {
         &["payout_sent", "payout_confirmed", "payout_retry"]
     };
