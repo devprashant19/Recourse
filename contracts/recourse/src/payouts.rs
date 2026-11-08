@@ -34,6 +34,14 @@ use crate::{Recourse, RecourseExt};
 
 /// Gas reserved for `on_payout_transfer`; it only reads and writes one record.
 pub const PAYOUT_CALLBACK_GAS: Gas = Gas::from_tgas(10);
+/// Gas for the token's `storage_deposit` on an Intents payout.
+pub const STORAGE_DEPOSIT_GAS: Gas = Gas::from_tgas(5);
+/// What an Intents payout's attached calls may use in all; with the
+/// method's own work the whole payout fits in about 30 Tgas.
+pub const INTENTS_PAYOUT_GAS: Gas = Gas::from_tgas(25);
+/// NEAR the keeper attaches for the deposit address's token storage
+/// (NEP-145 registration on USDC is 0.00125 NEAR).
+pub const INTENTS_STORAGE_DEPOSIT: u128 = 1_250_000_000_000_000_000_000;
 
 impl PayoutStatus {
     /// Allowed payout moves (invariant I6).
@@ -60,6 +68,11 @@ impl Recourse {
     /// keeper chooses only *when* and, for Intents, supplies the 1Click quote
     /// for that fixed destination. A quote id or deposit address can be used
     /// once; Direct payouts take neither.
+    ///
+    /// Intents payouts attach at least `INTENTS_STORAGE_DEPOSIT` (paid by the
+    /// keeper) to register the deposit address on the token; Direct payouts
+    /// attach nothing.
+    #[payable]
     pub fn execute_payout(
         &mut self,
         claim_id: ClaimId,
@@ -79,9 +92,19 @@ impl Recourse {
                     deposit_address.is_none() && quote_id.is_none() && quote_hash.is_none(),
                     "Direct payouts take no deposit address or quote"
                 );
+                require!(
+                    env::attached_deposit().is_zero(),
+                    "Direct payouts take no deposit"
+                );
                 None
             }
             PayoutMode::Intents => {
+                require!(
+                    env::attached_deposit().as_yoctonear() >= INTENTS_STORAGE_DEPOSIT,
+                    format!(
+                        "attach at least {INTENTS_STORAGE_DEPOSIT} yoctoNEAR for the deposit address's token storage"
+                    )
+                );
                 let quote = IntentsQuote::check(deposit_address, quote_id, quote_hash);
                 self.use_quote_once(&quote);
                 p.deposit_address = Some(quote.deposit_address.to_string());
@@ -266,14 +289,27 @@ impl Recourse {
                 .then(callback);
         };
         self.ft_held = sub(self.ft_held, p.amount.0, "ft held");
-        let (to, memo) = match quote {
-            Some(q) => (q.deposit_address.clone(), Some(q.quote_id.clone())),
-            None => (p.claimant.clone(), None),
+        let transfer = |to: AccountId, memo: Option<String>| {
+            ext_ft::ext(token.clone())
+                .with_attached_deposit(NearToken::from_yoctonear(1))
+                .with_static_gas(FT_TRANSFER_GAS)
+                .ft_transfer(to, p.amount, memo)
         };
-        ext_ft::ext(token)
-            .with_attached_deposit(NearToken::from_yoctonear(1))
-            .with_static_gas(FT_TRANSFER_GAS)
-            .ft_transfer(to, p.amount, memo)
+        let Some(q) = quote else {
+            return transfer(p.claimant.clone(), None).then(callback);
+        };
+        // 1. Register the deposit address on the token (a no-op refund if it
+        //    already is); 2. send with the quote id as memo; 3. settle. The
+        //    callback reads the transfer's result: if registration failed the
+        //    transfer fails too and the payout is Pending again.
+        ext_ft::ext(token.clone())
+            .with_attached_deposit(env::attached_deposit())
+            .with_static_gas(STORAGE_DEPOSIT_GAS)
+            .storage_deposit(Some(q.deposit_address.clone()), Some(true))
+            .then(transfer(
+                q.deposit_address.clone(),
+                Some(q.quote_id.clone()),
+            ))
             .then(callback)
     }
 

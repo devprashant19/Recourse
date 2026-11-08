@@ -10,6 +10,7 @@ use near_sdk::{testing_env, AccountId, NearToken, PromiseResult};
 use super::common::*;
 use super::ft::usdc;
 use super::ft_flows::{ft_pending_payout, ft_ready, ft_transfers};
+use crate::payouts::*;
 use crate::types::*;
 use crate::Recourse;
 
@@ -43,7 +44,12 @@ fn with_keeper(dest: Destination) -> (Recourse, u64) {
 }
 
 fn execute(c: &mut Recourse, cid: u64, addr: Option<String>, quote: Option<&str>) {
-    ctx(&keeper(), 0, NOW);
+    let deposit = if quote.is_some() {
+        INTENTS_STORAGE_DEPOSIT
+    } else {
+        0
+    };
+    ctx(&keeper(), deposit, NOW);
     let _ = c.execute_payout(
         cid,
         addr,
@@ -231,7 +237,7 @@ fn intents_quote_id_is_bounded() {
 #[should_panic(expected = "need the quote hash")]
 fn intents_payout_needs_the_quote_hash() {
     let (mut c, cid) = with_keeper(base_usdc());
-    ctx(&keeper(), 0, NOW);
+    ctx(&keeper(), INTENTS_STORAGE_DEPOSIT, NOW);
     let _ = c.execute_payout(cid, Some(deposit_address()), Some("q".into()), None);
 }
 
@@ -253,4 +259,87 @@ fn only_a_keeper_can_execute_an_intents_payout() {
         Some("q".into()),
         Some(HexBytes([7; 32])),
     );
+}
+
+/// Every function call the last call scheduled, as (receiver, method, deposit, gas).
+fn calls() -> Vec<(AccountId, String, u128, u64)> {
+    get_created_receipts()
+        .into_iter()
+        .flat_map(|r| {
+            let to = r.receiver_id.clone();
+            r.actions.into_iter().filter_map(move |a| match a {
+                MockAction::FunctionCallWeight {
+                    method_name,
+                    attached_deposit,
+                    prepaid_gas,
+                    ..
+                } => Some((
+                    to.clone(),
+                    String::from_utf8(method_name).unwrap(),
+                    attached_deposit.as_yoctonear(),
+                    prepaid_gas.as_gas(),
+                )),
+                _ => None,
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn intents_payout_registers_the_deposit_address_then_transfers_then_settles() {
+    let (mut c, cid) = with_keeper(base_usdc());
+    execute(&mut c, cid, Some(deposit_address()), Some("q-1"));
+    let got = calls();
+    let methods: Vec<_> = got
+        .iter()
+        .map(|(to, m, _, _)| (to.clone(), m.as_str()))
+        .collect();
+    assert_eq!(
+        methods,
+        vec![
+            (usdc(), "storage_deposit"),
+            (usdc(), "ft_transfer"),
+            (contract_id(), "on_payout_transfer"),
+        ]
+    );
+    assert_eq!(
+        got[0].2, INTENTS_STORAGE_DEPOSIT,
+        "the keeper's deposit pays registration"
+    );
+    assert_eq!(got[1].2, 1, "ft_transfer carries one yocto");
+    let gas: u64 = got.iter().map(|g| g.3).sum();
+    assert!(gas <= INTENTS_PAYOUT_GAS.as_gas(), "{gas} gas attached");
+}
+
+#[test]
+fn the_payout_gas_budget_is_thirty_tgas() {
+    let attached = STORAGE_DEPOSIT_GAS.as_gas()
+        + crate::pay::FT_TRANSFER_GAS.as_gas()
+        + PAYOUT_CALLBACK_GAS.as_gas();
+    assert_eq!(attached, INTENTS_PAYOUT_GAS.as_gas());
+    assert!(
+        INTENTS_PAYOUT_GAS.as_gas() + near_sdk::Gas::from_tgas(5).as_gas()
+            <= near_sdk::Gas::from_tgas(30).as_gas()
+    );
+}
+
+#[test]
+#[should_panic(expected = "for the deposit address's token storage")]
+fn intents_payout_needs_the_storage_deposit() {
+    let (mut c, cid) = with_keeper(base_usdc());
+    ctx(&keeper(), INTENTS_STORAGE_DEPOSIT - 1, NOW);
+    let _ = c.execute_payout(
+        cid,
+        Some(deposit_address()),
+        Some("q".into()),
+        Some(HexBytes([7; 32])),
+    );
+}
+
+#[test]
+#[should_panic(expected = "Direct payouts take no deposit")]
+fn direct_payout_takes_no_deposit() {
+    let (mut c, cid) = with_keeper(near_usdc_to_client());
+    ctx(&keeper(), 1, NOW);
+    let _ = c.execute_payout(cid, None, None, None);
 }
