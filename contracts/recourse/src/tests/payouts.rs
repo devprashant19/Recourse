@@ -163,3 +163,21 @@ fn payout_status_transitions_follow_i6() {
     assert!(Sent.can_move_to(Pending));
     assert!(Refunded.can_move_to(Pending) && Failed.can_move_to(Pending));
 }
+
+#[test]
+fn native_payouts_are_direct_and_listed_for_keepers() {
+    let mut c = ready();
+    let cid = pending_payout(&mut c);
+    let p = c.get_payout(cid).unwrap();
+    assert_eq!(p.mode, PayoutMode::Direct);
+    assert_eq!(p.sent_at, None);
+    let page = c.list_payouts(None, None);
+    assert_eq!(page, vec![(cid, p)]);
+    assert!(c.list_payouts(Some(cid + 1), Some(10)).is_empty());
+}
+
+#[test]
+fn a_failed_intents_payout_can_still_be_refunded() {
+    assert!(PayoutStatus::Failed.can_move_to(PayoutStatus::Refunded));
+    assert!(!PayoutStatus::Refunded.can_move_to(PayoutStatus::Failed));
+}

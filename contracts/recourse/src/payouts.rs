@@ -14,17 +14,21 @@
 //! callback puts the payout back to `Pending` for another attempt (I6:
 //! `Success` happens at most once; only a failure moves a payout back).
 //!
-//! Intents mode (1Click deposit address, quote id/hash, `confirm_payout` with
-//! `SUCCESS`/`REFUNDED`/`FAILED`, refunds matched from `unattributed`) arrives
-//! with Phase 3. Until then `execute_payout` refuses Intents-only arguments.
+//! The mode is fixed when the payout is created, from the destination the
+//! claimant fixed when filing (`payout_mode_for`): Direct straight to the
+//! claimant on NEAR, or Intents through a 1Click deposit address for any
+//! other chain or asset. Intents payouts record the quote (`quote_id`, the
+//! deposit address and `quote_hash` = sha256 of the raw quote response),
+//! `sent_at`, and the 1Click `final_status` / `dest_tx` the keeper reports.
 
 use near_sdk::json_types::{U128, U64};
 use near_sdk::serde_json::json;
-use near_sdk::{env, near, require, Gas, NearToken, Promise};
+use near_sdk::{env, near, require, AccountId, Gas, NearToken, Promise};
 
 use crate::events::Event;
 use crate::math::{add, sub};
 use crate::types::*;
+use crate::views::MAX_PAGE;
 use crate::{Recourse, RecourseExt};
 
 /// Gas reserved for `on_payout_transfer`; it only reads and writes one record.
@@ -43,6 +47,7 @@ impl PayoutStatus {
                 | (Sent, Failed)
                 | (Refunded, Pending)
                 | (Failed, Pending)
+                | (Failed, Refunded)
         )
     }
 }
@@ -145,7 +150,44 @@ impl Recourse {
     }
 }
 
+#[near]
 impl Recourse {
+    /// Payouts by claim id, from `from_index` (default 0), `limit` capped at
+    /// `MAX_PAGE`. Claims without a payout are skipped. For keepers scanning
+    /// for `Pending` work.
+    pub fn list_payouts(
+        &self,
+        from_index: Option<u64>,
+        limit: Option<u32>,
+    ) -> Vec<(ClaimId, Payout)> {
+        let from = from_index.unwrap_or(0);
+        let limit = u64::from(limit.unwrap_or(MAX_PAGE).min(MAX_PAGE));
+        let end = self.next_ids.claim.min(from.saturating_add(limit));
+        (from..end)
+            .filter_map(|id| self.payouts.get(&id).map(|p| (id, p.clone())))
+            .collect()
+    }
+}
+
+impl Recourse {
+    /// Direct when the money can go straight to the claimant on NEAR: always
+    /// in native mode, and in token mode when the claimant asked for the
+    /// bond token itself on its own account. Anything else (another chain,
+    /// another asset, another recipient) goes through 1Click (Intents).
+    pub(crate) fn payout_mode_for(&self, claimant: &AccountId, d: &Destination) -> PayoutMode {
+        match self.ft_token() {
+            None => PayoutMode::Direct,
+            Some(token) => {
+                let same_asset = d.asset_id == format!("nep141:{token}");
+                if same_asset && d.recipient == claimant.as_str() {
+                    PayoutMode::Direct
+                } else {
+                    PayoutMode::Intents
+                }
+            }
+        }
+    }
+
     pub(crate) fn assert_keeper(&self) {
         require!(
             self.roles.keepers.contains(&env::predecessor_account_id()),

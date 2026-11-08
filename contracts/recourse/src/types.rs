@@ -477,7 +477,8 @@ pub struct Claim {
 pub enum PayoutMode {
     /// Straight transfer to the claimant on NEAR.
     Direct,
-    /// Through NEAR Intents 1Click to the claimant's chosen chain (Phase 3).
+    /// Through NEAR Intents 1Click to the claimant's chosen chain: the
+    /// contract sends the token to a 1Click deposit address fixed by a quote.
     Intents,
 }
 
@@ -508,6 +509,8 @@ pub struct Payout {
     pub final_status: Option<String>,
     pub dest_tx: Option<String>,
     pub attempts: u32,
+    /// Block time of the latest `execute_payout`; the keeper's timeout clock.
+    pub sent_at: Option<U64>,
 }
 
 // ---------------------------------------------------------------------------

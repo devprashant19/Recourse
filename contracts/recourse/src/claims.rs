@@ -298,7 +298,7 @@ impl Recourse {
                     Payout {
                         claimant: claim.claimant.clone(),
                         amount: U128(paid),
-                        mode: PayoutMode::Direct,
+                        mode: self.payout_mode_for(&claim.claimant, &claim.destination),
                         destination: claim.destination.clone(),
                         status: PayoutStatus::Pending,
                         deposit_address: None,
@@ -307,6 +307,7 @@ impl Recourse {
                         final_status: None,
                         dest_tx: None,
                         attempts: 0,
+                        sent_at: None,
                     },
                 );
                 self.totals.pending_payouts =

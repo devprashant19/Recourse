@@ -533,3 +533,67 @@ fn ft_held_is_credited_before_routing_and_the_refund_after() {
     deposit(&mut c, &client(), escrow + 50, engagement_msg(CAP, PRICE));
     assert_eq!(c.get_ft_held(), U128(held + escrow));
 }
+
+// ----- payout mode ----------------------------------------------------------
+
+/// A USDC job with an upheld no-delivery claim whose payout goes to `dest`.
+pub fn ft_pending_payout(c: &mut Recourse, dest: Destination) -> u64 {
+    let id = ft_open_job(c);
+    let msg = json!({
+        "engagement_id": U64(id),
+        "kind": "NoDelivery",
+        "amount": U128(CAP),
+        "evidence_hash": "0a".repeat(32),
+        "evidence_uri": "ipfs://evidence",
+        "destination": dest,
+    });
+    let cid = c.get_counters().claim;
+    ctx(&usdc(), 0, DEADLINE + 1);
+    let _ = c.ft_on_transfer(client(), U128(USDC), format!("claim:{msg}"));
+    ctx(&stranger(), 0, DEADLINE + 2);
+    c.resolve_objective(cid);
+    cid
+}
+
+#[test]
+fn usdc_to_another_chain_is_an_intents_payout() {
+    let mut c = ft_ready();
+    let cid = ft_pending_payout(
+        &mut c,
+        Destination {
+            asset_id: "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near".into(),
+            recipient: "0x000000000000000000000000000000000000dEaD".into(),
+        },
+    );
+    let p = c.get_payout(cid).unwrap();
+    assert_eq!(p.mode, PayoutMode::Intents);
+    assert_eq!(p.status, PayoutStatus::Pending);
+    assert_eq!(p.amount, U128(CAP));
+    assert_eq!(c.get_totals().pending_payouts, U128(CAP));
+}
+
+#[test]
+fn usdc_on_near_to_the_claimant_is_a_direct_payout() {
+    let mut c = ft_ready();
+    let cid = ft_pending_payout(
+        &mut c,
+        Destination {
+            asset_id: format!("nep141:{}", usdc()),
+            recipient: client().to_string(),
+        },
+    );
+    assert_eq!(c.get_payout(cid).unwrap().mode, PayoutMode::Direct);
+}
+
+#[test]
+fn usdc_on_near_to_someone_else_goes_through_intents() {
+    let mut c = ft_ready();
+    let cid = ft_pending_payout(
+        &mut c,
+        Destination {
+            asset_id: format!("nep141:{}", usdc()),
+            recipient: "friend.near".into(),
+        },
+    );
+    assert_eq!(c.get_payout(cid).unwrap().mode, PayoutMode::Intents);
+}

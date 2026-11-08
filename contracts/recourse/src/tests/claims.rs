@@ -1,6 +1,6 @@
 //! Filing claims, objective resolution and arbiter verdicts.
 
-use near_sdk::json_types::U128;
+use near_sdk::json_types::{U128, U64};
 
 use super::common::*;
 use crate::types::*;
@@ -249,6 +249,7 @@ fn prepaid_claim_fee_covers_the_largest_claim_verdict_and_payout() {
             final_status: Some(long.clone()),
             dest_tx: Some(long),
             attempts: u32::MAX,
+            sent_at: Some(U64(u64::MAX)),
         },
     );
     c.flush();
