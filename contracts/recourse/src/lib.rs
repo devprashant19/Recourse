@@ -71,6 +71,7 @@ enum StorageKey {
     AgentExposure,
     StorageBalances,
     Owed,
+    UsedQuotes,
 }
 
 #[near(contract_state)]
@@ -121,6 +122,9 @@ pub struct Recourse {
     owed: LookupMap<AccountId, u128>,
     /// Sum of `owed`; a liability.
     owed_total: u128,
+    /// sha256 of every 1Click quote id and deposit address a payout has been
+    /// sent with; neither can be used twice (replay protection).
+    used_quotes: LookupSet<Hash>,
 }
 
 #[near]
@@ -161,6 +165,7 @@ impl Recourse {
             storage_balance_total: 0,
             owed: LookupMap::new(StorageKey::Owed),
             owed_total: 0,
+            used_quotes: LookupSet::new(StorageKey::UsedQuotes),
         }
     }
 

@@ -16,6 +16,7 @@ mod events;
 mod flows;
 mod ft;
 mod ft_flows;
+mod ft_payouts;
 mod hardening;
 mod init;
 mod lifecycle;

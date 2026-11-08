@@ -27,6 +27,7 @@ use near_sdk::{env, near, require, AccountId, Gas, NearToken, Promise};
 
 use crate::events::Event;
 use crate::math::{add, sub};
+use crate::pay::{ext_ft, FT_TRANSFER_GAS};
 use crate::types::*;
 use crate::views::MAX_PAGE;
 use crate::{Recourse, RecourseExt};
@@ -54,9 +55,11 @@ impl PayoutStatus {
 
 #[near]
 impl Recourse {
-    /// Sends a pending payout. Keeper only. In Direct mode the amount and the
-    /// recipient (the claimant) are fixed by the verdict and the claim; the
-    /// keeper only chooses *when*. The Intents-only arguments must be absent.
+    /// Sends a pending payout. Keeper only. The amount is fixed by the
+    /// verdict, the destination by the claimant, the mode at creation; the
+    /// keeper chooses only *when* and, for Intents, supplies the 1Click quote
+    /// for that fixed destination. A quote id or deposit address can be used
+    /// once; Direct payouts take neither.
     pub fn execute_payout(
         &mut self,
         claim_id: ClaimId,
@@ -65,28 +68,34 @@ impl Recourse {
         quote_hash: Option<Hash>,
     ) -> Promise {
         self.assert_keeper();
-        // Awards are in the bond asset; in token mode this native transfer
-        // would pay token units as yoctoNEAR. Token payouts go through the
-        // token (see the Intents/token payout path).
-        self.assert_native_mode();
         let mut p = self
             .payouts
             .get(&claim_id)
             .cloned()
             .unwrap_or_else(|| env::panic_str("payout not found"));
-        require!(
-            p.mode == PayoutMode::Direct,
-            "only Direct payouts are supported"
-        );
-        require!(
-            deposit_address.is_none() && quote_id.is_none() && quote_hash.is_none(),
-            "Direct payouts take no deposit address or quote"
-        );
+        let deposit = match p.mode {
+            PayoutMode::Direct => {
+                require!(
+                    deposit_address.is_none() && quote_id.is_none() && quote_hash.is_none(),
+                    "Direct payouts take no deposit address or quote"
+                );
+                None
+            }
+            PayoutMode::Intents => {
+                let quote = IntentsQuote::check(deposit_address, quote_id, quote_hash);
+                self.use_quote_once(&quote);
+                p.deposit_address = Some(quote.deposit_address.to_string());
+                p.quote_id = Some(quote.quote_id.clone());
+                p.quote_hash = Some(quote.quote_hash);
+                Some(quote)
+            }
+        };
         self.set_payout_status(claim_id, &mut p, PayoutStatus::Sent);
         p.attempts = p.attempts.saturating_add(1);
+        p.sent_at = Some(U64(env::block_timestamp()));
+        p.final_status = None;
         self.payouts.insert(claim_id, p.clone());
-        // The money leaves now; if the transfer fails it comes back and the
-        // callback re-adds it.
+        // The money leaves now; if the transfer fails the callback puts it back.
         self.totals.pending_payouts = U128(sub(
             self.totals.pending_payouts.0,
             p.amount.0,
@@ -99,22 +108,24 @@ impl Recourse {
             "recipient": p.claimant,
             "amount": p.amount,
             "attempt": p.attempts,
+            "deposit_address": p.deposit_address,
+            "quote_id": p.quote_id,
+            "quote_hash": p.quote_hash,
             "by": env::predecessor_account_id(),
         }));
-        Promise::new(p.claimant.clone())
-            .transfer(NearToken::from_yoctonear(p.amount.0))
-            .then(
-                Self::ext(env::current_account_id())
-                    .with_static_gas(PAYOUT_CALLBACK_GAS)
-                    .on_payout_transfer(claim_id),
-            )
+        self.send_payout(claim_id, &p, deposit.as_ref())
     }
 
     /// Settles a Direct payout from its transfer's outcome. Only this
     /// contract can call it.
     #[private]
     pub fn on_payout_transfer(&mut self, claim_id: ClaimId) -> PayoutStatus {
-        let ok = env::promise_result_checked(0, 0).is_ok();
+        // Only an outright failure means the money did not move; a success
+        // that returned data (`TooLong`) still moved it.
+        let ok = !matches!(
+            env::promise_result_checked(0, 0),
+            Err(near_sdk::PromiseError::Failed)
+        );
         let mut p = self
             .payouts
             .get(&claim_id)
@@ -122,6 +133,11 @@ impl Recourse {
             .unwrap_or_else(|| env::panic_str("payout not found"));
         if p.status != PayoutStatus::Sent {
             // Nothing in flight for this claim; never double-settle.
+            return p.status;
+        }
+        if ok && p.mode == PayoutMode::Intents {
+            // Delivered to the 1Click deposit address; the outcome on the
+            // destination chain arrives with `confirm_payout`.
             return p.status;
         }
         if ok {
@@ -132,9 +148,13 @@ impl Recourse {
                 "amount": p.amount,
             }));
         } else {
-            // The runtime refunds a failed transfer to this contract, so the
-            // amount is owed again.
+            // A failed transfer leaves the money with this contract (the
+            // runtime refunds NEAR; the token never moved), so it is owed
+            // again.
             self.set_payout_status(claim_id, &mut p, PayoutStatus::Pending);
+            if self.is_ft_mode() {
+                self.ft_held = add(self.ft_held, p.amount.0, "ft held");
+            }
             self.totals.pending_payouts = U128(add(
                 self.totals.pending_payouts.0,
                 p.amount.0,
@@ -147,6 +167,47 @@ impl Recourse {
             }));
         }
         p.status
+    }
+}
+
+/// A 1Click quote for an Intents payout, checked.
+pub struct IntentsQuote {
+    pub deposit_address: AccountId,
+    pub quote_id: String,
+    pub quote_hash: Hash,
+}
+
+/// Longest 1Click quote id accepted.
+pub const MAX_QUOTE_ID_LEN: usize = 128;
+
+impl IntentsQuote {
+    fn check(
+        deposit_address: Option<String>,
+        quote_id: Option<String>,
+        quote_hash: Option<Hash>,
+    ) -> Self {
+        let deposit_address = deposit_address
+            .unwrap_or_else(|| env::panic_str("Intents payouts need the 1Click deposit address"))
+            .parse::<AccountId>()
+            .unwrap_or_else(|_| env::panic_str("deposit address is not a NEAR account"));
+        let quote_id =
+            quote_id.unwrap_or_else(|| env::panic_str("Intents payouts need the 1Click quote id"));
+        require!(
+            !quote_id.is_empty() && quote_id.len() <= MAX_QUOTE_ID_LEN,
+            "bad quote id"
+        );
+        require!(
+            quote_id.bytes().all(|b| b.is_ascii_graphic()),
+            "bad quote id"
+        );
+        let quote_hash =
+            quote_hash.unwrap_or_else(|| env::panic_str("Intents payouts need the quote hash"));
+        require!(quote_hash.0 != [0; 32], "bad quote hash");
+        Self {
+            deposit_address,
+            quote_id,
+            quote_hash,
+        }
     }
 }
 
@@ -185,6 +246,48 @@ impl Recourse {
                     PayoutMode::Intents
                 }
             }
+        }
+    }
+
+    /// Starts the transfer for a payout already marked `Sent`, with
+    /// `on_payout_transfer` as its callback.
+    fn send_payout(
+        &mut self,
+        claim_id: ClaimId,
+        p: &Payout,
+        quote: Option<&IntentsQuote>,
+    ) -> Promise {
+        let callback = Self::ext(env::current_account_id())
+            .with_static_gas(PAYOUT_CALLBACK_GAS)
+            .on_payout_transfer(claim_id);
+        let Some(token) = self.ft_token() else {
+            return Promise::new(p.claimant.clone())
+                .transfer(NearToken::from_yoctonear(p.amount.0))
+                .then(callback);
+        };
+        self.ft_held = sub(self.ft_held, p.amount.0, "ft held");
+        let (to, memo) = match quote {
+            Some(q) => (q.deposit_address.clone(), Some(q.quote_id.clone())),
+            None => (p.claimant.clone(), None),
+        };
+        ext_ft::ext(token)
+            .with_attached_deposit(NearToken::from_yoctonear(1))
+            .with_static_gas(FT_TRANSFER_GAS)
+            .ft_transfer(to, p.amount, memo)
+            .then(callback)
+    }
+
+    /// Records the quote id and deposit address; panics if either was used.
+    fn use_quote_once(&mut self, q: &IntentsQuote) {
+        for key in [
+            format!("quote:{}", q.quote_id),
+            format!("deposit:{}", q.deposit_address),
+        ] {
+            let h = HexBytes(env::sha256_array(key.as_bytes()));
+            require!(
+                self.used_quotes.insert(h),
+                "quote or deposit address already used"
+            );
         }
     }
 

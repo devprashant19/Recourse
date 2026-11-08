@@ -507,16 +507,6 @@ fn a_claim_owed_that_fails_again_is_owed_again() {
 }
 
 #[test]
-#[should_panic(expected = "use ft_transfer_call")]
-fn native_payouts_are_refused_in_token_mode() {
-    let mut c = ft_ready();
-    ctx(&owner(), 0, T0);
-    c.add_keeper(keeper());
-    ctx(&keeper(), 0, T0);
-    let _ = c.execute_payout(0, None, None, None);
-}
-
-#[test]
 fn solvency_flags_a_near_balance_below_storage_needs() {
     let c = ft_ready();
     assert!(c.solvency().storage_ok);
