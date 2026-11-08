@@ -124,6 +124,30 @@ export interface DocumentRow {
   truth: Record<string, unknown>;
 }
 
+/** The hosted sandbox's seven-scenario run (GET /demo/run). */
+export interface RunScenario {
+  id: string;
+  name: string;
+  expected: string;
+  state: "pending" | "running" | "pass" | "fail";
+  actual?: string;
+  txs?: number;
+  ms?: number;
+}
+
+export interface RunStatus {
+  cycle: number;
+  phase: "starting" | "seeding" | "live" | "resetting";
+  started_at: string;
+  finished_at: string | null;
+  reset_at: string | null;
+  model_source: string;
+  scenarios: RunScenario[];
+  passed: number;
+  total: number;
+  solvency_ok: boolean | null;
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`${path}: ${res.status} ${(await res.json().catch(() => ({}))).error ?? res.statusText}`);
@@ -160,4 +184,6 @@ export const api = {
   claimDemo: (body: { engagement_id: number; kind: "Quality" | "NoDelivery"; evidence?: string }) => post<{ claim_id: number }>("/demo/claim", body),
   sabotage: (mode: string) => post<{ mode: string }>("/demo/sabotage", { mode }),
   sabotageMode: () => get<{ mode: string | null }>("/demo/sabotage"),
+  run: () => get<{ status: RunStatus | null; queued: boolean }>("/demo/run"),
+  runAll: () => post<{ ok: boolean; message: string }>("/demo/run", {}),
 };

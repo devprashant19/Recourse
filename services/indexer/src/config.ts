@@ -6,6 +6,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 
+import { RUN_REQUEST_FILE, RUN_STATUS_FILE } from "./run-status.js";
+
 export type Mode = "sandbox" | "testnet" | "mainnet";
 
 export interface DemoAccount {
@@ -34,6 +36,9 @@ export interface IndexerConfig {
   workerAdmin: { url: string; token: string } | null;
   /** Allowed browser origins for CORS. */
   corsOrigins: string[] | true;
+  /** The hosted sandbox's run-everything status and request files (sandbox only). */
+  runStatusFile: string;
+  runRequestFile: string;
 }
 
 const RPC: Record<Mode, string> = {
@@ -117,5 +122,7 @@ export function loadIndexerConfig(env: NodeJS.ProcessEnv = process.env, argv: st
     demo,
     workerAdmin,
     corsOrigins: origins && origins.length ? origins : true,
+    runStatusFile: env.RUN_STATUS_FILE ?? RUN_STATUS_FILE,
+    runRequestFile: env.RUN_REQUEST_FILE ?? RUN_REQUEST_FILE,
   };
 }

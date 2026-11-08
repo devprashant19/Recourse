@@ -91,6 +91,30 @@ test("06 attacks — the books still balance", async ({ page }) => {
   await expect(page.getByText("solvent", { exact: true })).toBeVisible();
 });
 
+test("run everything — the Demo page shows all seven scenarios passed", async ({ page }) => {
+  await page.goto("/demo");
+  const panel = page.getByTestId("run-panel");
+  await expect(panel.getByText("Run everything: the seven scenarios")).toBeVisible();
+  await expect(panel.getByTestId("run-headline")).toHaveText(/^7\/7 PASS\s+solvency OK$/);
+  await expect(panel.getByText("PASS", { exact: true })).toHaveCount(7);
+  await expect(panel.getByText(/genuine NEAR AI Cloud recordings/)).toBeVisible();
+});
+
+// Resets the shared chain and waits for the full replay (7-12 minutes depending on the machine). Opt-in: E2E_RUN_RESET=1.
+test("run everything — the button resets the chain and replays all seven", async ({ page }, info) => {
+  test.skip(process.env.E2E_RUN_RESET !== "1" || info.project.name !== "desktop", "opt-in: E2E_RUN_RESET=1 (desktop only; resets the shared chain)");
+  test.setTimeout(25 * 60_000);
+  const before = (await api<{ status: { cycle: number } | null }>("/demo/run")).status!.cycle;
+  await page.goto("/demo");
+  page.once("dialog", (d) => void d.accept());
+  await page.getByRole("button", { name: "Reset the chain and run all seven" }).click();
+  await expect(page.getByText(/Restarting on a fresh chain/)).toBeVisible();
+  await expect(page.getByTestId("run-headline")).toHaveText(/Running scenario|Starting a fresh chain/, { timeout: 5 * 60_000 });
+  await expect(page.getByTestId("run-headline")).toHaveText(/^7\/7 PASS\s+solvency OK$/, { timeout: 20 * 60_000 });
+  const after = (await api<{ status: { cycle: number } | null }>("/demo/run")).status!.cycle;
+  expect(after).toBe(before + 1);
+});
+
 test("07 underwriting market — sealed rounds with a winner and rationales", async ({ page }) => {
   await page.goto("/vaults");
   await expect(page.getByRole("heading", { name: "Bid rounds" })).toBeVisible();

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 
+import { RunPanel } from "@/components/run-panel";
 import { describe } from "@/components/timeline";
 import { Account, ErrorBox, Loading, Pill, Section, statusTone, Tx } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -35,20 +36,37 @@ export default function DemoPage() {
     onError: (e) => setMsg((e as Error).message),
   });
 
-  if (health.isError) return <ErrorBox error={health.error} />;
-  if (!health.data) return <Loading />;
-  if (!health.data.demo)
+  const header = (
+    <>
+      <h1 className="text-2xl font-semibold">Demo controls</h1>
+      <p className="mt-1 text-sm text-dim">Every button sends a real transaction from a server-side demo client. No wallet needed.</p>
+    </>
+  );
+  if (health.isError || !health.data || !health.data.demo)
     return (
-      <div className="card text-sm">
-        Demo controls are off on this deployment ({health.data.mode}). On mainnet they never exist; elsewhere the indexer needs the demo client in <code className="font-mono">.data</code>.
+      <div>
+        {header}
+        {health.data?.mode === "sandbox" || health.isError ? <div className="mt-6"><RunPanel /></div> : null}
+        <div className="mt-6">
+          {health.isError ? (
+            <ErrorBox error={health.error} />
+          ) : !health.data ? (
+            <Loading />
+          ) : (
+            <div className="card text-sm">
+              Demo controls are off on this deployment ({health.data.mode}). On mainnet they never exist; elsewhere the indexer needs the demo client in <code className="font-mono">.data</code>.
+            </div>
+          )}
+        </div>
       </div>
     );
   const covered = agents.data?.filter((a) => a.coverage) ?? [];
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold">Demo controls</h1>
-      <p className="mt-1 text-sm text-dim">Every button sends a real transaction from a server-side demo client. No wallet needed.</p>
+      {header}
+
+      {health.data.mode === "sandbox" ? <div className="mt-6"><RunPanel /></div> : null}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <div className="card">

@@ -18,6 +18,7 @@
  *   GET  /documents                   the demo document catalog (name, terms hash)
  *   GET  /events?after=<id>           the live event log
  *   POST /demo/hire | /demo/sabotage | /demo/claim   sandbox/testnet only, rate-limited
+ *   GET|POST /demo/run                sandbox only: the seven scenarios' live status; replay them on a fresh chain
  *
  * State is read live from the contract's views; events supply lists, history
  * and the transaction behind every step. Amounts stay decimal strings.
@@ -37,6 +38,7 @@ import { RecourseClient, type Engagement } from "@recourse/sdk";
 
 import type { IndexerConfig } from "./config.js";
 import type { EventStore, StoredEvent } from "./db.js";
+import { readJson, refuseRun, writeJson, type RunRequest, type RunStatus } from "./run-status.js";
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const MINUTE_NS = 60n * 1_000_000_000n;
@@ -363,6 +365,21 @@ export function buildApi(d: ApiDeps): FastifyInstance {
       if (!res) return reply.code(502).send({ error: "worker admin server unreachable" });
       return reply.code(res.status).send(await res.json());
     });
+
+    // Run everything: the hosted sandbox replays all seven scenarios on a fresh chain.
+    if (cfg.mode === "sandbox") {
+      app.get("/demo/run", async () => ({
+        status: readJson<RunStatus>(cfg.runStatusFile),
+        queued: readJson<RunRequest>(cfg.runRequestFile) !== null,
+      }));
+      app.post("/demo/run", async (req, reply) => {
+        if (!guard(req.ip, reply)) return;
+        const why = refuseRun(readJson<RunStatus>(cfg.runStatusFile), readJson<RunRequest>(cfg.runRequestFile));
+        if (why) return reply.code(409).send({ error: why });
+        writeJson(cfg.runRequestFile, { requested_at: new Date().toISOString() } satisfies RunRequest);
+        return reply.code(202).send({ ok: true, message: "A fresh chain is starting and all seven scenarios replay on it. The site reconnects in about a minute." });
+      });
+    }
 
     app.get("/demo/sabotage", async (_req, reply) => {
       if (!cfg.workerAdmin) return { mode: null };

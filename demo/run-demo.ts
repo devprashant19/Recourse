@@ -99,12 +99,18 @@ export async function setupNetwork(net: Network, log: (s: string) => void): Prom
   };
 }
 
-export async function runScenarios(only?: Set<string>, log: (s: string) => void = console.log): Promise<DemoReport> {
+export interface RunHooks {
+  onStart?: (s: { id: string; name: string; expected: string }) => void;
+  onResult?: (r: ScenarioResult) => void;
+}
+
+export async function runScenarios(only?: Set<string>, log: (s: string) => void = console.log, hooks: RunHooks = {}): Promise<DemoReport> {
   const results: ScenarioResult[] = [];
   const chosen = SCENARIOS.filter((s) => !only || only.has(s.id));
   for (const s of chosen) {
     const c = cast();
     log(`\n━━ SCENARIO ${s.id} — ${s.name}`);
+    hooks.onStart?.(s);
     const t0 = Date.now();
     try {
       const actual = await s.run(c);
@@ -115,6 +121,7 @@ export async function runScenarios(only?: Set<string>, log: (s: string) => void 
       results.push({ id: s.id, name: s.name, expected: s.expected, actual: `FAILED: ${msg.split("\n")[0]!.slice(0, 160)}`, txs: c.txs, pass: false, ms: Date.now() - t0 });
       log(`SCENARIO ${s.id}: FAIL\n${msg}`);
     }
+    hooks.onResult?.(results[results.length - 1]!);
   }
   const c = cast();
   const sol = await c.view.solvency();

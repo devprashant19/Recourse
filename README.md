@@ -22,6 +22,7 @@ and the client is paid **in the token and on the chain they chose**, through NEA
 |---|---|
 | `pnpm i && pnpm demo` | A local NEAR sandbox boots, the DAO and contract deploy, seven scenarios run, and a table ends **7/7 PASS, `solvency: OK`** (about 6–7 minutes; no `.env`, no keys) |
 | `npm run judge` | 14 check groups, one row per threat, `ALL PASS`, exit code 0 |
+| `docker compose up`, open http://localhost:3000/demo | **One page runs everything**: the seven scenarios with live PASS/FAIL as they run, a button that resets the chain and replays all seven, plus hire, sabotage and claim controls and a live event log |
 | `docker compose up`, open http://localhost:3000, click "Watch an agent get slashed" | The claim timeline, step by step: findings, the bond-first split, the payout — every step with its transaction |
 | On any job page, click "Verify receipt" | The browser re-hashes the exact bytes and recovers the TEE signer; every check green |
 | `pnpm verify-receipt demo/fixtures/receipts/01-northwind-invoice.wrong-total.receipt.json` | The same checks in the terminal: `VALID` |
@@ -136,6 +137,7 @@ Full list of what is *not* defended against: [`THREAT_MODEL.md`](THREAT_MODEL.md
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Diagram, components, trust boundaries, what runs where |
 | [`RULES.md`](RULES.md) | The protocol in plain English, with a worked example |
 | [`THREAT_MODEL.md`](THREAT_MODEL.md) | 16 attacks, each with the test that proves the defence |
+| [`DECISION.md`](DECISION.md) | Every significant decision: what we chose, why, and what we rejected |
 | [`phases/`](phases/) | The build plan, phase by phase, with exit criteria |
 | [`HACKATHON_DISCLOSURE.md`](HACKATHON_DISCLOSURE.md) | Baseline, libraries, AI-generated code |
 | [`docs/services.md`](docs/services.md) | Running the worker and arbiter: modes, keys, testnet steps, operations |

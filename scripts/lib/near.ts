@@ -127,6 +127,16 @@ export async function fastForward(net: Network, blocks: number): Promise<void> {
   if (body.error) throw new Error(`sandbox_fast_forward failed: ${JSON.stringify(body.error)}`);
 }
 
+/** Polls the head until it reaches `height` (or 60 s pass); returns where it is. */
+async function waitForHeight(p: JsonRpcProvider, height: number): Promise<{ height: number; time: bigint }> {
+  const until = Date.now() + 60_000;
+  for (;;) {
+    const b = await p.viewBlock({ finality: "optimistic" });
+    if (b.header.height >= height || Date.now() > until) return { height: b.header.height, time: BigInt(b.header.timestamp_nanosec) };
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
+
 /**
  * Sandbox only: fast-forwards until chain time is past `targetNs`.
  *
@@ -136,7 +146,22 @@ export async function fastForward(net: Network, blocks: number): Promise<void> {
  * and wait for finality to catch up before returning.
  */
 export async function skipPast(net: Network, p: JsonRpcProvider, targetNs: bigint, stepBlocks = 50): Promise<void> {
-  while ((await chainNow(p)) <= targetNs) await fastForward(net, stepBlocks);
+  // `sandbox_fast_forward` returns before the jump is applied. Re-reading the
+  // time straight away used to see the old head and ask again, so under load
+  // several jumps stacked up and overshot by minutes (scenario 07 then found
+  // its 3-minute claim window already closed). So: wait for each jump to land,
+  // learn how much time a block skips, and size the last step to what is left.
+  let nsPerBlock = 0n;
+  for (let guard = 0; guard < 500; guard++) {
+    const before = await p.viewBlock({ finality: "optimistic" });
+    const now = BigInt(before.header.timestamp_nanosec);
+    if (now > targetNs) break;
+    const left = targetNs - now;
+    const step = nsPerBlock > 0n ? Number(BigInt(stepBlocks) < left / nsPerBlock + 1n ? BigInt(stepBlocks) : left / nsPerBlock + 1n) : Math.min(stepBlocks, 5);
+    await fastForward(net, Math.max(1, step));
+    const landed = await waitForHeight(p, before.header.height + Math.max(1, step));
+    if (landed.time > now && landed.height > before.header.height) nsPerBlock = (landed.time - now) / BigInt(landed.height - before.header.height);
+  }
   for (let i = 0; i < 60; i++) {
     const [head, fin] = await Promise.all([
       p.viewBlock({ finality: "optimistic" }),

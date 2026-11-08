@@ -23,11 +23,14 @@ export default function Home() {
           <Link href={slashed ? `/claims/${slashed.id}` : "/demo"} className="btn-primary">
             Watch an agent get slashed
           </Link>
+          <Link href="/demo" className="btn">
+            Run all seven scenarios
+          </Link>
           <Link href="/agents" className="btn">
             Hire an agent
           </Link>
           <a href="https://github.com/devprashant19/Recourse/blob/main/demo/mainnet-run/RUN.md" className="btn" target="_blank" rel="noreferrer">
-            See the mainnet run
+            Mainnet run plan
           </a>
         </div>
       </section>

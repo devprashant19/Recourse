@@ -15,19 +15,28 @@
  *      keeper, three underwriter personas — plus the indexer API as a child;
  *   4. after HOSTED_RESET_MINUTES, stops it all and starts again.
  *
- * The model is the deterministic dev model (scripts/lib/dev-answer.ts):
- * answers any job or claim, signs with the allow-listed sandbox key, and
- * every receipt says "dev-fixture". Every transaction is real on the local
- * chain and every receipt is checked by the contract — but there is no TEE.
- * The testnet deployment (docs/hosting.md) is the one with live NEAR AI Cloud.
+ * Models: the seeded scenarios replay the genuine NEAR AI Cloud recordings
+ * (demo/fixtures/near-ai). New hires from the web UI are answered by the
+ * deterministic dev model (scripts/lib/dev-answer.ts), signed with the
+ * allow-listed sandbox key; those receipts say "dev-fixture" (no TEE), because
+ * a public keyless demo cannot spend a NEAR AI key. Every transaction is real
+ * on the local chain and every receipt is checked by the contract. The
+ * testnet deployment (docs/hosting.md) runs live NEAR AI Cloud.
+ *
+ * Run everything from the browser: the status of each scenario is written to
+ * .data/sandbox-run.json as it runs (GET /demo/run), and POST /demo/run asks
+ * this loop to start a fresh chain and replay all seven (the Demo page).
  *
  * Linux x64 / macOS arm64 (nearcore sandbox builds). Use Docker elsewhere.
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 
-import { setupNetwork, runScenarios, printReport } from "../demo/run-demo.js";
+import { SCENARIOS, setupNetwork, runScenarios, printReport } from "../demo/run-demo.js";
+import { selectBackend } from "../packages/adapters/src/index.js";
+import { RUN_REQUEST_FILE, RUN_STATUS_FILE, removeFile, writeJson, type RunStatus } from "../services/indexer/src/run-status.js";
 import { DEV_MODEL } from "../demo/fixtures/plan.js";
 import { adminServer, listenLocal } from "../services/worker-agent/src/admin.js";
 import { KeeperService } from "../services/keeper/src/service.js";
@@ -54,19 +63,62 @@ function log(msg: string, fields: Record<string, unknown> = {}) {
 
 async function cycle(n: number): Promise<void> {
   log("cycle starting", { cycle: n, resetMinutes: RESET_MIN });
+  removeFile(RUN_REQUEST_FILE);
+  const status: RunStatus = {
+    cycle: n,
+    phase: "starting",
+    started_at: new Date().toISOString(),
+    finished_at: null,
+    reset_at: null,
+    model_source: selectBackend("sandbox").source,
+    scenarios: SEED ? SCENARIOS.map((x) => ({ id: x.id, name: x.name, expected: x.expected, state: "pending" as const })) : [],
+    passed: 0,
+    total: SEED ? SCENARIOS.length : 0,
+    solvency_ok: null,
+  };
+  const publish = () => writeJson(RUN_STATUS_FILE, status);
+  publish();
+
   const net = await setupNetwork("sandbox", (s) => log(s));
   const stops: (() => Promise<void> | void)[] = [net.stop];
   let indexer: ChildProcess | undefined;
   try {
+    const token = process.env.WORKER_ADMIN_TOKEN ?? randomBytes(32).toString("hex");
+    const rpcUrl = process.env.RECOURSE_RPC_URL!;
+
+    // Indexer API first (it configures itself from .data), so the site shows
+    // the scenarios' events as they happen. The sandbox keeps every block, so
+    // it could also catch up later; starting now just makes the page live.
+    indexer = spawn(process.execPath, ["--import", "tsx", "services/indexer/src/main.ts", "--mode", "sandbox"], {
+      stdio: "inherit",
+      env: { ...process.env, RECOURSE_RPC_URL: rpcUrl, WORKER_ADMIN_TOKEN: token, WORKER_ADMIN_PORT: String(ADMIN_PORT), INDEXER_HOST: process.env.INDEXER_HOST ?? "0.0.0.0" },
+    });
+    stops.push(() => {
+      indexer?.kill("SIGTERM");
+    });
+
     if (SEED) {
-      const report = await runScenarios(undefined, () => {});
+      status.phase = "seeding";
+      publish();
+      const report = await runScenarios(undefined, () => {}, {
+        onStart: (x) => {
+          const row = status.scenarios.find((r) => r.id === x.id);
+          if (row) row.state = "running";
+          publish();
+        },
+        onResult: (r) => {
+          const row = status.scenarios.find((x) => x.id === r.id);
+          if (row) Object.assign(row, { state: r.pass ? "pass" : "fail", actual: r.actual, txs: r.txs, ms: r.ms });
+          status.passed = status.scenarios.filter((x) => x.state === "pass").length;
+          publish();
+        },
+      });
       printReport(report);
+      status.solvency_ok = report.solvencyOk;
       log("seeded with the seven scenarios", { passed: report.passed, total: report.total, solvency: report.solvencyOk });
     }
 
     const c = cast();
-    const token = process.env.WORKER_ADMIN_TOKEN ?? randomBytes(32).toString("hex");
-    const rpcUrl = process.env.RECOURSE_RPC_URL!;
 
     // Worker + arbiter, live, on the dev model.
     const s = services(c, artifactDir(), "none", devLiveBackend(DEV_MODEL), { worker: DEV_MODEL, arbiter: DEV_MODEL });
@@ -103,18 +155,19 @@ async function cycle(n: number): Promise<void> {
         }),
     );
 
-    // Indexer API as a child process (it configures itself from .data).
-    indexer = spawn(process.execPath, ["--import", "tsx", "services/indexer/src/main.ts", "--mode", "sandbox"], {
-      stdio: "inherit",
-      env: { ...process.env, RECOURSE_RPC_URL: rpcUrl, WORKER_ADMIN_TOKEN: token, WORKER_ADMIN_PORT: String(ADMIN_PORT), INDEXER_HOST: process.env.INDEXER_HOST ?? "0.0.0.0" },
-    });
-    stops.push(() => {
-      indexer?.kill("SIGTERM");
-    });
-
-    log("stack live", { contract: c.contractId, api: `http://${process.env.INDEXER_HOST ?? "0.0.0.0"}:${process.env.INDEXER_PORT ?? 8080}`, resetAt: new Date(Date.now() + RESET_MIN * 60_000).toISOString() });
     const until = Date.now() + RESET_MIN * 60_000;
+    status.phase = "live";
+    status.finished_at = new Date().toISOString();
+    status.reset_at = new Date(until).toISOString();
+    publish();
+    log("stack live", { contract: c.contractId, api: `http://${process.env.INDEXER_HOST ?? "0.0.0.0"}:${process.env.INDEXER_PORT ?? 8080}`, resetAt: new Date(Date.now() + RESET_MIN * 60_000).toISOString() });
     while (Date.now() < until) {
+      if (existsSync(RUN_REQUEST_FILE)) {
+        log("fresh run requested from the web UI; resetting the chain");
+        status.phase = "resetting";
+        publish();
+        break;
+      }
       for (const [name, tick] of [
         ["worker", () => s.worker.tick()],
         ["arbiter", () => s.arbiter.tick()],

@@ -25,6 +25,11 @@ with history (a slash, a rejected claim, an appeal, three bid rounds), then runs
 sabotage switch), arbiter, keeper and three underwriter personas live, plus the indexer API. Every
 `HOSTED_RESET_MINUTES` (default 60) it starts again from a fresh chain, which bounds any damage.
 
+**Run everything from the browser.** The Demo page (`/demo`) shows the seven scenarios as they run, one
+row each with PASS or FAIL and what happened. Its "Reset the chain and run all seven" button starts a
+fresh chain and replays them (about 6 minutes). A reset affects every viewer, so it asks for
+confirmation and is refused while a run is in progress or within 3 minutes of the last one.
+
 `web` builds the Next.js app with `NEXT_PUBLIC_API_URL` (default `http://localhost:8080`; set
 `PUBLIC_API_URL` to the VM's public API address when hosting).
 
