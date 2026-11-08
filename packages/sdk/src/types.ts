@@ -182,7 +182,23 @@ export interface Payout {
   final_status: string | null;
   dest_tx: string | null;
   attempts: number;
+  /** Block time (ns) of the latest execute_payout. */
+  sent_at: U64 | null;
 }
+
+/** NEP-145 storage balance (token mode), in yoctoNEAR. */
+export interface StorageBalance {
+  total: U128;
+  available: U128;
+}
+
+export interface StorageBalanceBounds {
+  min: U128;
+  max: U128 | null;
+}
+
+/** 1Click outcome reported with `confirm_payout`. */
+export type PayoutOutcome = "SUCCESS" | "REFUNDED" | "FAILED";
 
 export interface Roles {
   owner: AccountId;
@@ -209,8 +225,12 @@ export interface Solvency extends Totals {
   held: U128;
   storage_reserved: U128;
   unattributed: U128;
+  /** Owed after refused token transfers (claim_owed). */
+  owed: U128;
   liabilities: U128;
   surplus: U128;
+  /** The NEAR balance covers locked storage plus prepaid storage balances. */
+  storage_ok: boolean;
   ok: boolean;
 }
 

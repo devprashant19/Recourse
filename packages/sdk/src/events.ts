@@ -35,6 +35,10 @@ export const EVENT_NAMES = [
   "payout_confirmed",
   "payout_retry",
   "paused",
+  "storage_deposit",
+  "payment_failed",
+  "owed_claimed",
+  "unattributed_synced",
 ] as const;
 
 export type RecourseEventName = (typeof EVENT_NAMES)[number];

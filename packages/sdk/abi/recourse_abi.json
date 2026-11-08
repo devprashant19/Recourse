@@ -7,7 +7,7 @@
       "compiler": "rustc 1.95.0",
       "builder": "cargo-near cargo-near-build 0.11.5"
     },
-    "wasm_hash": "GLAfBauARziLPyNViDEABioYmExic82Fx2faEvnb5ony"
+    "wasm_hash": "HVbCHkc3oFV5pqe1wAxyhGF8QoDVcgvrbTMxzykQvtXJ"
   },
   "body": {
     "functions": [
@@ -148,6 +148,17 @@
         }
       },
       {
+        "name": "claim_owed",
+        "doc": " Pulls everything owed to the caller after a refused transfer.",
+        "kind": "call",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
         "name": "close_stale_claim",
         "doc": " Unwinds a quality claim no arbiter ruled on within `claim_window +\n appeal_window` of filing, so a missing arbiter can never lock funds\n forever. No fault is found: the client gets the price and the stake\n back, the vault keeps the premium, all locks are released, nobody is\n slashed and the agent's record is unchanged. Anyone may call it.",
         "kind": "call",
@@ -181,6 +192,51 @@
               }
             }
           ]
+        }
+      },
+      {
+        "name": "confirm_payout",
+        "doc": " The keeper reports 1Click's final outcome for a delivered Intents\n payout (`status` is `SUCCESS`, `REFUNDED` or `FAILED`, `quote_id` must\n be the one it was sent with):\n\n * `SUCCESS` — final; `dest_tx` is recorded.\n * `FAILED`  — recorded; a later `REFUNDED` can still recover it.\n * `REFUNDED` — the award came back to this contract. It is matched\n   from `unattributed` (tokens `sync_unattributed` has seen on the\n   balance and nobody owns), so a report alone creates nothing; the\n   payout is `Pending` again for a new quote.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "claim_id",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "quote_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "status",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "dest_tx",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/PayoutStatus"
+          }
         }
       },
       {
@@ -238,8 +294,11 @@
       },
       {
         "name": "execute_payout",
-        "doc": " Sends a pending payout. Keeper only. In Direct mode the amount and the\n recipient (the claimant) are fixed by the verdict and the claim; the\n keeper only chooses *when*. The Intents-only arguments must be absent.",
+        "doc": " Sends a pending payout. Keeper only. The amount is fixed by the\n verdict, the destination by the claimant, the mode at creation; the\n keeper chooses only *when* and, for Intents, supplies the 1Click quote\n for that fixed destination. A quote id or deposit address can be used\n once; Direct payouts take neither.\n\n Intents payouts attach more than `INTENTS_STORAGE_DEPOSIT`: exactly\n that registers the deposit address on the token, the storage this\n attempt adds here is kept, and the rest is refunded to the keeper.\n Direct payouts attach nothing.\n\n Trust note (T8): the deposit address and quote are relayed by the\n keeper and cannot be checked on-chain against the claimant's\n destination. They are recorded (with `quote_hash`, the sha256 of the\n raw quote) and emitted so anyone can check them against 1Click's\n public status for that deposit address; the keeper's bond is what\n answers for a mismatch.",
         "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
         "params": {
           "serialization_type": "json",
           "args": [
@@ -384,6 +443,41 @@
               }
             }
           ]
+        }
+      },
+      {
+        "name": "ft_on_transfer",
+        "doc": " NEP-141 receiver. Returns the amount to refund to the sender (0 when\n all of it was used). Panics on anything invalid, which refunds the\n sender in full.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "sender_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "msg",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/PromiseOrValueString"
+          }
         }
       },
       {
@@ -610,6 +704,64 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      {
+        "name": "get_ft_epoch",
+        "doc": " Counter of changes to the token books; `sync_unattributed` passes it\n to its callback so a read taken while the books moved is ignored.",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          }
+        }
+      },
+      {
+        "name": "get_ft_held",
+        "doc": " Fungible-token units this contract holds by its own accounting (Ft mode).",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "get_ft_in_flight",
+        "doc": " Token units sent whose transfer callback has not run yet.",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "get_owed",
+        "doc": " Bond-asset units owed to `account` after refused transfers.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
           }
         }
       },
@@ -869,6 +1021,59 @@
         }
       },
       {
+        "name": "list_payouts",
+        "doc": " Payouts by claim id, from `from_index` (default 0), `limit` capped at\n `MAX_PAGE`. Claims without a payout are skipped. For keepers scanning\n for `Pending` work.",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "from_index",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": [
+                {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                },
+                {
+                  "$ref": "#/definitions/Payout"
+                }
+              ],
+              "maxItems": 2,
+              "minItems": 2
+            }
+          }
+        }
+      },
+      {
         "name": "list_vaults",
         "doc": " Vaults in insertion order, `limit` capped at `MAX_PAGE`.",
         "kind": "view",
@@ -943,6 +1148,64 @@
               }
             }
           ]
+        }
+      },
+      {
+        "name": "on_ft_balance",
+        "kind": "call",
+        "modifiers": [
+          "private"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "epoch",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "on_ft_paid",
+        "doc": " Callback for `pay` in Ft mode. A refused transfer becomes `owed`.",
+        "kind": "call",
+        "modifiers": [
+          "private"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "to",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "boolean"
+          }
         }
       },
       {
@@ -1343,6 +1606,111 @@
         }
       },
       {
+        "name": "storage_balance_bounds",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/StorageBalanceBounds"
+          }
+        }
+      },
+      {
+        "name": "storage_balance_of",
+        "kind": "view",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/StorageBalance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "storage_deposit",
+        "doc": " NEP-145: prepay storage for USDC-mode operations. A new account pays\n `storage_balance_bounds().min` once for its own entry (kept as long as\n the entry exists); the rest is its available balance. With\n `registration_only`, only the minimum is kept and the rest refunded.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            {
+              "name": "registration_only",
+              "type_schema": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/StorageBalance"
+          }
+        }
+      },
+      {
+        "name": "storage_withdraw",
+        "doc": " NEP-145: return unused prepaid storage (all of it if `amount` is\n omitted). Requires exactly 1 yoctoNEAR, so it needs a full-access key.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/StorageBalance"
+          }
+        }
+      },
+      {
         "name": "submit_receipt",
         "doc": " The agent proves delivery with a TEE-signed receipt, checked on-chain\n (see `tee.rs`). Must arrive by the deadline, and each response hash can\n be used once across all engagements (T3).",
         "kind": "call",
@@ -1393,6 +1761,17 @@
           "serialization_type": "json",
           "type_schema": {
             "$ref": "#/definitions/Receipt"
+          }
+        }
+      },
+      {
+        "name": "sync_unattributed",
+        "doc": " Keeper only. Reads this contract's real token balance to find tokens\n that arrived by plain `ft_transfer` (1Click refunds). The read is\n taken in another receipt, so it is trusted only when nothing moved in\n between: no transfer in flight and the books unchanged from request\n to callback. Even then a deposit being refunded by the token can sit\n on the balance for a few blocks, so `unattributed` only rises to what\n two quiet reads at least `SYNC_GAP_NS` apart both saw; it falls at\n once.\n\n Residual risk: someone who lands a rejected deposit on *both* reads\n can still overstate it. That only matters together with a false\n `REFUNDED` report, i.e. a dishonest keeper, which the keeper bond\n answers for (as with the deposit address, T8).",
+        "kind": "call",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Promise"
           }
         }
       },
@@ -2151,11 +2530,11 @@
               "minimum": 0.0
             },
             "storage_fee": {
-              "description": "Prepaid storage for the engagement and its receipt.",
+              "description": "Prepaid storage for the engagement and its receipt, in yoctoNEAR. Native mode: part of the attached deposit. Ft mode: taken from the client's NEP-145 storage balance.",
               "type": "string"
             },
             "total_deposit": {
-              "description": "`price + premium + storage_fee` to attach, when `price` was given.",
+              "description": "What to send, when `price` was given. Native mode: `price + premium + storage_fee` to attach. Ft mode: `price + premium` in the token, sent with `ft_transfer_call`.",
               "type": [
                 "string",
                 "null"
@@ -2236,6 +2615,13 @@
                 "null"
               ]
             },
+            "sent_at": {
+              "description": "Block time of the latest `execute_payout`; the keeper's timeout clock.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "status": {
               "$ref": "#/definitions/PayoutStatus"
             }
@@ -2251,7 +2637,7 @@
               ]
             },
             {
-              "description": "Through NEAR Intents 1Click to the claimant's chosen chain (Phase 3).",
+              "description": "Through NEAR Intents 1Click to the claimant's chosen chain: the contract sends the token to a 1Click deposit address fixed by a quote.",
               "type": "string",
               "enum": [
                 "Intents"
@@ -2270,6 +2656,9 @@
           ]
         },
         "Promise": true,
+        "PromiseOrValueString": {
+          "type": "string"
+        },
         "Receipt": {
           "description": "Proves which model produced which bytes inside an attested TEE. It does NOT prove the output is correct — that is the arbiter's job.",
           "type": "object",
@@ -2432,7 +2821,9 @@
             "held",
             "liabilities",
             "ok",
+            "owed",
             "pending_payouts",
+            "storage_ok",
             "storage_reserved",
             "surplus",
             "unattributed",
@@ -2453,15 +2844,23 @@
               "type": "string"
             },
             "liabilities": {
-              "description": "Sum of the six buckets above.",
+              "description": "Sum of the buckets above, plus prepaid NEP-145 storage in native mode.",
               "type": "string"
             },
             "ok": {
-              "description": "`held - storage_reserved >= liabilities`.",
+              "description": "`held - storage_reserved >= liabilities`, and `storage_ok`.",
               "type": "boolean"
+            },
+            "owed": {
+              "description": "Owed after refused token transfers (`claim_owed`).",
+              "type": "string"
             },
             "pending_payouts": {
               "type": "string"
+            },
+            "storage_ok": {
+              "description": "The NEAR balance covers locked storage plus prepaid NEP-145 balances.",
+              "type": "boolean"
             },
             "storage_reserved": {
               "description": "Part of `held` the runtime keeps aside to pay for the contract's storage.",
@@ -2475,6 +2874,38 @@
               "type": "string"
             },
             "vault_capital": {
+              "type": "string"
+            }
+          }
+        },
+        "StorageBalance": {
+          "type": "object",
+          "required": [
+            "available",
+            "total"
+          ],
+          "properties": {
+            "available": {
+              "type": "string"
+            },
+            "total": {
+              "type": "string"
+            }
+          }
+        },
+        "StorageBalanceBounds": {
+          "type": "object",
+          "required": [
+            "min"
+          ],
+          "properties": {
+            "max": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "min": {
               "type": "string"
             }
           }

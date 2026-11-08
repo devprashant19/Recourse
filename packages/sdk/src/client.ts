@@ -28,6 +28,7 @@ import type {
   Hash,
   JobQuote,
   Payout,
+  PayoutOutcome,
   PayoutStatus,
   Receipt,
   ReceiptInput,
@@ -35,6 +36,8 @@ import type {
   Signer,
   SignatureKind,
   Solvency,
+  StorageBalance,
+  StorageBalanceBounds,
   StorageFees,
   Totals,
   U128,
@@ -47,6 +50,8 @@ import type {
 export const DEFAULT_GAS = 300_000_000_000_000n;
 /** Attached to register_agent / create_vault / bind_coverage; the unused part is refunded. */
 export const STORAGE_DEPOSIT = 100_000_000_000_000_000_000_000n; // 0.1 NEAR
+/** Attached to an Intents execute_payout: 0.00125 NEAR token registration + record storage; the rest is refunded. */
+export const INTENTS_EXECUTE_DEPOSIT = 10_000_000_000_000_000_000_000n; // 0.01 NEAR
 
 /** Every contract method this client calls, with its argument names. */
 export const METHODS = {
@@ -73,6 +78,13 @@ export const METHODS = {
   list_vaults: { kind: "view", args: ["from_index", "limit"] },
   is_paused: { kind: "view", args: [] },
   solvency: { kind: "view", args: [] },
+  get_ft_held: { kind: "view", args: [] },
+  get_ft_in_flight: { kind: "view", args: [] },
+  get_ft_epoch: { kind: "view", args: [] },
+  get_owed: { kind: "view", args: ["account"] },
+  list_payouts: { kind: "view", args: ["from_index", "limit"] },
+  storage_balance_of: { kind: "view", args: ["account_id"] },
+  storage_balance_bounds: { kind: "view", args: [] },
   // calls
   new: { kind: "call", args: ["config", "owner"] },
   pause: { kind: "call", args: [] },
@@ -106,6 +118,12 @@ export const METHODS = {
   finalize: { kind: "call", args: ["claim_id"] },
   close_stale_claim: { kind: "call", args: ["claim_id"] },
   execute_payout: { kind: "call", args: ["claim_id", "deposit_address", "quote_id", "quote_hash"] },
+  confirm_payout: { kind: "call", args: ["claim_id", "quote_id", "status", "dest_tx"] },
+  sync_unattributed: { kind: "call", args: [] },
+  claim_owed: { kind: "call", args: [] },
+  storage_deposit: { kind: "call", args: ["account_id", "registration_only"] },
+  storage_withdraw: { kind: "call", args: ["amount"] },
+  ft_on_transfer: { kind: "call", args: ["sender_id", "amount", "msg"] },
 } as const satisfies Record<string, { kind: "view" | "call"; args: readonly string[] }>;
 
 export type MethodName = keyof typeof METHODS;
@@ -283,6 +301,34 @@ export class RecourseClient {
       quote_id: null,
       quote_hash: null,
     });
+  /**
+   * Intents mode (keeper): sends the award to a 1Click deposit address with
+   * the quote id as memo. Attach `INTENTS_EXECUTE_DEPOSIT`: 0.00125 NEAR
+   * registers the deposit address on the token, this attempt's storage is
+   * kept, the rest is refunded.
+   */
+  executeIntentsPayout = (claim_id: ClaimId, deposit_address: string, quote_id: string, quote_hash: Hash) =>
+    this.call<PayoutStatus>(
+      "execute_payout",
+      { claim_id, deposit_address, quote_id, quote_hash },
+      INTENTS_EXECUTE_DEPOSIT,
+    );
+  /** Keeper: 1Click's final outcome for a delivered Intents payout. */
+  confirmPayout = (claim_id: ClaimId, quote_id: string, status: PayoutOutcome, dest_tx?: string) =>
+    this.call<PayoutStatus>("confirm_payout", { claim_id, quote_id, status, dest_tx: dest_tx ?? null });
+  /** Keeper: one quiet read of the token balance (two, 30 s apart, raise unattributed). */
+  syncUnattributed = () => this.call<U128>("sync_unattributed", {});
+  claimOwed = () => this.call<U128>("claim_owed", {});
+  listPayouts = (from_index?: number, limit?: number) =>
+    this.view<[ClaimId, Payout][]>("list_payouts", { from_index: from_index ?? null, limit: limit ?? null });
+  getOwed = (account: AccountId) => this.view<U128>("get_owed", { account });
+  getFtHeld = () => this.view<U128>("get_ft_held");
+  getFtInFlight = () => this.view<U128>("get_ft_in_flight");
+  storageBalanceOf = (account_id: AccountId) => this.view<StorageBalance | null>("storage_balance_of", { account_id });
+  storageBalanceBounds = () => this.view<StorageBalanceBounds>("storage_balance_bounds");
+  /** Token mode: prepay NEAR storage for USDC operations (NEP-145). */
+  storageDeposit = (amount: bigint, account_id?: AccountId) =>
+    this.call<StorageBalance>("storage_deposit", { account_id: account_id ?? null, registration_only: null }, amount);
 }
 
 /** `ceil(amount * bps / 10_000)`, matching the contract's stake rounding. */
