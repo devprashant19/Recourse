@@ -9,3 +9,5 @@ export * from "./verdict.js";
 export * from "./chain.js";
 export * from "./case.js";
 export * from "./sdk-chain.js";
+export * from "./judge.js";
+export * from "./arbiter.js";

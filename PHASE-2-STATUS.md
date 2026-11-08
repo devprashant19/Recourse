@@ -267,7 +267,7 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
 
 ### 12. `feat(arbiter): implement claim monitoring and evidence verification`
 
-- **Commit:** (this commit)
+- **Commit:** `b2670b9`
 - **Did:** `ArbiterChain` slice + `SdkArbiterChain` (function-call key limited to `resolve_claim`);
   `isPendingQualityClaim` (Quality and `Filed` only — never Resolved, Finalized, Rejected or a
   `TimedOut` claim closed by Phase 1's stale-claim path); `gatherCase` assembles a case file trusting
@@ -286,6 +286,30 @@ recorded with the maintainer: build on dev fixtures, keep the live exit criteria
   doctored output file ignored; published-vs-on-chain mismatch; tampered artifact; evidence hash
   mismatch; arbitrary-URL and oversized evidence; no on-chain receipt / unknown document).
 - **Ran:** `vitest run packages services` (all pass), `tsc --noEmit` (all packages), `eslint` — clean.
+- **Evidence:** unit-tested.
+
+### 13. `feat(arbiter): implement receipt-backed quality verdicts`
+
+- **Commit:** (this commit)
+- **Did:** `judge`: the published rubric is the system prompt; terms (schema + weights), document,
+  agent output and evidence go in as quoted blocks, with `<<<`/`>>>` inside the data neutralised so
+  evidence cannot close its block and pose as instructions; temperature 0; run through
+  `attestedCompletion` so **the verdict is itself a receipt**; `checkVerdict` (schema + consistency);
+  `award = floor(liability_cap × award_bps / 10 000)` capped at the claimed amount (an upheld verdict
+  rounding to 0 is refused, since the contract requires a positive award); `reasons_hash =
+  sha256(JCS(verdict))` commits to findings, award and reasons; the verdict receipt and verdict JSON
+  are published (registry keyed by claim id); the claim's status is **re-read immediately before**
+  `resolve_claim`, so a claim resolved elsewhere or closed by Phase 1's `close_stale_claim` is never
+  touched. `Arbiter` loop: persisted cursor, one ruling per claim, failures recorded (an unresolved
+  claim falls back to the stale-claim timeout; money is never stuck). The request is a pure function of
+  the case (replayable; fixture-addressable).
+- **Files:** `services/arbiter/src/{judge,arbiter,index}.ts`, `test/{judge.test,model}.ts`
+- **Tests:** 8 (wrong total upheld with field findings and 30% award, verdict receipt verifies; bogus
+  claim rejected with 0; award capped at claim; invalid model verdict → no resolve, reason recorded;
+  claim moved to `TimedOut` → not resolved; idempotent ticks; rubric as system prompt, temperature 0,
+  forged closing marker neutralised; identical request bytes for the same case). The arbiter "model" in
+  tests is a test-only double that applies the rubric by comparing with ground truth.
+- **Ran:** `vitest run services/arbiter` (24 passed), `tsc --noEmit`, `eslint` — clean.
 - **Evidence:** unit-tested.
 
 ---
