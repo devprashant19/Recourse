@@ -286,6 +286,14 @@ A reset affects everyone viewing the demo, so it asks for confirmation and is al
 3 minutes and only when no run is in progress. The indexer now starts before the scenarios, so the page
 fills in live.
 
+**Redesign in an agency motion style, with no animation library (9 Nov).** The site's look and motion
+follow the style of bitwip.fr, studied in a browser: dark ground with cream sheets that slide over it, an
+orange accent, a chunky grotesk with key words in a display face, a floating pill nav, word-by-word
+reveals on one expo-out curve, count-ups, a marquee, a pinned horizontal track and a giant footer
+wordmark. Only the style is borrowed, not their brand, text, images or fonts: the faces are free Google
+Fonts (Bricolage Grotesque, Shrikhand). Like the reference, the motion is plain CSS plus a few small
+React hooks, so it adds no dependency. Reduced motion and no-JavaScript show everything at once.
+
 **Honest labels on the home page (9 Nov).** "See the mainnet run" became "Mainnet run plan" because the
 mainnet run has not been recorded yet.
 

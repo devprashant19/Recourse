@@ -35,7 +35,7 @@ export default function VerifyPage() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-semibold">Verify a receipt</h1>
+      <h1 className="page-title">Verify a receipt</h1>
       <p className="mt-1 text-sm text-dim">
         Paste a receipt JSON (for example one from <code className="font-mono">demo/fixtures/receipts/</code>) or type an engagement id. Every check runs in your browser: the exact bytes are fetched by their SHA-256, re-hashed, and the TEE signer is recovered with EIP-191.
       </p>

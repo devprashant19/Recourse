@@ -13,7 +13,7 @@ export default function AgentsPage() {
   if (!q.data) return <Loading what="Loading agents" />;
   return (
     <div>
-      <h1 className="text-2xl font-semibold">Bonded agents</h1>
+      <h1 className="page-title">Bonded agents</h1>
       <p className="mt-1 text-sm text-dim">Every agent here has its own money at stake, and an underwriter vault behind it.</p>
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         {q.data.map((a) => (

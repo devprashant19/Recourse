@@ -2,28 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ----- Tokens -------------------------------------------------------------------------------
+   Dark-first: near-black ground, white ink, one orange accent for actions, mint for money
+   moving. `.cream` flips a section to the warm light panel. Colours are RGB triplets so
+   Tailwind can apply alpha. */
 :root {
-  --bg: 250 250 249;
-  --panel: 255 255 255;
-  --line: 228 228 231;
-  --ink: 24 24 27;
-  --dim: 113 113 122;
-  --money: 5 150 105;
-  --bad: 220 38 38;
-  --warn: 202 138 4;
+  --bg: 18 20 20;
+  --panel: 29 31 31;
+  --line: 52 55 55;
+  --ink: 250 249 246;
+  --dim: 158 160 158;
+  --money: 166 224 145;
+  --bad: 255 112 92;
+  --warn: 250 196 80;
+  --accent: 252 98 42;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+  color-scheme: dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: 12 12 14;
-    --panel: 22 22 26;
-    --line: 45 45 52;
-    --ink: 236 236 240;
-    --dim: 150 150 160;
-    --money: 52 211 153;
-    --bad: 248 113 113;
-    --warn: 250 204 21;
-  }
+.cream {
+  --bg: 244 239 231;
+  --panel: 251 248 243;
+  --line: 214 207 196;
+  --ink: 18 18 18;
+  --dim: 96 94 90;
+  --money: 0 122 84;
+  --bad: 196 44 24;
+  --warn: 166 110 0;
+  color-scheme: light;
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
 }
 
 html,
@@ -32,17 +41,209 @@ body {
   color: rgb(var(--ink));
 }
 
-.card {
-  @apply rounded-xl border border-line bg-panel p-4 sm:p-5;
+::selection {
+  background: rgb(var(--accent));
+  color: rgb(18 20 20);
 }
-.btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-panel px-3 py-2 text-sm font-medium hover:border-ink/40 disabled:opacity-50;
+
+/* ----- Building blocks (used by every page) -------------------------------------------
+   In the components layer so utilities (hidden, w-full, !py-...) can override them. */
+@layer components {
+  .card {
+    @apply rounded-2xl border border-line bg-panel p-4 sm:p-5;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-line bg-transparent px-4 py-2 text-sm font-medium transition-colors duration-300 hover:border-ink/60 disabled:opacity-50;
+  }
+  /* Spelled out, not `@apply btn`: inheriting .btn brought its background along, and Tailwind
+     ordered it after ours, so primary buttons rendered invisible text. */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-accent bg-accent px-4 py-2 text-sm font-semibold text-[#121414] transition-[filter,transform] duration-300 hover:brightness-110 active:scale-[0.98] disabled:opacity-50;
+  }
+  /* Page and section titles: big, tight, ending in the orange dot (generated, so the text stays the same). */
+  .page-title {
+    @apply text-[clamp(2.2rem,5vw,3.6rem)] font-medium leading-[1.02] tracking-[-0.035em];
+  }
+  .section-title {
+    @apply text-2xl font-medium tracking-[-0.02em] sm:text-3xl;
+  }
+  .page-title::after,
+  .section-title::after {
+    content: ".";
+    color: rgb(var(--accent));
+  }
+  .label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-dim;
+  }
 }
-/* Spelled out, not `@apply btn`: inheriting .btn brought its bg-panel along, and Tailwind ordered it
-   after bg-ink, so primary buttons rendered light text on a white background (invisible). */
-.btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-ink bg-ink px-3 py-2 text-sm font-medium text-bg hover:opacity-90 disabled:opacity-50;
+
+/* ----- Motion --------------------------------------------------------------------------------
+   Everything enters once, on the same expo-out curve. `.js` is set before paint, so without
+   JavaScript nothing is ever hidden. */
+.js [data-reveal] {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 1s var(--ease),
+    transform 1s var(--ease);
+  transition-delay: var(--d, 0s);
 }
-.label {
-  @apply text-xs font-medium uppercase tracking-wide text-dim;
+.js [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Split words: each word rises out of its own mask, 45 ms apart. */
+.sw {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
+}
+.sw > .sw__in {
+  display: inline-block;
+  transition: transform 1.1s var(--ease);
+  transition-delay: calc(var(--i, 0) * 45ms + var(--d, 0s));
+}
+.js .sw > .sw__in {
+  transform: translateY(110%);
+}
+.js .is-in .sw > .sw__in {
+  transform: none;
+}
+
+/* The orange dot that ends a heading pops in after the words. */
+.dot {
+  display: inline-block;
+  color: rgb(var(--accent));
+  transition:
+    transform 0.8s var(--ease) 0.5s,
+    opacity 0.5s ease 0.5s;
+}
+.js .dot {
+  opacity: 0;
+  transform: scale(0.2);
+}
+.js .is-in .dot {
+  opacity: 1;
+  transform: none;
+}
+
+/* A rule that draws itself left to right. */
+.rule {
+  height: 1px;
+  background: rgb(var(--line));
+  transform-origin: 0 50%;
+  transition: transform 1.5s var(--ease-io);
+}
+.js .rule {
+  transform: scaleX(0);
+}
+.js .is-in .rule,
+.js .rule.is-in {
+  transform: none;
+}
+
+/* Marquee band. */
+@keyframes marquee {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+.marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee var(--marquee-s, 32s) linear infinite;
+}
+.marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Spinning star. */
+@keyframes spin {
+  to {
+    rotate: 360deg;
+  }
+}
+.star-spin {
+  animation: spin 14s linear infinite;
+}
+
+/* Page entry. */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+.page-in {
+  animation: page-in 0.8s var(--ease) both;
+}
+
+/* Mobile menu items. */
+@keyframes menu-item {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+.menu-item {
+  animation: menu-item 0.7s var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 60ms + 80ms);
+}
+
+/* Scroll cue in the hero. */
+@keyframes cue {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+.cue {
+  animation: cue 1.8s var(--ease-io) infinite;
+}
+
+/* Live value blink. */
+@keyframes blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+.blink {
+  animation: blink 1.6s ease-in-out infinite;
+}
+
+/* Footer wordmark letters rise one by one. */
+.wordmark span {
+  display: inline-block;
+  transition: transform 1.2s var(--ease);
+  transition-delay: calc(var(--i, 0) * 60ms);
+}
+.js .wordmark span {
+  transform: translateY(105%);
+}
+.js .wordmark.is-in span {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0s !important;
+  }
+  .js [data-reveal],
+  .js .sw > .sw__in,
+  .js .dot,
+  .js .rule,
+  .js .wordmark span {
+    opacity: 1;
+    transform: none;
+  }
 }

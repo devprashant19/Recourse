@@ -13,7 +13,7 @@ export default function EconomicsPage() {
   const { agents, pool } = q.data;
   return (
     <div>
-      <h1 className="text-2xl font-semibold">Unit economics</h1>
+      <h1 className="page-title">Unit economics</h1>
       <p className="mt-1 max-w-3xl text-sm text-dim">Does underwriting agents pay? Premiums in, losses out, per agent and for the whole pool. Every figure is summed from contract events.</p>
       <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Pool capital"><Money value={pool.capital} /></Stat>

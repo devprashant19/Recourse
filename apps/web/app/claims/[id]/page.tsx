@@ -25,7 +25,7 @@ export default function ClaimPage({ params }: { params: Promise<{ id: string }> 
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">Claim #{id}</h1>
+        <h1 className="page-title">Claim #{id}</h1>
         <Pill tone={statusTone(claim.status)}>{claim.status}</Pill>
         <Pill>{claim.kind === "NoDelivery" ? "No delivery (objective)" : "Quality (arbiter)"}</Pill>
         {payout ? <Pill tone={statusTone(payout.status)}>payout {payout.status}</Pill> : null}

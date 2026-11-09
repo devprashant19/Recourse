@@ -40,7 +40,7 @@ export default function HirePage({ params }: { params: Promise<{ agentId: string
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-semibold">
+      <h1 className="page-title">
         Hire <Account id={agentId} />
       </h1>
       <p className="mt-1 text-sm text-dim">Structured extraction from an invoice into JSON. Pay a price and a premium; get protection backed by the agent&apos;s bond and a vault.</p>

@@ -38,7 +38,7 @@ export default function DemoPage() {
 
   const header = (
     <>
-      <h1 className="text-2xl font-semibold">Demo controls</h1>
+      <h1 className="page-title">Demo controls</h1>
       <p className="mt-1 text-sm text-dim">Every button sends a real transaction from a server-side demo client. No wallet needed.</p>
     </>
   );

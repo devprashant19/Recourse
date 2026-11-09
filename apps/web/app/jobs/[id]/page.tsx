@@ -58,7 +58,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">Engagement #{id}</h1>
+        <h1 className="page-title">Engagement #{id}</h1>
         <Pill tone={statusTone(e.status)}>{e.status}</Pill>
         {e.claim_id !== null ? (
           <Link href={`/claims/${e.claim_id}`} className="btn">

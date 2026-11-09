@@ -22,7 +22,7 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">
+        <h1 className="page-title">
           <Account id={id} />
         </h1>
         <span className="font-mono text-xs text-dim">{id}</span>

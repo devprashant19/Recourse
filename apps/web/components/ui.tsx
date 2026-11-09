@@ -70,7 +70,7 @@ export function Stat({ label, children, hint }: { label: string; children: React
   return (
     <div className="card">
       <div className="label">{label}</div>
-      <div className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl">{children}</div>
+      <div className="mt-2 text-2xl font-light tabular-nums tracking-tight sm:text-3xl">{children}</div>
       {hint ? <div className="mt-1 text-xs text-dim">{hint}</div> : null}
     </div>
   );
@@ -78,9 +78,9 @@ export function Stat({ label, children, hint }: { label: string; children: React
 
 export function Section({ title, children, right }: { title: string; children: ReactNode; right?: ReactNode }) {
   return (
-    <section className="mt-8">
-      <div className="mb-3 flex items-end justify-between gap-3">
-        <h2 className="text-lg font-semibold">{title}</h2>
+    <section className="mt-14">
+      <div className="mb-4 flex items-end justify-between gap-3">
+        <h2 className="section-title">{title}</h2>
         {right}
       </div>
       {children}
@@ -124,7 +124,7 @@ export function Meter({ total, used, label }: { total: string | null | undefined
   return (
     <div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-line">
-        <div className="h-full rounded-full bg-ink/70" style={{ width: `${Math.min(100, pct)}%` }} />
+        <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, pct)}%` }} />
       </div>
       <div className="mt-1 flex justify-between text-xs text-dim">
         <span>{label ?? "locked"} <Money value={u.toString()} /></span>

@@ -14,7 +14,7 @@ export default function VaultsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold">Underwriting</h1>
+      <h1 className="page-title">Underwriting</h1>
       <p className="mt-1 max-w-3xl text-sm text-dim">
         Vaults co-sign agents&apos; bonds for a premium. Three underwriter agents (cautious, balanced, aggressive) compete in sealed-bid rounds: commit a hash, then reveal. The price comes from a formula on the agent&apos;s public record — the LLM only writes the explanation.
       </p>
