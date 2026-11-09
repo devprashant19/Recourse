@@ -461,6 +461,34 @@ impl Recourse {
             .filter_map(|id| self.payouts.get(&id).map(|p| (id, p.clone())))
             .collect()
     }
+
+    /// Prunes expired used quotes and deposit addresses older than 180 seconds.
+    /// Callable by anyone. Returns the number of entries pruned.
+    pub fn prune_used_quotes(&mut self, limit: Option<u32>) -> u32 {
+        let max_prune = limit.unwrap_or(20).min(50) as usize;
+        let now = env::block_timestamp();
+        // 180 seconds = 180,000,000,000 nanoseconds
+        const EXPIRY_BUFFER_NS: u64 = 180_000_000_000;
+        let mut pruned = 0;
+        let mut i = 0;
+        while i < self.used_quote_queue.len() && pruned < max_prune {
+            let (h, ts) = self.used_quote_queue.get(i).copied().unwrap();
+            if now >= ts.saturating_add(EXPIRY_BUFFER_NS) {
+                self.used_quotes.remove(&h);
+                self.used_quote_queue.swap_remove(i);
+                pruned += 1;
+            } else {
+                i += 1;
+            }
+        }
+        if pruned > 0 {
+            Event::QuotesPruned.emit(json!({
+                "pruned_count": pruned,
+                "remaining": self.used_quote_queue.len(),
+            }));
+        }
+        pruned as u32
+    }
 }
 
 impl Recourse {
@@ -527,6 +555,7 @@ impl Recourse {
 
     /// Records the quote id and deposit address; panics if either was used.
     fn use_quote_once(&mut self, q: &IntentsQuote) {
+        let now = env::block_timestamp();
         for key in [
             format!("quote:{}", q.quote_id),
             format!("deposit:{}", q.deposit_address),
@@ -536,6 +565,7 @@ impl Recourse {
                 self.used_quotes.insert(h),
                 "quote or deposit address already used"
             );
+            self.used_quote_queue.push((h, now));
         }
     }
 

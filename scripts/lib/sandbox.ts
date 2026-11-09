@@ -152,25 +152,32 @@ export async function startSandbox(o: SandboxOptions = {}): Promise<SandboxHandl
   const child: ChildProcess = spawn(
     bin,
     ["--home", homeDir, "run", "--rpc-addr", `127.0.0.1:${rpcPort}`, "--network-addr", `127.0.0.1:${netPort}`],
-    { stdio: ["ignore", "ignore", "pipe"] },
+    { stdio: ["ignore", "pipe", "pipe"] },
   );
-  let stderr = "";
+  let output = "";
+  child.stdout?.on("data", (d: Buffer) => {
+    output = (output + d.toString()).slice(-8000);
+  });
   child.stderr?.on("data", (d: Buffer) => {
-    stderr = (stderr + d.toString()).slice(-4000);
+    output = (output + d.toString()).slice(-8000);
   });
   let exited = false;
-  child.on("exit", () => {
+  let intentionalStop = false;
+  child.on("exit", (code, signal) => {
     exited = true;
+    if (!intentionalStop) {
+      console.error(`[near-sandbox unexpected exit: code ${code}, signal ${signal}]:\n${output}`);
+    }
   });
   writeFileSync(join(homeDir, "sandbox.pid"), String(child.pid ?? ""));
 
   const rpcUrl = `http://127.0.0.1:${rpcPort}`;
   const deadline = Date.now() + (o.readyTimeoutS ?? 90) * 1000;
   while (!(await rpcReady(rpcUrl))) {
-    if (exited) throw new Error(`near-sandbox exited before its RPC came up:\n${stderr}`);
+    if (exited) throw new Error(`near-sandbox exited before its RPC came up:\n${output}`);
     if (Date.now() > deadline) {
       child.kill("SIGKILL");
-      throw new Error(`near-sandbox RPC did not answer within ${o.readyTimeoutS ?? 90}s:\n${stderr}`);
+      throw new Error(`near-sandbox RPC did not answer within ${o.readyTimeoutS ?? 90}s:\n${output}`);
     }
     await new Promise((r) => setTimeout(r, 300));
   }
@@ -182,6 +189,7 @@ export async function startSandbox(o: SandboxOptions = {}): Promise<SandboxHandl
     version,
     pid: child.pid,
     async stop() {
+      intentionalStop = true;
       if (!exited) {
         child.kill("SIGTERM");
         await new Promise<void>((done) => {

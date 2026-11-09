@@ -57,6 +57,8 @@ pub enum Event {
     BidRevealed,
     RoundSettled,
     BidDepositForfeited,
+    AuditAnchored,
+    QuotesPruned,
 }
 
 impl Event {
@@ -99,6 +101,8 @@ impl Event {
             Event::BidRevealed => "bid_revealed",
             Event::RoundSettled => "round_settled",
             Event::BidDepositForfeited => "bid_deposit_forfeited",
+            Event::AuditAnchored => "audit_anchored",
+            Event::QuotesPruned => "quotes_pruned",
         }
     }
 

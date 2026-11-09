@@ -44,12 +44,12 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
   }, T);
 
   /** Proposes a job for `agent`, accepted by `agentRole`. */
-  async function job(cap = price, p = price, terms = "ad") {
+  async function job(cap = price, p = price, terms = "ad", durationNs = 10n * MINUTE_NS) {
     const id = await c.as("client").openEngagement({
       agent: A.accountId,
       termsHash: terms.repeat(32),
       liabilityCap: cap,
-      deadline: ((await chainNow(c.p)) + 10n * MINUTE_NS).toString(),
+      deadline: ((await chainNow(c.p)) + durationNs).toString(),
       price: p,
     });
     await agentC().acceptEngagement(id);
@@ -58,7 +58,7 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
 
   /** A silent agent, a no-delivery claim, upheld objectively. Returns the claim id (payout Pending). */
   async function silentSlash(): Promise<number> {
-    const id = await job();
+    const id = await job(price, price, "ad", 20n * 1_000_000_000n);
     await skipPast(c.net, c.p, BigInt((await c.view.getEngagement(id))!.deadline));
     const claimId = await c.as("client").fileClaim({ id, kind: "NoDelivery", amount: price, evidenceHash: "00".repeat(32), evidenceUri: "ipfs://no-receipt", destination: dest() });
     await c.as("stranger").resolveObjective(claimId);
@@ -95,7 +95,7 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
   });
 
   it("t04_withdraw_during_claim_blocked", async () => {
-    const id = await job();
+    const id = await job(price, price, "ad", 20n * 1_000_000_000n);
     await skipPast(c.net, c.p, BigInt((await c.view.getEngagement(id))!.deadline));
     const claimId = await c.as("client").fileClaim({ id, kind: "NoDelivery", amount: price, evidenceHash: "00".repeat(32), evidenceUri: "ipfs://no-receipt", destination: dest() });
     await expectRevert("request_withdrawal with an open claim", () => agentC().requestWithdrawal(ONE_NEAR.toString()), "cannot withdraw while a claim is open");
@@ -140,7 +140,7 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
     // (b) the largest job they CAN open, staged to fail, loses them money
     const colluder = await freshAccount(c, "t06client", 6n);
     const p = ONE_NEAR.toString();
-    const id = await colluder.client.openEngagement({ agent: a.accountId, termsHash: "66".repeat(32), liabilityCap: p, deadline: ((await chainNow(c.p)) + 10n * MINUTE_NS).toString(), price: p });
+    const id = await colluder.client.openEngagement({ agent: a.accountId, termsHash: "66".repeat(32), liabilityCap: p, deadline: ((await chainNow(c.p)) + 20n * 1_000_000_000n).toString(), price: p });
     await a.client.acceptEngagement(id);
     const e = (await c.view.getEngagement(id))!;
     const bondBefore = BigInt((await c.view.getBond(a.accountId))!.amount);
@@ -281,7 +281,7 @@ describe.skipIf(!available)("THREAT_MODEL.md — one attack per entry", { timeou
     // A Direct payout goes to the claimant's account; the claimant deletes that account before the
     // keeper pays, so the transfer genuinely fails and the callback must put the money back.
     const claimant = await freshAccount(c, "t14client", 8n);
-    const id = await claimant.client.openEngagement({ agent: A.accountId, termsHash: "14".repeat(32), liabilityCap: price, deadline: ((await chainNow(c.p)) + 10n * MINUTE_NS).toString(), price });
+    const id = await claimant.client.openEngagement({ agent: A.accountId, termsHash: "14".repeat(32), liabilityCap: price, deadline: ((await chainNow(c.p)) + 20n * 1_000_000_000n).toString(), price });
     await agentC().acceptEngagement(id);
     await skipPast(c.net, c.p, BigInt((await c.view.getEngagement(id))!.deadline));
     const claimId = await claimant.client.fileClaim({ id, kind: "NoDelivery", amount: price, evidenceHash: "00".repeat(32), evidenceUri: "ipfs://no-receipt", destination: { asset_id: "near", recipient: claimant.accountId } });

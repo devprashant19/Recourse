@@ -24,7 +24,7 @@
 
 use near_sdk::borsh::BorshSerialize;
 use near_sdk::serde_json::json;
-use near_sdk::store::{IterableMap, LookupMap, LookupSet};
+use near_sdk::store::{IterableMap, LookupMap, LookupSet, Vector};
 use near_sdk::{env, near, require, AccountId, BorshStorageKey, PanicOnDefault};
 
 pub mod math;
@@ -74,6 +74,7 @@ enum StorageKey {
     UsedQuotes,
     OpenRounds,
     PendingLimits,
+    UsedQuoteQueue,
 }
 
 #[near(contract_state)]
@@ -146,6 +147,14 @@ pub struct Recourse {
     /// vault -> sum of the limits of its revealed bids in unsettled rounds,
     /// so concurrent rounds cannot promise the same capital twice.
     pending_limits: LookupMap<AccountId, u128>,
+    /// Last anchored audit ledger sequence number.
+    last_audit_seq: u64,
+    /// Last anchored audit ledger root hash.
+    last_audit_hash: Option<Hash>,
+    /// Block timestamp when the last audit anchor was committed.
+    last_audit_at: Option<u64>,
+    /// Timestamped queue of used quote and deposit hashes for bounded pruning.
+    used_quote_queue: Vector<(Hash, u64)>,
 }
 
 #[near]
@@ -193,6 +202,37 @@ impl Recourse {
             unattributed_at: 0,
             open_rounds: LookupMap::new(StorageKey::OpenRounds),
             pending_limits: LookupMap::new(StorageKey::PendingLimits),
+            last_audit_seq: 0,
+            last_audit_hash: None,
+            last_audit_at: None,
+            used_quote_queue: Vector::new(StorageKey::UsedQuoteQueue),
+        }
+    }
+
+    /// Anchors the latest audit ledger sequence and hash on chain.
+    /// Callable by authorized keepers or the contract owner.
+    pub fn anchor_audit_head(&mut self, sequence: u64, hash: Hash) {
+        self.assert_keeper_or_owner();
+        require!(
+            sequence > self.last_audit_seq,
+            "sequence must strictly advance"
+        );
+        self.last_audit_seq = sequence;
+        self.last_audit_hash = Some(hash);
+        let now = env::block_timestamp();
+        self.last_audit_at = Some(now);
+        Event::AuditAnchored.emit(json!({
+            "sequence": sequence,
+            "hash": hash,
+            "anchored_at": now.to_string(),
+            "by": env::predecessor_account_id(),
+        }));
+    }
+
+    pub fn get_audit_anchor(&self) -> Option<(u64, Hash, near_sdk::json_types::U64)> {
+        match (self.last_audit_hash, self.last_audit_at) {
+            (Some(h), Some(t)) => Some((self.last_audit_seq, h, near_sdk::json_types::U64(t))),
+            _ => None,
         }
     }
 

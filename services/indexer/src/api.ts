@@ -37,8 +37,10 @@ import { ARTIFACT_URI_PREFIX, checkArtifact, sha256Hex } from "@recourse/receipt
 import { RecourseClient, type Engagement } from "@recourse/sdk";
 
 import type { IndexerConfig } from "./config.js";
-import type { EventStore, StoredEvent } from "./db.js";
+import type { AuditRecord, EventStore, StoredEvent } from "./db.js";
 import { readJson, refuseRun, writeJson, type RunRequest, type RunStatus } from "./run-status.js";
+import { verifyNearAccountOwnership, verifyNep413Signature } from "./nep413.js";
+import { handleTelegramCommand, MockTelegramClient, NOTIFICATION_CATEGORIES } from "./telegram.js";
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const MINUTE_NS = 60n * 1_000_000_000n;
@@ -96,6 +98,242 @@ export function buildApi(d: ApiDeps): FastifyInstance {
   const docs = () => (catalog ??= loadCatalog(cfg.documentsDir));
   const notFound = (r: FastifyReply, what: string) => r.code(404).send({ error: `${what} not found` });
   const id = (s: string) => (/^\d{1,12}$/.test(s) ? Number(s) : null);
+
+  app.get("/", async () => ({
+    ok: true,
+    watched: store.distinctAgents().length,
+    capacity: 50,
+    contract: cfg.contractId,
+    mode: cfg.mode,
+    head: d.headHeight(),
+    events: store.count(),
+  }));
+
+  const csvHandler = async (_req: unknown, reply: FastifyReply) => {
+    const events = store.latest(5000);
+    const escapeCsv = (val: unknown): string => {
+      const s = typeof val === "object" && val !== null ? JSON.stringify(val) : String(val ?? "");
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const header = "id,block_height,block_time,tx_hash,receipt_id,event,data\n";
+    const rows = events.map((e) =>
+      [e.id, e.block_height, e.block_time, e.tx_hash, e.receipt_id, e.event, escapeCsv(e.data)].join(",")
+    ).join("\n");
+    void reply.header("Content-Type", "text/csv; charset=utf-8");
+    void reply.header("Content-Disposition", 'attachment; filename="audit.csv"');
+    return reply.send(header + rows);
+  };
+  app.get("/audit.csv", csvHandler);
+  app.get("/api/audit.csv", csvHandler);
+
+  // ================= Capability A: Audit Ledger Endpoints =================
+  app.get<{ Querystring: { id?: string; seq?: string } }>("/api/ledger/proof", async (req, reply) => {
+    const seq = req.query.seq ? Number(req.query.seq) : undefined;
+    const eventId = req.query.id ? Number(req.query.id) : undefined;
+    let rec: AuditRecord | null = null;
+    if (seq !== undefined && Number.isFinite(seq)) {
+      rec = store.getAuditRecord(seq);
+    } else if (eventId !== undefined && Number.isFinite(eventId)) {
+      rec = store.getAuditRecordByEvent(eventId);
+    } else {
+      const head = store.getAuditHead();
+      rec = head ? store.getAuditRecord(head.seq) : null;
+    }
+    if (!rec) return notFound(reply, "audit record");
+    const anchor = store.getLatestAnchor();
+    const explanation = store.getExplanation(rec.event_id);
+    return {
+      proof: rec,
+      latest_anchor: anchor,
+      explanation,
+    };
+  });
+
+  app.get<{ Querystring: { from?: string; to?: string } }>("/api/ledger/verify", async (req) => {
+    const fromSeq = req.query.from ? Number(req.query.from) : 1;
+    const toSeq = req.query.to ? Number(req.query.to) : Infinity;
+    const res = store.verifyAuditChain(fromSeq, toSeq);
+    const head = store.getAuditHead();
+    const anchor = store.getLatestAnchor();
+    return {
+      ...res,
+      head_seq: head?.seq ?? 0,
+      head_hash: head?.record_hash ?? null,
+      latest_anchor: anchor,
+    };
+  });
+
+  app.post<{ Body: { seq?: number; root_hash?: string; tx_hash?: string } }>("/api/ledger/anchor", async (req, reply) => {
+    const head = store.getAuditHead();
+    if (!head) return reply.code(400).send({ error: "no audit records to anchor" });
+    const seq = req.body?.seq ?? head.seq;
+    const rootHash = req.body?.root_hash ?? head.record_hash;
+    const txHash = req.body?.tx_hash ?? `tx-${Date.now().toString(16)}`;
+    const now = Date.now();
+    store.recordAnchor(seq, rootHash, txHash, now);
+    return {
+      ok: true,
+      anchored: {
+        seq,
+        root_hash: rootHash,
+        tx_hash: txHash,
+        anchored_at: now,
+      },
+    };
+  });
+
+  // ================= Capability B: NEP-413 Telegram Notification Endpoints =================
+  app.post<{ Body: { account_id?: string } }>("/api/telegram/challenge", async (req, reply) => {
+    const accountId = req.body?.account_id?.trim();
+    if (!accountId) return reply.code(400).send({ error: "account_id is required" });
+    const nonce = store.createAuthNonce(accountId);
+    return {
+      nonce,
+      recipient: cfg.contractId,
+      message: `Authenticate Telegram Notifications for Recourse account ${accountId}`,
+      expires_in_sec: 600,
+    };
+  });
+
+  app.post<{ Body: { account_id?: string; public_key?: string; signature?: string; nonce?: string; chat_id?: string } }>(
+    "/api/telegram/link",
+    async (req, reply) => {
+      const { account_id, public_key, signature, nonce, chat_id } = req.body ?? {};
+      if (!account_id || !public_key || !signature || !nonce) {
+        return reply.code(400).send({ error: "account_id, public_key, signature, and nonce are required" });
+      }
+
+      // 1. Consume auth nonce (must be unexpired and unused)
+      const validNonce = store.consumeAuthNonce(nonce, account_id);
+      if (!validNonce) {
+        return reply.code(401).send({ error: "Invalid or expired authentication nonce" });
+      }
+
+      // 2. Validate key against account via RPC
+      const validKey = await verifyNearAccountOwnership(d.provider, account_id, public_key);
+      if (!validKey) {
+        return reply.code(401).send({ error: `Public key ${public_key} is not an authorized access key for ${account_id}` });
+      }
+
+      // 3. Verify NEP-413 Borsh signature
+      const validSig = verifyNep413Signature({
+        payload: {
+          message: `Authenticate Telegram Notifications for Recourse account ${account_id}`,
+          recipient: cfg.contractId,
+          nonce,
+        },
+        publicKey: public_key,
+        signature,
+      });
+
+      if (!validSig) {
+        return reply.code(401).send({ error: "Invalid NEP-413 signature" });
+      }
+
+      // 4. Link chat or issue linking token
+      if (chat_id) {
+        store.completeTelegramLink(nonce, chat_id);
+        return { ok: true, linked: true, account_id, chat_id };
+      }
+
+      const token = store.createLinkingToken(account_id);
+      return {
+        ok: true,
+        linked: false,
+        linking_token: token,
+        instructions: `Send '/start ${token}' to the Recourse Telegram bot to complete linking.`,
+      };
+    },
+  );
+
+  app.post<{ Body: { linking_token?: string; chat_id?: string } }>("/api/telegram/link/complete", async (req, reply) => {
+    const { linking_token, chat_id } = req.body ?? {};
+    if (!linking_token || !chat_id) return reply.code(400).send({ error: "linking_token and chat_id are required" });
+    const res = store.completeTelegramLink(linking_token, chat_id);
+    if (!res.ok) return reply.code(400).send({ error: res.error });
+    return { ok: true, account_id: res.accountId, chat_id };
+  });
+
+  app.delete<{ Params: { chat_id: string } }>("/api/telegram/chats/:chat_id", async (req, reply) => {
+    const unlinked = store.removeTelegramChat(req.params.chat_id);
+    if (!unlinked) return notFound(reply, "chat");
+    return { ok: true, unlinked: true };
+  });
+
+  app.get<{ Querystring: { account_id?: string; chat_id?: string } }>("/api/telegram/status", async (req, reply) => {
+    const { account_id, chat_id } = req.query;
+    if (chat_id) {
+      const c = store.getTelegramChat(chat_id);
+      return { chat: c, linked: c !== null };
+    }
+    if (account_id) {
+      const chats = store.getTelegramChatsForAccount(account_id);
+      const prefs = store.getPreferences(account_id);
+      return { account_id, chats, preferences: prefs, linked: chats.length > 0 };
+    }
+    return reply.code(400).send({ error: "account_id or chat_id is required" });
+  });
+
+  app.get<{ Querystring: { account_id: string } }>("/api/telegram/preferences", async (req, reply) => {
+    if (!req.query.account_id) return reply.code(400).send({ error: "account_id required" });
+    return {
+      account_id: req.query.account_id,
+      preferences: store.getPreferences(req.query.account_id),
+      available_categories: NOTIFICATION_CATEGORIES,
+    };
+  });
+
+  app.patch<{ Body: { account_id?: string; category?: string; enabled?: boolean } }>("/api/telegram/preferences", async (req, reply) => {
+    const { account_id, category, enabled } = req.body ?? {};
+    if (!account_id || !category || typeof enabled !== "boolean") {
+      return reply.code(400).send({ error: "account_id, category, and boolean enabled are required" });
+    }
+    store.setPreference(account_id, category, enabled);
+    return { ok: true, account_id, category, enabled };
+  });
+
+  app.post<{ Body: { chat_id?: string } }>("/api/telegram/pause", async (req, reply) => {
+    if (!req.body?.chat_id) return reply.code(400).send({ error: "chat_id required" });
+    store.setChatPaused(req.body.chat_id, true);
+    return { ok: true, paused: true, chat_id: req.body.chat_id };
+  });
+
+  app.post<{ Body: { chat_id?: string } }>("/api/telegram/resume", async (req, reply) => {
+    if (!req.body?.chat_id) return reply.code(400).send({ error: "chat_id required" });
+    store.setChatPaused(req.body.chat_id, false);
+    return { ok: true, paused: false, chat_id: req.body.chat_id };
+  });
+
+  app.post<{ Body: { update_id: number; message?: { chat: { id: number | string }; text?: string } } }>("/api/telegram/webhook", async (req) => {
+    const body = req.body;
+    if (body?.update_id) {
+      const isNew = store.recordProcessedUpdate(body.update_id);
+      if (!isNew) return { ok: true, duplicate: true };
+    }
+    const chatId = String(body?.message?.chat?.id ?? "");
+    const text = body?.message?.text ?? "";
+    if (!chatId || !text) return { ok: true, ignored: true };
+
+    const client = new MockTelegramClient();
+    const reply = await handleTelegramCommand(store, chatId, text, client);
+    return { ok: true, replied: reply };
+  });
+
+  // ================= Capability D: Storage Pruning Endpoint =================
+  app.post<{ Body: { older_than_ms?: number } }>("/api/storage/prune", async () => {
+    const now = Date.now();
+    const dbPruned = store.pruneExpiredAuth(now);
+    return {
+      ok: true,
+      timestamp: now,
+      pruned: {
+        database: dbPruned,
+      },
+    };
+  });
 
   app.get("/health", async () => ({
     ok: true,

@@ -86,17 +86,22 @@ export async function setupNetwork(net: Network, log: (s: string) => void): Prom
     save("sandbox", "home", { home: sandbox.homeDir, rpcUrl: sandbox.rpcUrl });
     process.env.RECOURSE_MODE = "sandbox";
   }
-  const p = provider(net);
-  const owner = ownerAccount(net, p);
-  const dao = await deployDao({ net, p, owner, log });
-  const dep = await deployContract({ net, p, owner, councilId: dao.daoId, log });
-  await seed({ net, p, owner, dep, log });
-  return {
-    contractId: dep.contractId,
-    stop: async () => {
-      if (sandbox) await sandbox.stop();
-    },
-  };
+  try {
+    const p = provider(net);
+    const owner = ownerAccount(net, p);
+    const dao = await deployDao({ net, p, owner, log });
+    const dep = await deployContract({ net, p, owner, councilId: dao.daoId, log });
+    await seed({ net, p, owner, dep, log });
+    return {
+      contractId: dep.contractId,
+      stop: async () => {
+        if (sandbox) await sandbox.stop();
+      },
+    };
+  } catch (err) {
+    if (sandbox) await sandbox.stop();
+    throw err;
+  }
 }
 
 export interface RunHooks {
@@ -160,6 +165,7 @@ if (isMain) {
   main().catch((e) => {
     console.error("DEMO FAILED");
     console.error(e instanceof Error ? e.stack ?? e.message : e);
+    if (e instanceof Error && "cause" in e && e.cause) console.error("CAUSE:", e.cause);
     process.exit(1);
   });
 }

@@ -642,3 +642,22 @@ fn a_failed_balance_read_changes_nothing() {
 }
 
 const USDC_UNIT: u128 = 1_000_000;
+
+#[test]
+fn prune_used_quotes_removes_expired_entries_safely() {
+    let (mut c, cid) = with_keeper(base_usdc());
+    let dep = deposit_address();
+    execute(&mut c, cid, Some(dep.clone()), Some("q1"));
+
+    // Immediately after execution, quote is unexpired (buffer is 180s)
+    let pruned_immediately = c.prune_used_quotes(Some(10));
+    assert_eq!(pruned_immediately, 0);
+
+    // Fast-forward block time past 180 seconds (180 * 1e9 ns)
+    let future_time = NOW + 200_000_000_000;
+    ctx(&keeper(), 0, future_time);
+
+    // Prune should now clean the expired quote entries
+    let pruned = c.prune_used_quotes(Some(10));
+    assert_eq!(pruned, 2); // 1 for quote_id + 1 for deposit_address
+}

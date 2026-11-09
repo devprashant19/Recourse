@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { EventStore } from "../src/db.js";
 import { Ingester, type Rpc } from "../src/ingest.js";
+import { buildApi } from "../src/api.js";
 
 const CONTRACT = "recourse.test.near";
 const log = (event: string, data: Record<string, unknown>) => `EVENT_JSON:${JSON.stringify({ standard: "recourse", version: "1.0.0", event, data: [data] })}`;
@@ -112,5 +113,80 @@ describe("Ingester", () => {
     // head 53, floor 51: only blocks 52 and 53
     expect(r.blocks).toBe(2);
     expect(s.latest(10).map((e) => e.event).sort()).toEqual(["claim_filed", "council_decided"]);
+  });
+});
+
+describe("Indexer API Endpoints", () => {
+  it("GET / returns capacity and watched agent count", async () => {
+    const s = store();
+    s.insert({
+      block_height: 10,
+      block_time: "1000000000",
+      tx_hash: "tx1",
+      receipt_id: "r1",
+      log_index: 0,
+      event: "agent_registered",
+      data: { agent: "agent1.near" },
+    });
+    const app = buildApi({
+      cfg: {
+        mode: "sandbox",
+        contractId: CONTRACT,
+        rpcUrl: "http://localhost:3030",
+        port: 0,
+        corsOrigins: true,
+        documentsDir: "",
+        artifactDir: "",
+        runRequestFile: "",
+        runStatusFile: "",
+        demo: null,
+      },
+      store: s,
+      view: {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      provider: {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      headHeight: () => 10,
+    });
+    const res = await app.inject({ method: "GET", url: "/" });
+    expect(res.statusCode).toBe(200);
+    const json = JSON.parse(res.payload);
+    expect(json.watched).toBe(1);
+    expect(json.capacity).toBe(50);
+    expect(json.ok).toBe(true);
+  });
+
+  it("GET /audit.csv returns valid CSV format", async () => {
+    const s = store();
+    s.insert({
+      block_height: 10,
+      block_time: "1000000000",
+      tx_hash: "tx1",
+      receipt_id: "r1",
+      log_index: 0,
+      event: "agent_registered",
+      data: { agent: "agent1.near", note: "quoted, comma" },
+    });
+    const app = buildApi({
+      cfg: {
+        mode: "sandbox",
+        contractId: CONTRACT,
+        rpcUrl: "http://localhost:3030",
+        port: 0,
+        corsOrigins: true,
+        documentsDir: "",
+        artifactDir: "",
+        runRequestFile: "",
+        runStatusFile: "",
+        demo: null,
+      },
+      store: s,
+      view: {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      provider: {} as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      headHeight: () => 10,
+    });
+    const res = await app.inject({ method: "GET", url: "/audit.csv" });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/csv");
+    expect(res.payload).toContain("id,block_height,block_time,tx_hash,receipt_id,event,data");
+    expect(res.payload).toContain('"{""agent"":""agent1.near"",""note"":""quoted, comma""}"');
   });
 });

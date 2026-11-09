@@ -66,3 +66,43 @@ fn role_change_emits_role_updated() {
     assert_eq!(ev[0]["data"][0]["account_id"], "keeper.near");
     assert_eq!(ev[0]["data"][0]["added"], true);
 }
+
+#[test]
+fn owner_or_keeper_can_anchor_audit_head() {
+    let mut c = new_contract();
+    ctx(&owner(), 0, T0);
+    c.add_keeper(keeper());
+
+    // Keeper anchors sequence 1
+    ctx(&keeper(), 0, T0 + 100);
+    let hash1 = crate::types::HexBytes([1u8; 32]);
+    c.anchor_audit_head(1, hash1);
+    let anchor = c.get_audit_anchor().expect("anchor should exist");
+    assert_eq!(anchor.0, 1);
+    assert_eq!(anchor.1, hash1);
+
+    // Owner anchors sequence 2
+    ctx(&owner(), 0, T0 + 200);
+    let hash2 = crate::types::HexBytes([2u8; 32]);
+    c.anchor_audit_head(2, hash2);
+    let anchor2 = c.get_audit_anchor().expect("anchor should exist");
+    assert_eq!(anchor2.0, 2);
+    assert_eq!(anchor2.1, hash2);
+}
+
+#[test]
+#[should_panic(expected = "owner or keeper only")]
+fn stranger_cannot_anchor_audit_head() {
+    let mut c = new_contract();
+    ctx(&stranger(), 0, T0);
+    c.anchor_audit_head(1, crate::types::HexBytes([1u8; 32]));
+}
+
+#[test]
+#[should_panic(expected = "sequence must strictly advance")]
+fn audit_anchor_sequence_regression_fails() {
+    let mut c = new_contract();
+    ctx(&owner(), 0, T0);
+    c.anchor_audit_head(10, crate::types::HexBytes([1u8; 32]));
+    c.anchor_audit_head(9, crate::types::HexBytes([2u8; 32]));
+}

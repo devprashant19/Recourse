@@ -46,6 +46,8 @@ export const EVENT_NAMES = [
   "bid_revealed",
   "round_settled",
   "bid_deposit_forfeited",
+  "audit_anchored",
+  "quotes_pruned",
 ] as const;
 
 export type RecourseEventName = (typeof EVENT_NAMES)[number];

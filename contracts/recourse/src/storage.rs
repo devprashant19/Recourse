@@ -86,6 +86,7 @@ impl Recourse {
         self.owed.flush();
         self.open_rounds.flush();
         self.pending_limits.flush();
+        self.used_quote_queue.flush();
     }
 
     /// Charges the storage used since `before` against `available` and returns

@@ -69,6 +69,14 @@ impl Recourse {
         );
     }
 
+    pub(crate) fn assert_keeper_or_owner(&self) {
+        let caller = env::predecessor_account_id();
+        require!(
+            caller == self.roles.owner || self.roles.keepers.contains(&caller),
+            "owner or keeper only"
+        );
+    }
+
     pub(crate) fn assert_arbiter(&self) {
         require!(
             self.roles.arbiters.contains(&env::predecessor_account_id()),

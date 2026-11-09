@@ -18,10 +18,15 @@ import { RecourseClient } from "../../packages/sdk/src/index.js";
 import { chainNow, clientAs, MINUTE_NS, ONE_NEAR, save, type Deployment, type Network, type SeededAccount, type SeededAccounts } from "./near.js";
 import { sandboxModels } from "./sandbox-models.js";
 
-/** Where the deployable wasm comes from, in order of preference. */
-export const WASM_CANDIDATES = ["target/near/recourse/recourse.wasm", "contracts/recourse/res/recourse.wasm"];
-/** Covers the code's storage (~0.5 MB at 1e19 yocto/byte) plus a buffer for contract-paid records. */
-const CONTRACT_FUNDING = 8n * ONE_NEAR;
+/** Where the deployable wasm comes from, in order of preference.
+ * Priority given to audited reproducible artifact in res/, falling back to dev target/. */
+export const WASM_CANDIDATES = [
+  "contracts/recourse/res/recourse.wasm",
+  "target/near/recourse/recourse.wasm",
+  "target/wasm32-unknown-unknown/release/recourse.wasm",
+];
+/** Covers the code's storage plus a buffer for contract-paid records. */
+const CONTRACT_FUNDING = 12n * ONE_NEAR;
 const DAO_FUNDING = 6n * ONE_NEAR;
 const INIT_GAS = 100_000_000_000_000n;
 export const DEFAULT_DAO_WASM = "tests/fixtures/sputnikdao2.wasm";
