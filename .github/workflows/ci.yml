@@ -1,9 +1,19 @@
 name: CI
 
-on:
+"on":
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: read
 
 env:
   # CI never touches live services. Everything runs against the sandbox on recorded fixtures.
@@ -16,8 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust from rust-toolchain.toml
-        uses: dtolnay/rust-toolchain@stable
+      # Immutable commit SHA corresponding to dtolnay/rust-toolchain v1 release tag
+      - name: Install Rust (1.95.0)
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: "1.95.0"
           targets: wasm32-unknown-unknown
@@ -32,7 +43,10 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Unit tests
-        run: cargo test --manifest-path contracts/recourse/Cargo.toml
+        run: cargo test --manifest-path contracts/recourse/Cargo.toml --lib
+
+      - name: Invariant property tests
+        run: cargo test --manifest-path contracts/recourse/Cargo.toml --test invariants
 
       - name: Build wasm
         run: cargo build --manifest-path contracts/recourse/Cargo.toml --target wasm32-unknown-unknown --release
@@ -62,7 +76,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Immutable commit SHA corresponding to dtolnay/rust-toolchain v1 release tag
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: "1.95.0"
           targets: wasm32-unknown-unknown

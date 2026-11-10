@@ -20,7 +20,7 @@ We want contributing to Recourse to be straightforward and welcoming:
 
 Ensure your local development environment meets the following requirements:
 
-- **Node.js:** `>= 20.0.0` (Recommended: `20.18.1`, see `.nvmrc`)
+- **Node.js:** `>= 22.0.0` (Recommended: `22.23.3`, see `.nvmrc`)
 - **pnpm:** `>= 9.12.0` (Project package manager: `pnpm@9.12.3`)
 - **Rust:** `1.95.0` (specified in `rust-toolchain.toml`) with the `wasm32-unknown-unknown` target:
   ```bash
@@ -202,4 +202,28 @@ Recourse uses [GitHub Dependabot](.github/dependabot.yml) to keep dependencies h
 - **Security Updates:** Vulnerability-related dependency alerts are prioritized and should be reviewed promptly.
 - **Maintainer Review:** Automated merging is disabled. Repository maintainers review, test, and merge all dependency updates manually.
 - **Lockfile Hygiene:** Contributors should avoid manually modifying `pnpm-lock.yaml` or `Cargo.lock`. Always update dependencies using the standard package manager commands (`pnpm install` or `cargo update`).
+
+---
+
+## 9. Continuous Integration & Pull Request Feedback
+
+Automated checks run on all pull requests and pushes to `main` via [GitHub Actions](.github/workflows/ci.yml):
+
+- **Jobs & What They Validate:**
+  - **Contract (`contract`):** Formatting (`cargo fmt`), linting (`cargo clippy`), unit tests (`cargo test --lib`), invariant tests (`cargo test --test invariants`), and wasm compilation.
+  - **TypeScript (`typescript`):** Frozen-lockfile install (`pnpm install --frozen-lockfile`), type checking (`pnpm typecheck`), linting (`pnpm lint`), and service unit tests (`pnpm test:services`).
+  - **Judge (`judge`):** Keyless sandbox headline verification (`npm run judge`) running all 7 end-to-end scenarios, solvency checks, adversarial threat defenses, and README parity. Runs after `contract` and `typescript` succeed.
+  - **Secrets Scan (`secrets`):** History and working tree scan (`gitleaks`) to prevent credential leakage.
+- **Excluded from Routine PR CI:**
+  - **Live Testnet Execution (`demo:testnet`):** Requires funded NEAR testnet accounts and network keys.
+  - **Mainnet Verification (`mainnet:verify`):** Awaiting a human-recorded mainnet run.
+  - **Browser E2E Tests (`pnpm test:e2e`):** Requires containerized web services and browser binaries; run locally or during release qualification.
+- **Running Locally:** You can reproduce CI checks locally before opening a PR:
+  ```bash
+  pnpm install --frozen-lockfile
+  pnpm typecheck && pnpm lint && pnpm test:services
+  npm run judge
+  ```
+- **Advisory Feedback & Maintainer Discretion:** CI checks provide transparent feedback and help catch unintended regressions. They are not configured as hard blocking gates or mandatory status checks. Repository maintainers retain full discretion to review and merge pull requests.
+- **Reporting CI Issues:** If you observe an unexpected CI failure on an advisory check, feel free to comment on your pull request or open an issue using the Bug Report template.
 
