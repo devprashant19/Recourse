@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 import { Star, useInView } from "./motion";
 import { NAV } from "./nav";
@@ -30,7 +30,15 @@ const COLUMNS: { title: string; links: [string, string][] }[] = [
 ];
 
 export function Footer() {
-  const [ref, inView] = useInView<HTMLDivElement>({ threshold: 0.3 });
+  const [ref, inView] = useInView<HTMLDivElement>({ threshold: 0, rootMargin: "150px 0px 150px 0px" });
+  const [forceVisible, setForceVisible] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setForceVisible(true), 600);
+    return () => clearTimeout(t);
+  }, []);
+
+  const isVisible = inView || forceVisible;
   const letters = "RECOURSE".split("");
   return (
     <footer className="relative mt-24 overflow-hidden border-t border-line">
@@ -60,15 +68,21 @@ export function Footer() {
         ))}
       </div>
 
-      <div ref={ref} className={`wordmark relative mx-auto mt-12 flex w-full max-w-7xl items-end justify-center overflow-hidden px-4 ${inView ? "is-in" : ""}`} aria-hidden="true">
-        <div className="flex w-full select-none flex-nowrap items-baseline justify-between whitespace-nowrap pr-10 text-[clamp(2.5rem,11.8vw,11rem)] font-extrabold leading-[0.8] tracking-[-0.06em] text-ink sm:pr-16 md:pr-24">
+      <div
+        ref={ref}
+        className={`wordmark relative mx-auto mt-12 flex w-full max-w-7xl select-none items-center justify-between overflow-hidden px-4 md:px-8 ${isVisible ? "is-in" : ""}`}
+        aria-hidden="true"
+      >
+        <div className="flex w-full flex-nowrap items-center justify-between gap-1 text-[clamp(2rem,9.5vw,9.5rem)] font-extrabold leading-none tracking-[-0.05em] text-ink sm:gap-2">
           {letters.map((l, i) => (
-            <span key={i} className="wordmark-letter" style={{ "--i": i } as CSSProperties}>
+            <span key={i} className="wordmark-letter flex-1 text-center" style={{ "--i": i } as CSSProperties}>
               {l}
             </span>
           ))}
+          <div className="wordmark-letter flex flex-1 items-center justify-center" style={{ "--i": letters.length } as CSSProperties}>
+            <Star spin className="h-[0.7em] w-[0.7em]" />
+          </div>
         </div>
-        <Star spin className="absolute bottom-1 right-2 h-8 w-8 sm:bottom-2 sm:right-4 sm:h-12 sm:w-12 md:bottom-3 md:h-16 md:w-16" />
       </div>
 
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-5 text-xs text-dim">

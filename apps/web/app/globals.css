@@ -302,13 +302,15 @@ body {
 /* Footer wordmark letters rise one by one. */
 .wordmark-letter {
   display: inline-block;
-  transition: transform 1.2s var(--ease);
+  transition: transform 1.2s var(--ease), opacity 0.8s var(--ease);
   transition-delay: calc(var(--i, 0) * 55ms);
 }
 .js .wordmark-letter {
+  opacity: 0;
   transform: translateY(105%);
 }
 .js .is-in .wordmark-letter {
+  opacity: 1;
   transform: none;
 }
 
