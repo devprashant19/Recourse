@@ -52,3 +52,4 @@ The visitor enters a dark, editorial experience with ambient atmospheric depth: 
 - Next.js 15 App Router production build: Passed with 0 errors.
 - TypeScript typecheck: Passed with 0 errors.
 - Visual inspection & performance: 60fps GPU transforms on `transform` and `opacity`.
+

@@ -60,15 +60,15 @@ export function Footer() {
         ))}
       </div>
 
-      <div ref={ref} className={`wordmark relative mx-auto mt-12 flex max-w-[1500px] items-end justify-center overflow-hidden px-2 ${inView ? "is-in" : ""}`} aria-hidden="true">
-        <span className="flex select-none text-[16.5vw] font-extrabold leading-[0.8] tracking-[-0.06em] text-ink">
+      <div ref={ref} className={`wordmark relative mx-auto mt-12 flex w-full max-w-7xl items-end justify-center overflow-hidden px-4 ${inView ? "is-in" : ""}`} aria-hidden="true">
+        <div className="flex w-full select-none flex-nowrap items-baseline justify-between whitespace-nowrap pr-10 text-[clamp(2.5rem,11.8vw,11rem)] font-extrabold leading-[0.8] tracking-[-0.06em] text-ink sm:pr-16 md:pr-24">
           {letters.map((l, i) => (
-            <span key={i} style={{ "--i": i } as CSSProperties}>
+            <span key={i} className="wordmark-letter" style={{ "--i": i } as CSSProperties}>
               {l}
             </span>
           ))}
-        </span>
-        <Star spin className="absolute bottom-[1.5vw] right-[1.5vw] h-[7vw] w-[7vw]" />
+        </div>
+        <Star spin className="absolute bottom-1 right-2 h-8 w-8 sm:bottom-2 sm:right-4 sm:h-12 sm:w-12 md:bottom-3 md:h-16 md:w-16" />
       </div>
 
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-5 text-xs text-dim">

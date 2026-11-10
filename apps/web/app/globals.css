@@ -300,15 +300,15 @@ body {
 }
 
 /* Footer wordmark letters rise one by one. */
-.wordmark span {
+.wordmark-letter {
   display: inline-block;
   transition: transform 1.2s var(--ease);
-  transition-delay: calc(var(--i, 0) * 60ms);
+  transition-delay: calc(var(--i, 0) * 55ms);
 }
-.js .wordmark span {
+.js .wordmark-letter {
   transform: translateY(105%);
 }
-.js .wordmark.is-in span {
+.js .is-in .wordmark-letter {
   transform: none;
 }
 
@@ -325,7 +325,7 @@ body {
   .js .sw > .sw__in,
   .js .dot,
   .js .rule,
-  .js .wordmark span {
+  .js .wordmark-letter {
     opacity: 1;
     transform: none;
   }
