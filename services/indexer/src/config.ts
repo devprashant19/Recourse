@@ -6,6 +6,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 
+import { DEFAULT_DOCUMENTS_DIR } from "@recourse/jobs/catalog";
+
 import { RUN_REQUEST_FILE, RUN_STATUS_FILE } from "./run-status.js";
 
 export type Mode = "sandbox" | "testnet" | "mainnet";
@@ -175,7 +177,7 @@ export function loadIndexerConfig(env: NodeJS.ProcessEnv = process.env, argv: st
     dbPath: env.INDEXER_DB_PATH ?? `.data/${mode}-indexer.sqlite`,
     artifactDir: env.ARTIFACT_DIR ?? ".data/artifacts",
     rationalesFile: env.RATIONALES_FILE ?? `.data/${mode}-rationales.jsonl`,
-    documentsDir: env.DOCUMENTS_DIR ?? "demo/documents",
+    documentsDir: env.DOCUMENTS_DIR ?? DEFAULT_DOCUMENTS_DIR,
     port: intEnv(env, "INDEXER_PORT", 8080, 1),
     host: env.INDEXER_HOST ?? "127.0.0.1",
     pollMs: intEnv(env, "INDEXER_POLL_MS", 1500, 200),

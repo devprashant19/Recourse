@@ -3,6 +3,8 @@
  * environment and are never logged (see `log.ts`).
  */
 
+import { DEFAULT_DOCUMENTS_DIR } from "@recourse/jobs/catalog";
+
 export type Mode = "sandbox" | "testnet" | "mainnet";
 
 export interface WorkerConfig {
@@ -75,7 +77,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: string[] 
     model: env.NEARAI_MODEL_WORKER ?? "",
     stateFile: env.WORKER_STATE_FILE ?? `.data/${mode}-worker-state.json`,
     artifactDir: env.ARTIFACT_DIR ?? ".data/artifacts",
-    documentsDir: env.DOCUMENTS_DIR ?? "demo/documents",
+    documentsDir: env.DOCUMENTS_DIR ?? DEFAULT_DOCUMENTS_DIR,
     pollMs,
   };
   if (!cfg.agentKey.startsWith("ed25519:")) throw new Error("AGENT_FC_KEY must be an ed25519:... private key");

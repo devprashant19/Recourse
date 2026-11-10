@@ -1,5 +1,7 @@
 /** Arbiter configuration, validated at startup. Secrets only from the environment; never logged. */
 
+import { DEFAULT_DOCUMENTS_DIR } from "@recourse/jobs/catalog";
+
 export type Mode = "sandbox" | "testnet" | "mainnet";
 
 export interface ArbiterConfig {
@@ -53,7 +55,7 @@ export function loadArbiterConfig(env: NodeJS.ProcessEnv = process.env, argv: st
     model: env.NEARAI_MODEL_ARBITER ?? (mode === "sandbox" ? SANDBOX_ARBITER_MODEL : ""),
     stateFile: env.ARBITER_STATE_FILE ?? `.data/${mode}-arbiter-state.json`,
     artifactDir: env.ARTIFACT_DIR ?? ".data/artifacts",
-    documentsDir: env.DOCUMENTS_DIR ?? "demo/documents",
+    documentsDir: env.DOCUMENTS_DIR ?? DEFAULT_DOCUMENTS_DIR,
     pollMs,
   };
   if (mode === "sandbox") {
