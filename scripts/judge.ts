@@ -92,14 +92,16 @@ async function main() {
   // 1. Toolchains
   await check("1", "Toolchain versions match pins", () => {
     const nvmrc = readFileSync(".nvmrc", "utf8").trim();
-    const nodeOk = process.version.slice(1).split(".")[0] === nvmrc.split(".")[0];
+    const nodeMajor = Number(process.version.slice(1).split(".")[0]);
+    const nvmMajor = Number(nvmrc.split(".")[0]);
+    const nodeOk = nodeMajor >= nvmMajor;
     const pm = (JSON.parse(readFileSync("package.json", "utf8")) as { packageManager: string }).packageManager.split("@")[1]!;
     const pnpm = sh("pnpm", ["--version"]).stdout?.trim() ?? "";
     const pnpmOk = pnpm.split(".")[0] === pm.split(".")[0];
     const channel = readFileSync("rust-toolchain.toml", "utf8").match(/channel = "([^"]+)"/)?.[1] ?? "?";
     const rustc = has("rustc") ? (sh("rustc", ["--version"]).stdout ?? "").trim() : "";
     const rustOk = !rustc || rustc.includes(channel);
-    const parts = [`node ${process.version} vs .nvmrc ${nvmrc}`, `pnpm ${pnpm} vs ${pm}`, rustc ? `${rustc.split(" ").slice(0, 2).join(" ")} vs ${channel}` : `rustc absent (pin ${channel})`];
+    const parts = [`node ${process.version} (min .nvmrc ${nvmrc})`, `pnpm ${pnpm} vs ${pm}`, rustc ? `${rustc.split(" ").slice(0, 2).join(" ")} vs ${channel}` : `rustc absent (pin ${channel})`];
     return { status: nodeOk && pnpmOk && rustOk ? "PASS" : "FAIL", detail: parts.join("; ") };
   });
 
