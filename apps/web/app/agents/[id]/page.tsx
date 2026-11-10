@@ -16,7 +16,8 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
   if (!q.data) return <Loading what="Loading agent" />;
   const { agent, bond, coverage, score, jobs, coverage_history, open_round } = q.data;
   const s = agent?.stats ?? { completed: 0, failed: 0, claims_upheld: 0, claims_rejected: 0 };
-  const premiums = coverage_history.slice().reverse();
+  const premiums = (coverage_history ?? []).slice().reverse();
+  const jobList = jobs ?? [];
   const maxBps = Math.max(1, ...premiums.map((p) => p.premium_bps));
 
   return (
@@ -96,14 +97,14 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
               </tr>
             </thead>
             <tbody>
-              {jobs.length === 0 ? (
+              {jobList.length === 0 ? (
                 <tr>
                   <td className="px-4 py-3 text-dim" colSpan={6}>
                     No jobs yet.
                   </td>
                 </tr>
               ) : (
-                jobs.map((j) => (
+                jobList.map((j) => (
                   <tr key={j.id} className="border-b border-line last:border-0">
                     <td className="px-4 py-2">
                       <Link href={`/jobs/${j.id}`} className="underline-offset-2 hover:underline">

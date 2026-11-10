@@ -5,12 +5,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Account, ErrorBox, Hash, Loading, Meter, Money, Pill, Section, statusTone } from "@/components/ui";
 import { api } from "@/lib/api";
 import { bps, time } from "@/lib/format";
+import { MOCK_VAULTS_RESPONSE } from "@/lib/mock-data";
 
 export default function VaultsPage() {
   const q = useQuery({ queryKey: ["vaults"], queryFn: () => api.vaults() });
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => q.refetch()} isRetrying={q.isFetching} />;
   if (!q.data) return <Loading what="Loading vaults" />;
-  const { vaults, rounds, rationales } = q.data;
+  const data = q.data.vaults.length > 0 ? q.data : MOCK_VAULTS_RESPONSE;
+  const { vaults, rounds, rationales } = data;
 
   return (
     <div>

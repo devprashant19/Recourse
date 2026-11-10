@@ -6,17 +6,19 @@ import Link from "next/link";
 import { Account, ErrorBox, Loading, Money, Pill } from "@/components/ui";
 import { api } from "@/lib/api";
 import { bps } from "@/lib/format";
+import { MOCK_AGENTS } from "@/lib/mock-data";
 
 export default function AgentsPage() {
   const q = useQuery({ queryKey: ["agents"], queryFn: () => api.agents() });
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => q.refetch()} isRetrying={q.isFetching} />;
   if (!q.data) return <Loading what="Loading agents" />;
+  const data = q.data.length > 0 ? q.data : MOCK_AGENTS;
   return (
     <div>
       <h1 className="page-title">Bonded agents</h1>
       <p className="mt-1 text-sm text-dim">Every agent here has its own money at stake, and an underwriter vault behind it.</p>
       <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {q.data.map((a) => (
+        {data.map((a) => (
           <div key={a.id} className="card">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -36,7 +38,7 @@ export default function AgentsPage() {
               <dd>{bps(a.score?.score_bps)}</dd>
               <dt className="text-dim">Jobs / upheld</dt>
               <dd>
-                {a.agent?.stats.completed ?? 0} / {a.agent?.stats.claims_upheld ?? 0}
+                {a.agent?.stats?.completed ?? 0} / {a.agent?.stats?.claims_upheld ?? 0}
               </dd>
               <dt className="text-dim">Must cover itself</dt>
               <dd>{bps(a.score?.required_bond_share_bps)} of each job</dd>

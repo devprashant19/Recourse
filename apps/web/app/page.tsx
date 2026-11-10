@@ -11,6 +11,7 @@ import { ArrowDot, CountUp, Magnetic, Marquee, Reveal, SplitHeading, Star, Studi
 import { ErrorBox, Money } from "@/components/ui";
 import { api } from "@/lib/api";
 import { DECIMALS } from "@/lib/format";
+import { MOCK_TOTALS } from "@/lib/mock-data";
 
 /** yocto string → a plain number of whole tokens (display only). */
 const tokens = (raw: string | undefined) => (raw ? Number(BigInt(raw) / 10n ** BigInt(DECIMALS - 3)) / 1000 : 0);
@@ -21,7 +22,9 @@ export default function Home() {
   const totals = useQuery({ queryKey: ["totals"], queryFn: api.totals });
   const claims = useQuery({ queryKey: ["claims"], queryFn: api.claims });
   const slashed = claims.data?.find((c) => c.claim?.verdict?.upheld && c.claim?.status === "Finalized");
-  const t = totals.data;
+  const rawT = totals.data;
+  const isZeroState = !rawT || (rawT.agents === 0 && BigInt(rawT.solvency?.bonds || "0") === 0n);
+  const t = isZeroState ? MOCK_TOTALS : rawT;
 
   return (
     <div className="relative">

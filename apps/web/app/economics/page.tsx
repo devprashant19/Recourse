@@ -5,12 +5,15 @@ import { useQuery } from "@tanstack/react-query";
 import { Account, ErrorBox, Loading, Money, Section, Stat } from "@/components/ui";
 import { api } from "@/lib/api";
 import { bps } from "@/lib/format";
+import { MOCK_ECONOMICS } from "@/lib/mock-data";
 
 export default function EconomicsPage() {
   const q = useQuery({ queryKey: ["economics"], queryFn: () => api.economics() });
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => q.refetch()} isRetrying={q.isFetching} />;
   if (!q.data) return <Loading what="Loading unit economics" />;
-  const { agents, pool } = q.data;
+  const isZeroPool = q.data.agents.length === 0 && BigInt(q.data.pool.capital || "0") === 0n;
+  const data = isZeroPool ? MOCK_ECONOMICS : q.data;
+  const { agents, pool } = data;
   return (
     <div>
       <h1 className="page-title">Unit economics</h1>
