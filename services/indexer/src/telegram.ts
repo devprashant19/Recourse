@@ -303,29 +303,307 @@ export async function dispatchOutbox(
   store: EventStore,
   client: TelegramClient,
   limit = 20,
+  circuitBreaker?: CircuitBreaker,
 ): Promise<{ processed: number; successful: number; failed: number }> {
+  if (circuitBreaker && !circuitBreaker.canExecute()) {
+    return { processed: 0, successful: 0, failed: 0 };
+  }
+
   const jobs: OutboxJob[] = store.getPendingOutboxJobs(limit);
   let successful = 0;
   let failed = 0;
 
   for (const job of jobs) {
+    if (circuitBreaker && !circuitBreaker.canExecute()) {
+      break;
+    }
+
     if (!job.chat_id) {
       store.markOutboxFailed(job.id, "No chat_id registered", true);
       failed++;
       continue;
     }
 
-    const res = await client.sendMessage(job.chat_id, job.message_text);
-    if (res.ok) {
-      store.markOutboxDelivered(job.id);
-      successful++;
-    } else {
+    const chat = store.getTelegramChat(job.chat_id);
+    if (!chat || chat.is_paused) {
+      store.markOutboxFailed(job.id, chat ? "Chat is paused" : "Chat unlinked", !chat);
+      failed++;
+      continue;
+    }
+
+    const prefs = store.getPreferences(job.account_id);
+    if (prefs[job.category] === false) {
+      store.markOutboxFailed(job.id, `User opted out of category ${job.category}`, true);
+      failed++;
+      continue;
+    }
+
+    try {
+      const res = await client.sendMessage(job.chat_id, job.message_text);
+      if (res.ok) {
+        store.markOutboxDelivered(job.id);
+        circuitBreaker?.recordSuccess();
+        successful++;
+      } else {
+        const isDead = job.attempts >= 4;
+        store.markOutboxFailed(job.id, res.error ?? "Unknown delivery failure", isDead);
+        circuitBreaker?.recordFailure();
+        failed++;
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       const isDead = job.attempts >= 4;
-      store.markOutboxFailed(job.id, res.error ?? "Unknown delivery failure", isDead);
+      store.markOutboxFailed(job.id, errMsg, isDead);
+      circuitBreaker?.recordFailure();
       failed++;
     }
   }
 
   return { processed: jobs.length, successful, failed };
+}
+
+export type CircuitState = "CLOSED" | "OPEN" | "HALF_OPEN";
+
+export interface CircuitBreakerConfig {
+  failureThreshold?: number; // default 5 consecutive failures
+  cooldownMs?: number; // default 30000ms
+}
+
+export class CircuitBreaker {
+  private state: CircuitState = "CLOSED";
+  private consecutiveFailures = 0;
+  private nextAttemptAt = 0;
+  readonly failureThreshold: number;
+  readonly cooldownMs: number;
+
+  constructor(config: CircuitBreakerConfig = {}) {
+    this.failureThreshold = config.failureThreshold ?? 5;
+    this.cooldownMs = config.cooldownMs ?? 30_000;
+  }
+
+  getState(now = Date.now()): CircuitState {
+    if (this.state === "OPEN") {
+      if (now >= this.nextAttemptAt) {
+        return "HALF_OPEN";
+      }
+      return "OPEN";
+    }
+    return this.state;
+  }
+
+  getConsecutiveFailures(): number {
+    return this.consecutiveFailures;
+  }
+
+  canExecute(now = Date.now()): boolean {
+    const s = this.getState(now);
+    return s === "CLOSED" || s === "HALF_OPEN";
+  }
+
+  recordSuccess(): void {
+    this.consecutiveFailures = 0;
+    this.state = "CLOSED";
+    this.nextAttemptAt = 0;
+  }
+
+  recordFailure(now = Date.now()): void {
+    this.consecutiveFailures++;
+    if (this.consecutiveFailures >= this.failureThreshold || this.state === "HALF_OPEN") {
+      this.state = "OPEN";
+      this.nextAttemptAt = now + this.cooldownMs;
+    }
+  }
+
+  reset(): void {
+    this.state = "CLOSED";
+    this.consecutiveFailures = 0;
+    this.nextAttemptAt = 0;
+  }
+}
+
+export interface TelegramClientConfig {
+  mode: "real" | "mock" | "disabled";
+  botToken?: string;
+  apiBaseUrl?: string;
+}
+
+export function createTelegramClient(config: TelegramClientConfig): TelegramClient | null {
+  if (config.mode === "disabled") {
+    return null;
+  }
+  if (config.mode === "real") {
+    if (!config.botToken || config.botToken.trim() === "") {
+      throw new Error("TELEGRAM_BOT_TOKEN is required when TELEGRAM_MODE=real");
+    }
+    return new HttpTelegramClient(config.botToken, config.apiBaseUrl);
+  }
+  if (config.mode === "mock") {
+    return new MockTelegramClient();
+  }
+  throw new Error(`Unknown telegram mode: ${(config as { mode: string }).mode}`);
+}
+
+export interface DispatcherConfig {
+  pollIntervalMs?: number; // default 3000ms
+  batchSize?: number; // default 20
+  circuitBreaker?: CircuitBreakerConfig;
+  logger?: (level: "info" | "warn" | "error", msg: string, fields?: Record<string, unknown>) => void;
+}
+
+export interface DispatchResult {
+  processed: number;
+  successful: number;
+  failed: number;
+  circuitOpen: boolean;
+}
+
+export class TelegramDispatcher {
+  private running = false;
+  private stopping = false;
+  private timer?: NodeJS.Timeout;
+  private isDispatching = false;
+  private activeDispatchPromise?: Promise<DispatchResult>;
+  readonly circuitBreaker: CircuitBreaker;
+  readonly pollIntervalMs: number;
+  readonly batchSize: number;
+  private readonly logger?: (level: "info" | "warn" | "error", msg: string, fields?: Record<string, unknown>) => void;
+
+  constructor(
+    readonly store: EventStore,
+    readonly client: TelegramClient,
+    config: DispatcherConfig = {},
+  ) {
+    this.pollIntervalMs = config.pollIntervalMs ?? 3000;
+    this.batchSize = config.batchSize ?? 20;
+    this.circuitBreaker = new CircuitBreaker(config.circuitBreaker);
+    this.logger = config.logger;
+  }
+
+  isRunning(): boolean {
+    return this.running;
+  }
+
+  isBusy(): boolean {
+    return this.isDispatching;
+  }
+
+  async tick(now = Date.now()): Promise<DispatchResult> {
+    if (this.isDispatching || this.stopping) {
+      return { processed: 0, successful: 0, failed: 0, circuitOpen: false };
+    }
+    this.isDispatching = true;
+    try {
+      if (!this.circuitBreaker.canExecute(now)) {
+        this.logger?.("warn", "telegram_dispatch_skipped_circuit_open", {
+          state: this.circuitBreaker.getState(now),
+        });
+        return { processed: 0, successful: 0, failed: 0, circuitOpen: true };
+      }
+
+      const jobs: OutboxJob[] = this.store.getPendingOutboxJobs(this.batchSize);
+      let successful = 0;
+      let failed = 0;
+
+      for (const job of jobs) {
+        if (this.stopping) {
+          break;
+        }
+
+        if (!this.circuitBreaker.canExecute(Date.now())) {
+          this.logger?.("warn", "telegram_circuit_breaker_opened_during_batch");
+          break;
+        }
+
+        if (!job.chat_id) {
+          this.store.markOutboxFailed(job.id, "No chat_id registered", true);
+          failed++;
+          continue;
+        }
+
+        // Check if chat is still linked and not paused
+        const chat = this.store.getTelegramChat(job.chat_id);
+        if (!chat || chat.is_paused) {
+          this.store.markOutboxFailed(job.id, chat ? "Chat is paused" : "Chat unlinked", !chat);
+          failed++;
+          continue;
+        }
+
+        // Check category opt-out preferences
+        const prefs = this.store.getPreferences(job.account_id);
+        if (prefs[job.category] === false) {
+          this.store.markOutboxFailed(job.id, `User opted out of category ${job.category}`, true);
+          failed++;
+          continue;
+        }
+
+        try {
+          const res = await this.client.sendMessage(job.chat_id, job.message_text);
+          if (res.ok) {
+            this.store.markOutboxDelivered(job.id);
+            this.circuitBreaker.recordSuccess();
+            successful++;
+          } else {
+            const isDead = job.attempts >= 4;
+            this.store.markOutboxFailed(job.id, res.error ?? "Unknown delivery failure", isDead);
+            this.circuitBreaker.recordFailure();
+            failed++;
+          }
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const isDead = job.attempts >= 4;
+          this.store.markOutboxFailed(job.id, errMsg, isDead);
+          this.circuitBreaker.recordFailure();
+          failed++;
+        }
+      }
+
+      return { processed: jobs.length, successful, failed, circuitOpen: false };
+    } finally {
+      this.isDispatching = false;
+    }
+  }
+
+  start(): void {
+    if (this.running) return;
+    this.running = true;
+    this.stopping = false;
+
+    const loop = async () => {
+      if (!this.running) return;
+      try {
+        this.activeDispatchPromise = this.tick();
+        await this.activeDispatchPromise;
+      } catch (e) {
+        this.logger?.("error", "telegram_dispatch_tick_error", {
+          error: e instanceof Error ? e.message : String(e),
+        });
+      } finally {
+        this.activeDispatchPromise = undefined;
+      }
+
+      if (this.running) {
+        this.timer = setTimeout(loop, this.pollIntervalMs);
+      }
+    };
+
+    this.timer = setTimeout(loop, this.pollIntervalMs);
+  }
+
+  async stop(): Promise<void> {
+    this.running = false;
+    this.stopping = true;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+    if (this.activeDispatchPromise) {
+      try {
+        await this.activeDispatchPromise;
+      } catch {
+        // Safe ignore on shutdown
+      }
+    }
+    this.stopping = false;
+  }
 }
 

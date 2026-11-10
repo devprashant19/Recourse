@@ -40,7 +40,15 @@ import type { IndexerConfig } from "./config.js";
 import type { AuditRecord, EventStore, StoredEvent } from "./db.js";
 import { readJson, refuseRun, writeJson, type RunRequest, type RunStatus } from "./run-status.js";
 import { verifyNearAccountOwnership, verifyNep413Signature } from "./nep413.js";
-import { handleTelegramCommand, MockTelegramClient, NOTIFICATION_CATEGORIES } from "./telegram.js";
+import {
+  dispatchOutbox,
+  handleTelegramCommand,
+  HttpTelegramClient,
+  MockTelegramClient,
+  NOTIFICATION_CATEGORIES,
+  type TelegramClient,
+  type TelegramDispatcher,
+} from "./telegram.js";
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const MINUTE_NS = 60n * 1_000_000_000n;
@@ -51,6 +59,8 @@ export interface ApiDeps {
   view: RecourseClient;
   provider: JsonRpcProvider;
   headHeight: () => number | null;
+  telegramClient?: TelegramClient;
+  dispatcher?: TelegramDispatcher;
 }
 
 /** A tiny fixed-window limiter per IP for the demo endpoints. */
@@ -317,9 +327,43 @@ export function buildApi(d: ApiDeps): FastifyInstance {
     const text = body?.message?.text ?? "";
     if (!chatId || !text) return { ok: true, ignored: true };
 
-    const client = new MockTelegramClient();
+    const client =
+      d.telegramClient ??
+      (cfg.telegram?.mode === "real" && cfg.telegram.botToken
+        ? new HttpTelegramClient(cfg.telegram.botToken, cfg.telegram.apiBaseUrl)
+        : new MockTelegramClient());
     const reply = await handleTelegramCommand(store, chatId, text, client);
     return { ok: true, replied: reply };
+  });
+
+  app.get<{ Querystring: { status?: "pending" | "delivered" | "failed" | "dead"; limit?: number } }>(
+    "/api/telegram/outbox",
+    async (req) => {
+      const stats = store.getOutboxStats();
+      const jobs = store.getOutboxJobs(req.query.status);
+      const limit = Number(req.query.limit ?? 50);
+      const circuitState = d.dispatcher?.circuitBreaker.getState() ?? "CLOSED";
+      return {
+        ok: true,
+        stats,
+        circuit: {
+          state: circuitState,
+          consecutive_failures: d.dispatcher?.circuitBreaker.getConsecutiveFailures() ?? 0,
+        },
+        jobs: jobs.slice(0, limit),
+      };
+    },
+  );
+
+  app.post<{ Body: { limit?: number } }>("/api/telegram/outbox/dispatch", async (req) => {
+    if (d.dispatcher) {
+      const res = await d.dispatcher.tick();
+      return { ok: true, ...res };
+    }
+    const client = d.telegramClient ?? new MockTelegramClient();
+    const limit = Number(req.body?.limit ?? 20);
+    const res = await dispatchOutbox(store, client, limit);
+    return { ok: true, ...res, circuitOpen: false };
   });
 
   // ================= Capability D: Storage Pruning Endpoint =================

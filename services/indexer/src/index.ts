@@ -8,3 +8,4 @@ export * from "./config.js";
 export * from "./db.js";
 export * from "./ingest.js";
 export * from "./api.js";
+export * from "./telegram.js";

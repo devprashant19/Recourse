@@ -15,6 +15,7 @@ import { buildApi } from "./api.js";
 import { loadIndexerConfig } from "./config.js";
 import { EventStore } from "./db.js";
 import { Ingester, Rpc } from "./ingest.js";
+import { createTelegramClient, TelegramDispatcher } from "./telegram.js";
 
 function log(level: "info" | "warn" | "error", msg: string, fields: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ t: new Date().toISOString(), service: "indexer", level, msg, ...fields }));
@@ -34,13 +35,41 @@ async function main() {
     log: (msg, f) => log("info", msg, f),
   });
   let head: number | null = null;
-  const app = buildApi({ cfg, store, view, provider, headHeight: () => head });
+  const telegramClient = createTelegramClient(cfg.telegram);
+  let dispatcher: TelegramDispatcher | undefined;
+  if (telegramClient) {
+    dispatcher = new TelegramDispatcher(store, telegramClient, {
+      pollIntervalMs: cfg.telegram.dispatchIntervalMs,
+      batchSize: cfg.telegram.batchSize,
+      logger: (level, msg, f) => log(level, msg, f),
+    });
+    dispatcher.start();
+    log("info", "telegram dispatcher started", {
+      mode: cfg.telegram.mode,
+      pollIntervalMs: cfg.telegram.dispatchIntervalMs,
+      batchSize: cfg.telegram.batchSize,
+    });
+  }
+
+  const app = buildApi({
+    cfg,
+    store,
+    view,
+    provider,
+    headHeight: () => head,
+    telegramClient: telegramClient ?? undefined,
+    dispatcher,
+  });
   await app.listen({ port: cfg.port, host: cfg.host });
   log("info", "indexer listening", { url: `http://${cfg.host}:${cfg.port}`, mode: cfg.mode, contract: cfg.contractId, watch: cfg.watchAccounts, demo: cfg.demo !== null });
 
   let stopped = false;
   const stop = async () => {
     stopped = true;
+    if (dispatcher) {
+      await dispatcher.stop();
+      log("info", "telegram dispatcher stopped");
+    }
     await app.close();
     store.close();
     process.exit(0);

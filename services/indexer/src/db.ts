@@ -490,6 +490,33 @@ export class EventStore {
     return this.db.prepare("SELECT * FROM notification_outbox WHERE status = 'pending' AND next_attempt_at <= ? ORDER BY id ASC LIMIT ?").all(now, limit) as OutboxJob[];
   }
 
+  getOutboxJob(id: number): OutboxJob | null {
+    const row = this.db.prepare("SELECT * FROM notification_outbox WHERE id = ?").get(id) as OutboxJob | undefined;
+    return row ?? null;
+  }
+
+  getOutboxJobs(status?: "pending" | "delivered" | "failed" | "dead"): OutboxJob[] {
+    if (status) {
+      return this.db.prepare("SELECT * FROM notification_outbox WHERE status = ? ORDER BY id ASC").all(status) as OutboxJob[];
+    }
+    return this.db.prepare("SELECT * FROM notification_outbox ORDER BY id ASC").all() as OutboxJob[];
+  }
+
+  getOutboxStats(): { pending: number; delivered: number; dead: number; total: number } {
+    const rows = this.db.prepare("SELECT status, count(*) as cnt FROM notification_outbox GROUP BY status").all() as { status: string; cnt: number }[];
+    let pending = 0;
+    let delivered = 0;
+    let dead = 0;
+    let total = 0;
+    for (const r of rows) {
+      total += r.cnt;
+      if (r.status === "pending") pending = r.cnt;
+      else if (r.status === "delivered") delivered = r.cnt;
+      else if (r.status === "dead") dead = r.cnt;
+    }
+    return { pending, delivered, dead, total };
+  }
+
   markOutboxDelivered(id: number): void {
     this.db.prepare("UPDATE notification_outbox SET status = 'delivered', error = NULL WHERE id = ?").run(id);
   }

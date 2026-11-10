@@ -15,6 +15,14 @@ export interface DemoAccount {
   privateKey: string;
 }
 
+export interface TelegramConfig {
+  mode: "real" | "mock" | "disabled";
+  botToken?: string;
+  apiBaseUrl?: string;
+  dispatchIntervalMs: number;
+  batchSize: number;
+}
+
 export interface IndexerConfig {
   mode: Mode;
   rpcUrl: string;
@@ -39,6 +47,8 @@ export interface IndexerConfig {
   /** The hosted sandbox's run-everything status and request files (sandbox only). */
   runStatusFile: string;
   runRequestFile: string;
+  /** Telegram notification dispatcher configuration. */
+  telegram: TelegramConfig;
 }
 
 const RPC: Record<Mode, string> = {
@@ -106,6 +116,31 @@ export function loadIndexerConfig(env: NodeJS.ProcessEnv = process.env, argv: st
 
   const origins = env.CORS_ORIGINS?.split(",").map((s) => s.trim()).filter(Boolean);
 
+  const rawTelegramMode = env.TELEGRAM_MODE?.trim().toLowerCase();
+  const telegramMode: TelegramConfig["mode"] =
+    rawTelegramMode === "real"
+      ? "real"
+      : rawTelegramMode === "mock"
+      ? "mock"
+      : rawTelegramMode === "disabled"
+      ? "disabled"
+      : mode === "sandbox"
+      ? "mock"
+      : "disabled";
+
+  const telegramBotToken = env.TELEGRAM_BOT_TOKEN?.trim();
+  if (telegramMode === "real" && !telegramBotToken) {
+    throw new Error("TELEGRAM_BOT_TOKEN is required when TELEGRAM_MODE=real");
+  }
+
+  const telegram: TelegramConfig = {
+    mode: telegramMode,
+    botToken: telegramBotToken,
+    apiBaseUrl: env.TELEGRAM_API_BASE_URL,
+    dispatchIntervalMs: intEnv(env, "TELEGRAM_DISPATCH_INTERVAL_MS", 3000, 100),
+    batchSize: intEnv(env, "TELEGRAM_BATCH_SIZE", 20, 1),
+  };
+
   return {
     mode,
     rpcUrl: env.RECOURSE_RPC_URL ?? RPC[mode],
@@ -124,5 +159,6 @@ export function loadIndexerConfig(env: NodeJS.ProcessEnv = process.env, argv: st
     corsOrigins: origins && origins.length ? origins : true,
     runStatusFile: env.RUN_STATUS_FILE ?? RUN_STATUS_FILE,
     runRequestFile: env.RUN_REQUEST_FILE ?? RUN_REQUEST_FILE,
+    telegram,
   };
 }
