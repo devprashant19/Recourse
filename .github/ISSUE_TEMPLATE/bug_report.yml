@@ -1,0 +1,95 @@
+name: Bug Report
+description: Report a reproducible bug or unexpected behavior in Recourse
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug! Please fill out the form below to help us reproduce and resolve the issue.
+        **If this is a security vulnerability, please do NOT use this form.** Report it privately via [GitHub Security Advisories](https://github.com/devprashant19/Recourse/security/advisories/new).
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe the problem...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Component
+      description: Which part of the Recourse repository is affected?
+      options:
+        - Smart Contracts (contracts/recourse, contracts/test-token)
+        - Packages (packages/sdk, packages/receipts, packages/intents, etc.)
+        - Services (services/keeper, services/arbiter, services/worker-agent, etc.)
+        - Web App (apps/web)
+        - Demo & Scenarios (demo/)
+        - Scripts & Tooling (scripts/judge.ts, etc.)
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the bug.
+      placeholder: |
+        1. Run '...'
+        2. Execute '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened? Include error messages or unexpected outputs.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment & Versions
+      description: Please provide your operating system and toolchain versions.
+      value: |
+        - OS: [e.g. Linux / macOS / Windows / WSL2]
+        - Node.js version: [e.g. 20.18.1]
+        - pnpm version: [e.g. 9.12.3]
+        - Rust version: [e.g. 1.95.0, if applicable]
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs or Screenshots
+      description: Paste any terminal output, stack traces, or relevant logs here.
+      render: shell
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues to ensure this bug has not already been reported.
+          required: true
+        - label: I have verified that this report does NOT contain private keys, seed phrases, or sensitive production secrets.
+          required: true
+

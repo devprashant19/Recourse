@@ -144,6 +144,10 @@ Full list of what is *not* defended against: [`THREAT_MODEL.md`](THREAT_MODEL.md
 | [`docs/hosting.md`](docs/hosting.md) | Hosting: the keyless sandbox stack, the testnet deployment, the web app |
 | [`services/arbiter/rubric.md`](services/arbiter/rubric.md) | The published arbiter rubric |
 | [`demo/fixtures/README.md`](demo/fixtures/README.md) | What the recorded fixtures are (and the dev set is not) |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor guide, prerequisites, testing workflows, and PR checklist |
+| [`SECURITY.md`](SECURITY.md) | Vulnerability disclosure policy, scope, and private advisory reporting |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Contributor Covenant code of conduct and community guidelines |
+| [`SUPPORT.md`](SUPPORT.md) | Getting help, reporting bugs, feature requests, and discussions |
 
 ## Repository layout
 
