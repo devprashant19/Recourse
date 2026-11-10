@@ -13,6 +13,7 @@ import { LiveNearAiClient } from "@recourse/receipts";
 
 import type { KeeperChain } from "./chain.js";
 import type { KeeperConfig } from "./config.js";
+import type { KeeperCoordinator } from "./coordinator.js";
 import { KeeperLogger } from "./logger.js";
 import {
   executePendingPayout,
@@ -37,6 +38,7 @@ export class KeeperService {
   readonly tracker: PayoutTracker;
   readonly reconciler: PayoutReconciler;
   readonly registrar?: SignerRegistrar;
+  readonly coordinator?: KeeperCoordinator;
 
   constructor(
     readonly config: KeeperConfig,
@@ -46,6 +48,7 @@ export class KeeperService {
     tracker?: PayoutTracker,
     reconciler?: PayoutReconciler,
     registrar?: SignerRegistrar,
+    coordinator?: KeeperCoordinator,
   ) {
     this.log = logger ?? new KeeperLogger("keeper");
     this.tracker = tracker ?? new PayoutTracker(config.stateFile);
@@ -62,6 +65,7 @@ export class KeeperService {
             this.log,
           )
         : undefined);
+    this.coordinator = coordinator;
   }
 
   /**
@@ -78,6 +82,9 @@ export class KeeperService {
       keeperAccountId: this.config.keeperAccountId,
       rpcUrl: this.config.rpcUrl,
       dryQuote: this.config.dryQuote,
+      coordinated: Boolean(this.coordinator),
+      keeperId: this.coordinator?.keeperId,
+      priority: this.coordinator?.priority,
     });
 
     if (this.api) {
@@ -123,6 +130,20 @@ export class KeeperService {
     let polled: PollResult[] = [];
     let reconciled: ReconcileResult[] = [];
 
+    // 0. Leadership check: if coordinator is present, verify this keeper is active leader
+    if (this.coordinator) {
+      this.coordinator.heartbeat();
+      const leadership = this.coordinator.isLeader();
+      if (!leadership.leader) {
+        this.log.info("keeper_standby_skip_tick", {
+          keeperId: this.coordinator.keeperId,
+          activeLeaderId: leadership.activeLeaderId,
+          reason: leadership.reason,
+        });
+        return { executed, polled, reconciled };
+      }
+    }
+
     // 1. Discover and execute new pending payouts
     try {
       const pending = await findPendingPayouts(this.chain);
@@ -131,6 +152,29 @@ export class KeeperService {
       }
 
       for (const job of pending) {
+        let leaseAcquired = false;
+        let generation: number | undefined;
+
+        if (this.coordinator) {
+          const lease = this.coordinator.acquireClaimLease(job.claimId);
+          if (!lease.acquired) {
+            this.log.warn("claim_lease_acquisition_failed", {
+              claimId: job.claimId,
+              keeperId: this.coordinator.keeperId,
+              reason: lease.reason ?? "Lease held by another keeper or leadership lost",
+            });
+            continue;
+          }
+          leaseAcquired = true;
+          generation = lease.generation;
+          this.log.info("claim_lease_acquired_for_execution", {
+            claimId: job.claimId,
+            keeperId: this.coordinator.keeperId,
+            generation,
+            expiresAt: lease.expiresAt,
+          });
+        }
+
         try {
           const res = await executePendingPayout(
             this.chain,
@@ -141,6 +185,10 @@ export class KeeperService {
               contractId: this.config.contractId,
               dry: this.config.dryQuote,
               logger: this.log,
+              generation,
+              validateLease: this.coordinator
+                ? () => this.coordinator!.isClaimLeaseValid(job.claimId, generation)
+                : undefined,
             },
           );
           executed.push(res);
@@ -156,8 +204,20 @@ export class KeeperService {
         } catch (jobErr) {
           this.log.error("execute_payout_failed", {
             claimId: job.claimId,
+            generation,
             error: jobErr instanceof Error ? jobErr.message : String(jobErr),
           });
+        } finally {
+          if (leaseAcquired && this.coordinator) {
+            try {
+              this.coordinator.releaseClaimLease(job.claimId);
+            } catch (relErr) {
+              this.log.warn("claim_lease_release_failed", {
+                claimId: job.claimId,
+                error: relErr instanceof Error ? relErr.message : String(relErr),
+              });
+            }
+          }
         }
       }
     } catch (tickErr) {
@@ -201,6 +261,10 @@ export class KeeperService {
 
     this.log.info("keeper_loop_started", { pollMs: this.config.pollMs });
 
+    if (this.coordinator) {
+      this.coordinator.start();
+    }
+
     if (this.registrar) {
       this.registrar.start().catch((err) => {
         this.log.warn("signer_registrar_loop_error", {
@@ -226,6 +290,9 @@ export class KeeperService {
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = undefined;
+    }
+    if (this.coordinator) {
+      this.coordinator.stop();
     }
     if (this.registrar) {
       this.registrar.stop();

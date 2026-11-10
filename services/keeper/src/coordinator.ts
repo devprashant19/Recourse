@@ -157,6 +157,21 @@ export class KeeperCoordinator {
   }
 
   /**
+   * Revalidates that this keeper still holds the active execution lease
+   * with the expected generation token and remains active cluster leader.
+   */
+  isClaimLeaseValid(claimId: number, expectedGeneration?: number, now = Date.now()): boolean {
+    const leadership = this.isLeader(now);
+    if (!leadership.leader) return false;
+    const lease = this.store.getKeeperLease(claimId);
+    if (!lease) return false;
+    if (lease.keeper_id !== this.keeperId) return false;
+    if (lease.expires_at < now) return false;
+    if (expectedGeneration !== undefined && lease.generation !== expectedGeneration) return false;
+    return true;
+  }
+
+  /**
    * Records a heartbeat into the shared coordination store.
    */
   heartbeat(): void {

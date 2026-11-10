@@ -38,6 +38,8 @@ export interface ExecutePayoutOptions {
   slippageBps?: number;
   confidentiality?: QuoteRequest["confidentiality"];
   logger?: KeeperLogger;
+  generation?: number;
+  validateLease?: () => boolean;
 }
 
 export interface ExecutePayoutResult {
@@ -105,9 +107,13 @@ export async function executePendingPayout(
     claimant: payout.claimant,
     amount: payout.amount,
     attempt: payout.attempts + 1,
+    generation: options.generation,
   });
 
   if (payout.mode === "Direct") {
+    if (options.validateLease && !options.validateLease()) {
+      throw new Error(`Execution aborted: lease or leadership lost for claim ${claimId}`);
+    }
     const status = await chain.executeDirectPayout(claimId);
     log.info("direct_payout_executed", { claimId, status });
     return { claimId, mode: "Direct", status };
@@ -188,6 +194,9 @@ export async function executePendingPayout(
   });
 
   // Submit on-chain execution via keeper key
+  if (options.validateLease && !options.validateLease()) {
+    throw new Error(`Execution aborted: lease or leadership lost for claim ${claimId}`);
+  }
   const status = await chain.executeIntentsPayout(
     claimId,
     depositAddress,
