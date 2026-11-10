@@ -191,3 +191,15 @@ Before submitting your PR, ensure:
 3. You have not committed any private keys, `.env` files with secrets, or temporary build artifacts.
 4. The PR description clearly explains **what** changed, **why**, and **how** it was tested.
 
+---
+
+## 8. Automated Dependency Management
+
+Recourse uses [GitHub Dependabot](.github/dependabot.yml) to keep dependencies healthy and secure:
+
+- **Automated Monitoring:** Dependabot monitors npm/pnpm packages, Cargo crates, and GitHub Actions weekly on Mondays.
+- **Grouped Pull Requests:** Compatible patch and minor updates are automatically grouped to minimize PR noise, while major version upgrades remain isolated for targeted review.
+- **Security Updates:** Vulnerability-related dependency alerts are prioritized and should be reviewed promptly.
+- **Maintainer Review:** Automated merging is disabled. Repository maintainers review, test, and merge all dependency updates manually.
+- **Lockfile Hygiene:** Contributors should avoid manually modifying `pnpm-lock.yaml` or `Cargo.lock`. Always update dependencies using the standard package manager commands (`pnpm install` or `cargo update`).
+
