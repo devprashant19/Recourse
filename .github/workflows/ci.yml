@@ -24,7 +24,7 @@ jobs:
     name: Contract — build and test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Immutable commit SHA corresponding to dtolnay/rust-toolchain v1 release tag
       - name: Install Rust (1.95.0)
@@ -55,7 +55,7 @@ jobs:
     name: TypeScript — typecheck, lint, test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
 
@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [contract, typescript]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Immutable commit SHA corresponding to dtolnay/rust-toolchain v1 release tag
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -101,7 +101,7 @@ jobs:
     name: No secrets in repo or history
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: gitleaks
