@@ -56,7 +56,7 @@ export function RunPanel() {
   }, [st, qc, requestedFrom]);
 
   const start = useMutation({
-    mutationFn: api.runAll,
+    mutationFn: () => api.runAll(),
     onSuccess: (r) => {
       setRequestedFrom(st?.cycle ?? 0);
       setMsg(r.message);

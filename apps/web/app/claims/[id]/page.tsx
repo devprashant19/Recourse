@@ -12,13 +12,13 @@ import { bps, countdown } from "@/lib/format";
 export default function ClaimPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const q = useQuery({ queryKey: ["claim", id], queryFn: () => api.claim(id) });
-  if (q.isError) return <ErrorBox error={q.error} />;
+  if (q.isError) return <ErrorBox error={q.error} onRetry={() => q.refetch()} isRetrying={q.isFetching} />;
   if (!q.data) return <Loading what={`Loading claim ${id}`} />;
   const { claim, engagement, payout, verdict, evidence, timeline } = q.data;
   const v = claim.verdict;
   const slashed = timeline.find((e) => e.event === "slashed");
-  const fromBond = BigInt((slashed?.data.from_bond as string) ?? "0");
-  const fromVault = BigInt((slashed?.data.from_vault as string) ?? "0");
+  const fromBond = BigInt((slashed?.data?.from_bond as string) ?? "0");
+  const fromVault = BigInt((slashed?.data?.from_vault as string) ?? "0");
   const total = fromBond + fromVault;
   const findings = verdict?.body?.findings ?? [];
 

@@ -149,6 +149,13 @@ export async function startSandbox(o: SandboxOptions = {}): Promise<SandboxHandl
   cfg.gc_num_epochs_to_keep = KEEP_EPOCHS;
   writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
 
+  const genPath = join(homeDir, "genesis.json");
+  if (existsSync(genPath)) {
+    const gen = JSON.parse(readFileSync(genPath, "utf8")) as Record<string, unknown>;
+    gen.epoch_length = 100_000;
+    writeFileSync(genPath, JSON.stringify(gen, null, 2));
+  }
+
   const child: ChildProcess = spawn(
     bin,
     ["--home", homeDir, "run", "--rpc-addr", `127.0.0.1:${rpcPort}`, "--network-addr", `127.0.0.1:${netPort}`],

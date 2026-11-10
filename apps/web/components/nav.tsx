@@ -11,6 +11,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 
 import { ArrowDot, Magnetic } from "./motion";
 import { NetworkBadge } from "./network-badge";
+import { useDataMode } from "@/lib/mode";
 
 export const NAV: [string, string][] = [
   ["/agents", "Agents"],
@@ -30,6 +31,7 @@ export function Logo({ className = "" }: { className?: string }) {
 
 export function Nav() {
   const path = usePathname();
+  const { isDemo } = useDataMode();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -48,7 +50,7 @@ export function Nav() {
 
   return (
     <>
-      <header className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center px-3 pt-3 sm:pt-4">
+      <header className={`pointer-events-none fixed inset-x-0 ${isDemo ? "top-10 sm:top-9" : "top-0"} z-40 flex justify-center px-3 pt-3 sm:pt-4 transition-all duration-300`}>
         <div
           className={`pointer-events-auto flex w-full items-center gap-4 rounded-full border px-4 py-2 transition-all duration-[900ms] ease-expo sm:px-5 ${
             scrolled ? "max-w-4xl border-line bg-[rgb(29_31_31/0.82)] shadow-[0_10px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-md" : "max-w-6xl border-transparent bg-transparent"

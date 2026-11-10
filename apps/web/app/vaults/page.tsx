@@ -7,8 +7,8 @@ import { api } from "@/lib/api";
 import { bps, time } from "@/lib/format";
 
 export default function VaultsPage() {
-  const q = useQuery({ queryKey: ["vaults"], queryFn: api.vaults });
-  if (q.isError) return <ErrorBox error={q.error} />;
+  const q = useQuery({ queryKey: ["vaults"], queryFn: () => api.vaults() });
+  if (q.isError) return <ErrorBox error={q.error} onRetry={() => q.refetch()} isRetrying={q.isFetching} />;
   if (!q.data) return <Loading what="Loading vaults" />;
   const { vaults, rounds, rationales } = q.data;
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
 import { amount, EXPLORER_ACCOUNT, EXPLORER_TX, short, account as accountName } from "@/lib/format";
+import { getHumanErrorMessage } from "@/lib/errors";
 
 /** Monospace hash with a copy button (design rule: every hash is copyable). */
 export function Hash({ value, head = 8, tail = 6, href }: { value: string | null | undefined; head?: number; tail?: number; href?: string }) {
@@ -92,13 +93,63 @@ export function Loading({ what = "Loading" }: { what?: string }) {
   return <div className="card animate-pulse text-sm text-dim">{what}…</div>;
 }
 
-export function ErrorBox({ error }: { error: unknown }) {
-  const msg = error instanceof Error ? error.message : String(error);
+export interface ErrorBoxProps {
+  error: unknown;
+  onRetry?: () => void | Promise<unknown>;
+  isRetrying?: boolean;
+  title?: string;
+  className?: string;
+}
+
+export function ErrorBox({ error, onRetry, isRetrying = false, title: customTitle, className = "" }: ErrorBoxProps) {
+  const details = getHumanErrorMessage(error);
+  const title = customTitle ?? details.title;
+
   return (
-    <div className="card border-bad/40 text-sm">
-      <div className="font-medium text-bad">Could not reach the Recourse API</div>
-      <div className="mt-1 font-mono text-xs text-dim">{msg}</div>
-      <div className="mt-2 text-xs text-dim">Start it with <code className="font-mono">pnpm --filter @recourse/indexer start</code> after <code className="font-mono">pnpm demo -- --keep</code>.</div>
+    <div
+      role="alert"
+      className={`card border-bad/50 bg-bad/10 text-sm transition-colors ${className}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold text-bad flex items-center gap-2">
+            <span className="inline-block h-2 w-2 rounded-full bg-bad" />
+            {title}
+          </div>
+          <div className="mt-1 text-dim leading-relaxed">{details.message}</div>
+        </div>
+        {onRetry ? (
+          <button
+            type="button"
+            onClick={() => void onRetry()}
+            disabled={isRetrying}
+            className="shrink-0 rounded-full border border-line bg-panel px-3.5 py-1 text-xs font-medium hover:border-ink hover:text-ink disabled:opacity-50 transition-all inline-flex items-center gap-1.5"
+            aria-label="Retry request"
+          >
+            {isRetrying ? (
+              <>
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-ink border-t-transparent" />
+                Retrying…
+              </>
+            ) : (
+              <>
+                <span className="text-[13px]">↻</span>
+                Retry
+              </>
+            )}
+          </button>
+        ) : null}
+      </div>
+
+      {details.technicalDetails ? (
+        <div className="mt-3 rounded border border-line/60 bg-black/20 p-2 font-mono text-[11px] text-dim break-all">
+          {details.technicalDetails}
+        </div>
+      ) : null}
+
+      <div className="mt-3 text-xs text-dim">
+        Backend offline? Start it with <code className="font-mono text-ink">INDEXER_PORT=8085 pnpm hosted</code> or <code className="font-mono text-ink">pnpm demo -- --keep</code>.
+      </div>
     </div>
   );
 }

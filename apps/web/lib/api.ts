@@ -15,8 +15,10 @@ import {
   triggerSimulatedRun,
 } from "./mock-data";
 import { getMockArtifactBytes } from "./mock-artifacts";
+import { isDemoMode, getDataMode } from "./mode";
+import { ApiError } from "./errors";
 
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080").replace(/\/$/, "");
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8085").replace(/\/$/, "");
 
 export interface ChainEvent {
   id: number;
@@ -159,7 +161,7 @@ export interface RunStatus {
   solvency_ok: boolean | null;
 }
 
-function getMockData<T>(path: string): T {
+export function getMockData<T>(path: string): T {
   const cleanPath = path.split("?")[0];
 
   if (cleanPath === "/health") {
@@ -270,7 +272,7 @@ function getMockData<T>(path: string): T {
   throw new Error(`Mock data for path ${path} not defined`);
 }
 
-function handleMockPost<T>(path: string, body: unknown): T {
+export function handleMockPost<T>(path: string, body: unknown): T {
   if (path === "/demo/sabotage") {
     const b = body as { mode?: string };
     if (b?.mode) simulatedState.sabotageMode = b.mode;
@@ -338,37 +340,144 @@ function handleMockPost<T>(path: string, body: unknown): T {
   return { ok: true } as unknown as T;
 }
 
-async function get<T>(path: string): Promise<T> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1800);
-    const res = await fetch(`${API_URL}${path}`, { cache: "no-store", signal: controller.signal });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`${path}: ${res.status}`);
-    return (await res.json()) as T;
-  } catch {
-    // Transparently fallback to mock data when API is offline or unreachable
+export interface RequestOptions {
+  timeoutMs?: number;
+  headers?: Record<string, string>;
+}
+
+/**
+ * Perform a GET request against the Recourse indexer backend.
+ * In DEMO mode (explicitly enabled), returns local mock data fixtures.
+ * In LIVE mode (default), calls the backend and strictly throws ApiError on failures.
+ * Never silently falls back to synthetic data in LIVE mode.
+ */
+export async function get<T>(path: string, options?: RequestOptions): Promise<T> {
+  if (isDemoMode()) {
     return getMockData<T>(path);
+  }
+
+  const timeoutMs = options?.timeoutMs ?? 8000;
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      cache: "no-store",
+      headers: options?.headers,
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => null);
+      const errMsg = errBody?.error ?? errBody?.message ?? `Request to ${path} failed with status ${res.status}`;
+      throw new ApiError(errMsg, {
+        status: res.status,
+        path,
+        details: errBody,
+      });
+    }
+
+    try {
+      return (await res.json()) as T;
+    } catch (parseErr) {
+      throw new ApiError(`Invalid JSON response received from ${path}`, {
+        code: "INVALID_RESPONSE",
+        path,
+        cause: parseErr,
+      });
+    }
+  } catch (err: unknown) {
+    clearTimeout(timer);
+
+    if (err instanceof ApiError) {
+      throw err;
+    }
+
+    if (timedOut || (err instanceof Error && err.name === "AbortError")) {
+      throw new ApiError(`The request to ${path} timed out after ${timeoutMs}ms. The backend did not respond in time.`, {
+        code: "TIMEOUT",
+        path,
+      });
+    }
+
+    const causeMsg = err instanceof Error ? err.message : String(err);
+    throw new ApiError(`Unable to connect to Recourse services at ${path}: ${causeMsg}`, {
+      code: "NETWORK_ERROR",
+      path,
+      cause: err,
+    });
   }
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+/**
+ * Perform a POST request against the Recourse indexer backend.
+ * In DEMO mode (explicitly enabled), performs mock mutation.
+ * In LIVE mode (default), calls the backend and strictly throws ApiError on failures.
+ * Never blindly fakes financial writes.
+ */
+export async function post<T>(path: string, body: unknown, options?: RequestOptions): Promise<T> {
+  if (isDemoMode()) {
+    return handleMockPost<T>(path, body);
+  }
+
+  const timeoutMs = options?.timeoutMs ?? 12000;
+  const controller = new AbortController();
+  let timedOut = false;
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
     const res = await fetch(`${API_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    clearTimeout(timeout);
-    const json = (await res.json().catch(() => ({}))) as T & { error?: string };
-    if (!res.ok) throw new Error(json.error ?? `${path}: ${res.status}`);
+    clearTimeout(timer);
+
+    const json = (await res.json().catch(() => ({}))) as T & { error?: string; message?: string };
+    if (!res.ok) {
+      const errMsg = json.error ?? json.message ?? `POST to ${path} failed with status ${res.status}`;
+      throw new ApiError(errMsg, {
+        status: res.status,
+        path,
+        details: json,
+      });
+    }
+
     return json;
-  } catch {
-    // Transparently handle mock mutation when API is offline or unreachable
-    return handleMockPost<T>(path, body);
+  } catch (err: unknown) {
+    clearTimeout(timer);
+
+    if (err instanceof ApiError) {
+      throw err;
+    }
+
+    if (timedOut || (err instanceof Error && err.name === "AbortError")) {
+      throw new ApiError(`The POST request to ${path} timed out after ${timeoutMs}ms.`, {
+        code: "TIMEOUT",
+        path,
+      });
+    }
+
+    const causeMsg = err instanceof Error ? err.message : String(err);
+    throw new ApiError(`Unable to complete transaction on ${path}: ${causeMsg}`, {
+      code: "NETWORK_ERROR",
+      path,
+      cause: err,
+    });
   }
 }
 
@@ -385,23 +494,65 @@ export const api = {
   economics: () => get<Economics>("/economics"),
   documents: () => get<DocumentRow[]>("/documents"),
   events: (after?: number) => get<ChainEvent[]>(`/events${after ? `?after=${after}` : ""}`),
-  artifact: async (hash: string): Promise<Uint8Array> => {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 1800);
-      const res = await fetch(`${API_URL}/artifacts/${hash}`, { signal: controller.signal });
-      clearTimeout(timeout);
-      if (!res.ok) throw new Error(`artifact ${hash.slice(0, 12)}…: ${res.status}`);
-      return new Uint8Array(await res.arrayBuffer());
-    } catch {
+  artifact: async (hash: string, opts?: RequestOptions): Promise<Uint8Array> => {
+    if (isDemoMode()) {
       return getMockArtifactBytes(hash);
+    }
+
+    const timeoutMs = opts?.timeoutMs ?? 10000;
+    const controller = new AbortController();
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+
+    try {
+      const res = await fetch(`${API_URL}/artifacts/${hash}`, {
+        headers: opts?.headers,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (!res.ok) {
+        throw new ApiError(`Artifact fetch for ${hash.slice(0, 12)}… failed with status ${res.status}`, {
+          status: res.status,
+          path: `/artifacts/${hash}`,
+        });
+      }
+      return new Uint8Array(await res.arrayBuffer());
+    } catch (err: unknown) {
+      clearTimeout(timer);
+
+      if (err instanceof ApiError) {
+        throw err;
+      }
+
+      if (timedOut || (err instanceof Error && err.name === "AbortError")) {
+        throw new ApiError(`Artifact fetch for ${hash.slice(0, 12)}… timed out after ${timeoutMs}ms.`, {
+          code: "TIMEOUT",
+          path: `/artifacts/${hash}`,
+        });
+      }
+
+      const causeMsg = err instanceof Error ? err.message : String(err);
+      throw new ApiError(`Unable to fetch artifact ${hash.slice(0, 12)}…: ${causeMsg}`, {
+        code: "NETWORK_ERROR",
+        path: `/artifacts/${hash}`,
+        cause: err,
+      });
     }
   },
   receipt: (engagementId: number) => get<PublishedReceipt>(`/receipts/${engagementId}`),
-  hire: (body: { agent: string; document: number; liability_cap?: string; price?: string }) => post<{ engagement_id: number; document: string }>("/demo/hire", body),
-  claimDemo: (body: { engagement_id: number; kind: "Quality" | "NoDelivery"; evidence?: string }) => post<{ claim_id: number }>("/demo/claim", body),
+  hire: (body: { agent: string; document: number; liability_cap?: string; price?: string }) =>
+    post<{ engagement_id: number; document: string }>("/demo/hire", body),
+  claimDemo: (body: { engagement_id: number; kind: "Quality" | "NoDelivery"; evidence?: string }) =>
+    post<{ claim_id: number }>("/demo/claim", body),
   sabotage: (mode: string) => post<{ mode: string }>("/demo/sabotage", { mode }),
   sabotageMode: () => get<{ mode: string | null }>("/demo/sabotage"),
   run: () => get<{ status: RunStatus | null; queued: boolean }>("/demo/run"),
   runAll: () => post<{ ok: boolean; message: string }>("/demo/run", {}),
+  getDataMode,
+  isDemoMode,
 };

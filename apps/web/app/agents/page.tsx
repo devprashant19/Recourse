@@ -8,8 +8,8 @@ import { api } from "@/lib/api";
 import { bps } from "@/lib/format";
 
 export default function AgentsPage() {
-  const q = useQuery({ queryKey: ["agents"], queryFn: api.agents });
-  if (q.isError) return <ErrorBox error={q.error} />;
+  const q = useQuery({ queryKey: ["agents"], queryFn: () => api.agents() });
+  if (q.isError) return <ErrorBox error={q.error} onRetry={() => q.refetch()} isRetrying={q.isFetching} />;
   if (!q.data) return <Loading what="Loading agents" />;
   return (
     <div>

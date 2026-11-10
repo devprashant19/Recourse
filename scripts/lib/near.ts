@@ -122,6 +122,7 @@ export async function fastForward(net: Network, blocks: number): Promise<void> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: "ff", method: "sandbox_fast_forward", params: { delta_height: blocks } }),
+    signal: AbortSignal.timeout(30_000),
   });
   const body = (await res.json()) as { error?: unknown };
   if (body.error) throw new Error(`sandbox_fast_forward failed: ${JSON.stringify(body.error)}`);

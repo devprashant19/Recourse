@@ -35,7 +35,7 @@ export default function HirePage({ params }: { params: Promise<{ agentId: string
     onError: (e) => setErr((e as Error).message),
   });
 
-  if (agent.isError) return <ErrorBox error={agent.error} />;
+  if (agent.isError) return <ErrorBox error={agent.error} onRetry={() => agent.refetch()} isRetrying={agent.isFetching} />;
   if (!agent.data) return <Loading what="Loading agent" />;
 
   return (
@@ -84,7 +84,7 @@ export default function HirePage({ params }: { params: Promise<{ agentId: string
         </div>
 
         {health.data?.demo ? (
-          <button className="btn-primary w-full" disabled={hire.isPending || !agent.data.coverage} onClick={() => hire.mutate()}>
+          <button className="btn-primary w-full" disabled={hire.isPending || !agent.data?.coverage} onClick={() => hire.mutate()}>
             {hire.isPending ? "Opening…" : "Hire (as the demo client)"}
           </button>
         ) : (

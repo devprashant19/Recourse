@@ -91,7 +91,7 @@ async function cycle(n: number): Promise<void> {
     // it could also catch up later; starting now just makes the page live.
     indexer = spawn(process.execPath, ["--import", "tsx", "services/indexer/src/main.ts", "--mode", "sandbox"], {
       stdio: "inherit",
-      env: { ...process.env, RECOURSE_RPC_URL: rpcUrl, WORKER_ADMIN_TOKEN: token, WORKER_ADMIN_PORT: String(ADMIN_PORT), INDEXER_HOST: process.env.INDEXER_HOST ?? "0.0.0.0" },
+      env: { ...process.env, RECOURSE_RPC_URL: rpcUrl, WORKER_ADMIN_TOKEN: token, WORKER_ADMIN_PORT: String(ADMIN_PORT), INDEXER_HOST: process.env.INDEXER_HOST ?? "0.0.0.0", INDEXER_PORT: process.env.INDEXER_PORT ?? "8085" },
     });
     stops.push(() => {
       indexer?.kill("SIGTERM");

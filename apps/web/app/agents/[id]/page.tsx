@@ -12,10 +12,10 @@ export default function AgentPage({ params }: { params: Promise<{ id: string }> 
   const { id: raw } = use(params);
   const id = decodeURIComponent(raw);
   const q = useQuery({ queryKey: ["agent", id], queryFn: () => api.agent(id) });
-  if (q.isError) return <ErrorBox error={q.error} />;
+  if (q.isError) return <ErrorBox error={q.error} onRetry={() => q.refetch()} isRetrying={q.isFetching} />;
   if (!q.data) return <Loading what="Loading agent" />;
   const { agent, bond, coverage, score, jobs, coverage_history, open_round } = q.data;
-  const s = agent!.stats;
+  const s = agent?.stats ?? { completed: 0, failed: 0, claims_upheld: 0, claims_rejected: 0 };
   const premiums = coverage_history.slice().reverse();
   const maxBps = Math.max(1, ...premiums.map((p) => p.premium_bps));
 

@@ -49,7 +49,7 @@ export default function DemoPage() {
         {health.data?.mode === "sandbox" || health.isError ? <div className="mt-6"><RunPanel /></div> : null}
         <div className="mt-6">
           {health.isError ? (
-            <ErrorBox error={health.error} />
+            <ErrorBox error={health.error} onRetry={() => health.refetch()} isRetrying={health.isFetching} />
           ) : !health.data ? (
             <Loading />
           ) : (

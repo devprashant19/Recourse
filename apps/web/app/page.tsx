@@ -20,7 +20,7 @@ const H2 = "text-[clamp(2.2rem,5.6vw,4.6rem)] font-medium leading-[0.98] trackin
 export default function Home() {
   const totals = useQuery({ queryKey: ["totals"], queryFn: api.totals });
   const claims = useQuery({ queryKey: ["claims"], queryFn: api.claims });
-  const slashed = claims.data?.find((c) => c.claim.verdict?.upheld && c.claim.status === "Finalized");
+  const slashed = claims.data?.find((c) => c.claim?.verdict?.upheld && c.claim?.status === "Finalized");
   const t = totals.data;
 
   return (
@@ -40,12 +40,16 @@ export default function Home() {
             </Reveal>
           </div>
           {totals.isError ? (
-            <ErrorBox error={totals.error} />
+            <ErrorBox
+              error={totals.error}
+              onRetry={() => totals.refetch()}
+              isRetrying={totals.isFetching}
+            />
           ) : (
             <div className="grid grid-cols-2 self-end">
               {[
                 ["Agents bonded", <CountUp key="a" value={t?.agents ?? 0} />],
-                ["NEAR bonded", <CountUp key="b" value={tokens(t?.solvency.bonds)} decimals={2} />],
+                ["NEAR bonded", <CountUp key="b" value={tokens(t?.solvency?.bonds)} decimals={2} />],
                 ["Claims paid", <CountUp key="c" value={t?.claims_paid ?? 0} prefix="+" />],
                 ["NEAR paid out", <CountUp key="d" value={tokens(t?.value_paid_out)} decimals={2} prefix="+" />],
               ].map(([label, value], i) => (
@@ -107,7 +111,11 @@ export default function Home() {
             </>
           ) : totals.isError ? (
             <div className="mt-8">
-              <ErrorBox error={totals.error} />
+              <ErrorBox
+                error={totals.error}
+                onRetry={() => totals.refetch()}
+                isRetrying={totals.isFetching}
+              />
             </div>
           ) : null}
         </div>

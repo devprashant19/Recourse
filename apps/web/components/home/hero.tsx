@@ -13,6 +13,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 import { api } from "@/lib/api";
 import { amount } from "@/lib/format";
+import { useDataMode } from "@/lib/mode";
 import { AmbientGlow, ArrowDot, Magnetic, Star } from "../motion";
 
 const CARDS: { bg: string; ink: string; top: string; big: string; small: string }[] = [
@@ -98,16 +99,17 @@ function W({ children, i, className = "" }: { children: ReactNode; i: number; cl
 }
 
 function Ticker() {
-  const health = useQuery({ queryKey: ["health"], queryFn: api.health, refetchInterval: 4000 });
-  const totals = useQuery({ queryKey: ["totals"], queryFn: api.totals, refetchInterval: 8000 });
+  const { isDemo } = useDataMode();
+  const health = useQuery({ queryKey: ["health"], queryFn: () => api.health(), refetchInterval: 4000 });
+  const totals = useQuery({ queryKey: ["totals"], queryFn: () => api.totals(), refetchInterval: 8000 });
   const h = health.data;
   const t = totals.data;
   const items: [string, ReactNode][] = [
-    ["Chain head", h?.head ? `#${h.head.toLocaleString("en-US")}` : "—"],
-    ["Solvency", t ? (t.solvency.ok ? "OK" : "BROKEN") : "—"],
+    ["Chain head", isDemo ? "DEMO FIXTURE" : h?.head ? `#${h.head.toLocaleString("en-US")}` : "—"],
+    ["Solvency", isDemo ? "SIMULATED" : t ? (t.solvency.ok ? "OK" : "BROKEN") : "—"],
     ["Bonded", t ? amount(t.solvency.bonds, 2) : "—"],
     ["Claims paid", t ? String(t.claims_paid) : "—"],
-    ["Network", h ? h.mode : health.isError ? "offline" : "—"],
+    ["Network", isDemo ? "DEMO (SYNTHETIC)" : h ? h.mode : health.isError ? "offline" : "—"],
   ];
   return (
     <div className="absolute inset-x-0 bottom-0 px-4 pb-5 sm:px-8">

@@ -7,8 +7,8 @@ import { api } from "@/lib/api";
 import { bps } from "@/lib/format";
 
 export default function EconomicsPage() {
-  const q = useQuery({ queryKey: ["economics"], queryFn: api.economics });
-  if (q.isError) return <ErrorBox error={q.error} />;
+  const q = useQuery({ queryKey: ["economics"], queryFn: () => api.economics() });
+  if (q.isError) return <ErrorBox error={q.error} onRetry={() => q.refetch()} isRetrying={q.isFetching} />;
   if (!q.data) return <Loading what="Loading unit economics" />;
   const { agents, pool } = q.data;
   return (

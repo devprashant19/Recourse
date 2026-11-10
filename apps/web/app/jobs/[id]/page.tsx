@@ -44,7 +44,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
     onSuccess: (r) => setMsg(`Claim #${r.claim_id} filed.`),
     onError: (e) => setMsg((e as Error).message),
   });
-  if (q.isError) return <ErrorBox error={q.error} />;
+  if (q.isError) return <ErrorBox error={q.error} onRetry={() => q.refetch()} isRetrying={q.isFetching} />;
   if (!q.data) return <Loading what={`Loading engagement ${id}`} />;
   const { engagement: e, published_receipt: pr, output, document, timeline } = q.data;
   let outputJson: Record<string, unknown> | null = null;
