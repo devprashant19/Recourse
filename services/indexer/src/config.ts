@@ -178,7 +178,7 @@ export function loadIndexerConfig(env: NodeJS.ProcessEnv = process.env, argv: st
     artifactDir: env.ARTIFACT_DIR ?? ".data/artifacts",
     rationalesFile: env.RATIONALES_FILE ?? `.data/${mode}-rationales.jsonl`,
     documentsDir: env.DOCUMENTS_DIR ?? DEFAULT_DOCUMENTS_DIR,
-    port: intEnv(env, "INDEXER_PORT", 8080, 1),
+    port: intEnv(env, "INDEXER_PORT", 8085, 1),
     host: env.INDEXER_HOST ?? "127.0.0.1",
     pollMs: intEnv(env, "INDEXER_POLL_MS", 1500, 200),
     backfillBlocks: intEnv(env, "INDEXER_BACKFILL_BLOCKS", 5000, 0),

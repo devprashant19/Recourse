@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 
 import { amount, EXPLORER_ACCOUNT, EXPLORER_TX, short, account as accountName } from "@/lib/format";
 import { getHumanErrorMessage } from "@/lib/errors";
+import { useDataMode } from "@/lib/mode";
 
 /** Monospace hash with a copy button (design rule: every hash is copyable). */
 export function Hash({ value, head = 8, tail = 6, href }: { value: string | null | undefined; head?: number; tail?: number; href?: string }) {
@@ -104,6 +105,7 @@ export interface ErrorBoxProps {
 export function ErrorBox({ error, onRetry, isRetrying = false, title: customTitle, className = "" }: ErrorBoxProps) {
   const details = getHumanErrorMessage(error);
   const title = customTitle ?? details.title;
+  const { isDemo, setMode } = useDataMode();
 
   return (
     <div
@@ -118,27 +120,41 @@ export function ErrorBox({ error, onRetry, isRetrying = false, title: customTitl
           </div>
           <div className="mt-1 text-dim leading-relaxed">{details.message}</div>
         </div>
-        {onRetry ? (
-          <button
-            type="button"
-            onClick={() => void onRetry()}
-            disabled={isRetrying}
-            className="shrink-0 rounded-full border border-line bg-panel px-3.5 py-1 text-xs font-medium hover:border-ink hover:text-ink disabled:opacity-50 transition-all inline-flex items-center gap-1.5"
-            aria-label="Retry request"
-          >
-            {isRetrying ? (
-              <>
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-ink border-t-transparent" />
-                Retrying…
-              </>
-            ) : (
-              <>
-                <span className="text-[13px]">↻</span>
-                Retry
-              </>
-            )}
-          </button>
-        ) : null}
+        <div className="flex items-center gap-2 shrink-0">
+          {!isDemo ? (
+            <button
+              type="button"
+              onClick={() => {
+                setMode("demo");
+                if (onRetry) void onRetry();
+              }}
+              className="rounded-full border border-warn/70 bg-warn/15 px-3 py-1 text-xs font-medium text-warn hover:bg-warn/25 transition-all inline-flex items-center gap-1.5"
+            >
+              Demo mode
+            </button>
+          ) : null}
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={() => void onRetry()}
+              disabled={isRetrying}
+              className="rounded-full border border-line bg-panel px-3.5 py-1 text-xs font-medium hover:border-ink hover:text-ink disabled:opacity-50 transition-all inline-flex items-center gap-1.5"
+              aria-label="Retry request"
+            >
+              {isRetrying ? (
+                <>
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-ink border-t-transparent" />
+                  Retrying…
+                </>
+              ) : (
+                <>
+                  <span className="text-[13px]">↻</span>
+                  Retry
+                </>
+              )}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {details.technicalDetails ? (
@@ -147,8 +163,22 @@ export function ErrorBox({ error, onRetry, isRetrying = false, title: customTitl
         </div>
       ) : null}
 
-      <div className="mt-3 text-xs text-dim">
-        Backend offline? Start it with <code className="font-mono text-ink">INDEXER_PORT=8085 pnpm hosted</code> or <code className="font-mono text-ink">pnpm demo -- --keep</code>.
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line/30 pt-3 text-xs text-dim">
+        <span>
+          Backend offline? Start it with <code className="font-mono text-ink">INDEXER_PORT=8085 pnpm hosted</code> or <code className="font-mono text-ink">pnpm demo -- --keep</code>.
+        </span>
+        {!isDemo ? (
+          <button
+            type="button"
+            onClick={() => {
+              setMode("demo");
+              if (onRetry) void onRetry();
+            }}
+            className="text-xs text-warn underline underline-offset-2 hover:text-warn/80 transition-colors"
+          >
+            Switch to offline demo fixtures →
+          </button>
+        ) : null}
       </div>
     </div>
   );

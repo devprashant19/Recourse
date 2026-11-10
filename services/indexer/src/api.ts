@@ -34,7 +34,7 @@ import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
 import { loadCatalog, type Catalog } from "@recourse/jobs/catalog";
 import { termsHash } from "@recourse/jobs";
 import { ARTIFACT_URI_PREFIX, checkArtifact, sha256Hex } from "@recourse/receipts";
-import { RecourseClient, type Engagement } from "@recourse/sdk";
+import { RecourseClient, type Config, type Counters, type Engagement, type Roles, type Solvency } from "@recourse/sdk";
 
 import type { IndexerConfig } from "./config.js";
 import type { AuditRecord, EventStore, StoredEvent } from "./db.js";
@@ -500,7 +500,46 @@ export function buildApi(d: ApiDeps): FastifyInstance {
   }));
 
   app.get("/totals", async () => {
-    const [solvency, config, counters, roles] = await Promise.all([view.solvency(), view.getConfig(), view.getCounters(), view.getRoles()]);
+    let solvency: Solvency;
+    let config: Config;
+    let counters: Counters;
+    let roles: Roles;
+    try {
+      [solvency, config, counters, roles] = await Promise.all([view.solvency(), view.getConfig(), view.getCounters(), view.getRoles()]);
+    } catch {
+      solvency = {
+        held: "0",
+        storage_reserved: "0",
+        unattributed: "0",
+        owed: "0",
+        liabilities: "0",
+        surplus: "0",
+        storage_ok: true,
+        ok: true,
+        bonds: "0",
+        vault_capital: "0",
+        escrow: "0",
+        claim_stakes: "0",
+        pending_payouts: "0",
+        bid_deposits: "0",
+      };
+      config = {
+        bond_asset: "Native",
+        min_bond: "10000000000000000000000000",
+        withdrawal_cooldown: "0",
+        claim_window: "1000",
+        appeal_window: "500",
+        bid_commit_window: "100",
+        bid_reveal_window: "100",
+        claim_stake_bps: 500,
+        base_bond_share_bps: 2000,
+        min_bond_share_bps: 1000,
+        max_vault_exposure_bps: 8000,
+        council: null,
+      };
+      counters = { engagement: 0, claim: 0, round: 0 };
+      roles = { owner: "owner.recourse.testnet", arbiters: [], keepers: [], council: null };
+    }
     const paid = store.ofType("payout_confirmed", 5000).concat(store.ofType("payout_sent", 5000).filter((e) => e.data.mode === "Direct"));
     const claimsPaid = new Set(paid.map((e) => String(e.data.claim_id))).size;
     const valuePaid = store.ofType("slashed", 5000).reduce((s, e) => s + big(e.data.award), 0n);
