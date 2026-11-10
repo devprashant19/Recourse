@@ -7,7 +7,7 @@ import type { CSSProperties } from "react";
 import { Faq, HowItWorks } from "@/components/home/accordion";
 import { Hero } from "@/components/home/hero";
 import { ScenarioTrack } from "@/components/home/track";
-import { ArrowDot, CountUp, Marquee, Reveal, SplitHeading, Star } from "@/components/motion";
+import { ArrowDot, CountUp, Magnetic, Marquee, Reveal, SplitHeading, Star, StudioCursor, Tilt } from "@/components/motion";
 import { ErrorBox, Money } from "@/components/ui";
 import { api } from "@/lib/api";
 import { DECIMALS } from "@/lib/format";
@@ -24,7 +24,9 @@ export default function Home() {
   const t = totals.data;
 
   return (
-    <div>
+    <div className="relative">
+      <StudioCursor />
+      <div className="grain" aria-hidden="true" />
       <Hero slashedHref={slashed ? `/claims/${slashed.id}` : "/demo"} />
 
       {/* Cream sheet that slides up over the hero. */}
@@ -75,7 +77,7 @@ export default function Home() {
           <SplitHeading text="Solvency, live" className={H2} />
           {t ? (
             <>
-              <div className="mt-12 grid gap-px overflow-hidden rounded-3xl border border-line bg-line sm:grid-cols-3">
+              <div className="mt-12 grid gap-4 overflow-hidden sm:grid-cols-3">
                 {(
                   [
                     ["held", t.solvency.held],
@@ -83,11 +85,13 @@ export default function Home() {
                     ["surplus", t.solvency.surplus],
                   ] as const
                 ).map(([k, v], i) => (
-                  <Reveal key={k} delay={i * 0.1} className="bg-panel p-6 sm:p-8">
-                    <div className="label">{k}</div>
-                    <div className="mt-3 text-3xl font-light tracking-tight sm:text-4xl">
-                      <Money value={v} />
-                    </div>
+                  <Reveal key={k} delay={i * 0.1}>
+                    <Tilt maxTilt={5} className="rounded-2xl border border-line bg-panel p-6 sm:p-8">
+                      <div className="label">{k}</div>
+                      <div className="mt-3 text-3xl font-light tracking-tight sm:text-4xl">
+                        <Money value={v} />
+                      </div>
+                    </Tilt>
                   </Reveal>
                 ))}
               </div>
@@ -121,22 +125,30 @@ export default function Home() {
 
       {/* Final call to action. */}
       <section className="mx-auto max-w-6xl px-4">
-        <div className="relative overflow-hidden rounded-[2.5rem] border border-line px-6 py-16 sm:px-14 sm:py-20">
+        <Tilt maxTilt={3} glare={false} className="relative overflow-hidden rounded-[2.5rem] border border-line px-6 py-16 sm:px-14 sm:py-20">
           <Star spin className="absolute -right-16 -top-16 h-64 w-64 opacity-90" />
           <SplitHeading text="Don't trust it. *Check* it" className={`relative max-w-3xl ${H2}`} />
           <Reveal delay={0.25} className="relative mt-10 flex flex-wrap gap-3">
-            <Link href={slashed ? `/claims/${slashed.id}` : "/demo"} className="btn-primary group !py-2 !pl-5 !pr-2 text-base">
-              Watch an agent get slashed <ArrowDot />
-            </Link>
-            <Link href="/demo" className="btn !px-5 text-base">
-              Run all seven scenarios
-            </Link>
-            <Link href="/agents" className="btn !px-5 text-base">
-              Hire an agent
-            </Link>
-            <a href="https://github.com/devprashant19/Recourse/blob/main/demo/mainnet-run/RUN.md" className="btn !px-5 text-base" target="_blank" rel="noreferrer">
-              Mainnet run plan
-            </a>
+            <Magnetic strength={0.35} innerStrength={0.22}>
+              <Link href={slashed ? `/claims/${slashed.id}` : "/demo"} className="btn-primary group !py-2 !pl-5 !pr-2 text-base">
+                Watch an agent get slashed <ArrowDot />
+              </Link>
+            </Magnetic>
+            <Magnetic strength={0.25} innerStrength={0.15}>
+              <Link href="/demo" className="btn !px-5 text-base">
+                Run all seven scenarios
+              </Link>
+            </Magnetic>
+            <Magnetic strength={0.25} innerStrength={0.15}>
+              <Link href="/agents" className="btn !px-5 text-base">
+                Hire an agent
+              </Link>
+            </Magnetic>
+            <Magnetic strength={0.25} innerStrength={0.15}>
+              <a href="https://github.com/devprashant19/Recourse/blob/main/demo/mainnet-run/RUN.md" className="btn !px-5 text-base" target="_blank" rel="noreferrer">
+                Mainnet run plan
+              </a>
+            </Magnetic>
           </Reveal>
           <div className="relative mt-12 flex flex-wrap gap-x-6 gap-y-2 text-xs font-bold uppercase tracking-[0.14em] text-dim">
             {["7/7 scenarios", "16/16 attacks refused", "395 contract tests", "Genuine NEAR AI TEE receipts"].map((s, i) => (
@@ -146,7 +158,7 @@ export default function Home() {
               </Reveal>
             ))}
           </div>
-        </div>
+        </Tilt>
       </section>
     </div>
   );

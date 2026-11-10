@@ -170,6 +170,89 @@ body {
   animation: spin 14s linear infinite;
 }
 
+/* Floating ambient glowing orbs */
+@keyframes float-slow {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(30px, -25px, 0) scale(1.08);
+  }
+}
+@keyframes float-slow-reverse {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-35px, 20px, 0) scale(1.12);
+  }
+}
+.ambient-glow-1 {
+  animation: float-slow 18s ease-in-out infinite;
+}
+.ambient-glow-2 {
+  animation: float-slow-reverse 22s ease-in-out infinite;
+}
+
+/* Film grain texture */
+.grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* 3D Tilt container */
+.tilt-card {
+  transform-style: preserve-3d;
+  transition: transform 0.45s var(--ease);
+  will-change: transform;
+}
+.tilt-card:hover {
+  transition: transform 0.1s linear;
+}
+
+/* Custom interactive cursor */
+.cursor-dot {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  background-color: rgb(var(--accent));
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 99999;
+  transform: translate(-50%, -50%);
+  transition: width 0.3s var(--ease), height 0.3s var(--ease), background-color 0.3s var(--ease), opacity 0.3s ease;
+}
+.cursor-ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 36px;
+  height: 36px;
+  border: 1.5px solid rgb(var(--accent) / 0.45);
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 99998;
+  transform: translate(-50%, -50%);
+  transition: width 0.35s var(--ease), height 0.35s var(--ease), border-color 0.35s var(--ease), background-color 0.35s var(--ease);
+}
+.cursor-hover .cursor-dot {
+  width: 14px;
+  height: 14px;
+  background-color: rgb(var(--accent));
+}
+.cursor-hover .cursor-ring {
+  width: 58px;
+  height: 58px;
+  border-color: rgb(var(--accent));
+  background-color: rgb(var(--accent) / 0.1);
+}
+
 /* Page entry. */
 @keyframes page-in {
   from {

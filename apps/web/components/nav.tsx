@@ -9,7 +9,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type CSSProperties } from "react";
 
-import { ArrowDot } from "./motion";
+import { ArrowDot, Magnetic } from "./motion";
 import { NetworkBadge } from "./network-badge";
 
 export const NAV: [string, string][] = [
@@ -54,9 +54,11 @@ export function Nav() {
             scrolled ? "max-w-4xl border-line bg-[rgb(29_31_31/0.82)] shadow-[0_10px_40px_-12px_rgba(0,0,0,0.6)] backdrop-blur-md" : "max-w-6xl border-transparent bg-transparent"
           }`}
         >
-          <Link href="/" className="shrink-0 text-lg" aria-label="Recourse home">
-            <Logo />
-          </Link>
+          <Magnetic strength={0.3} innerStrength={0.15}>
+            <Link href="/" className="shrink-0 text-lg block" aria-label="Recourse home">
+              <Logo />
+            </Link>
+          </Magnetic>
           <nav className="hidden flex-1 items-center justify-center gap-1 md:flex" aria-label="Main">
             {NAV.map(([href, label]) => (
               <Link
@@ -71,9 +73,13 @@ export function Nav() {
           <div className={`ml-auto hidden shrink-0 ${scrolled ? "" : "xl:block"}`}>
             <NetworkBadge />
           </div>
-          <Link href="/demo" className="btn-primary group hidden shrink-0 whitespace-nowrap !py-1.5 !pl-4 !pr-1.5 sm:inline-flex">
-            Run the demo <ArrowDot />
-          </Link>
+          <div className="hidden sm:inline-flex">
+            <Magnetic strength={0.3} innerStrength={0.2}>
+              <Link href="/demo" className="btn-primary group shrink-0 whitespace-nowrap !py-1.5 !pl-4 !pr-1.5 inline-flex">
+                Run the demo <ArrowDot />
+              </Link>
+            </Magnetic>
+          </div>
           <button
             type="button"
             className="ml-auto flex h-10 w-10 items-center justify-center rounded-full border border-line md:hidden"

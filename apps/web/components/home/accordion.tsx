@@ -8,7 +8,7 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 
-import { Reveal, Star } from "../motion";
+import { Reveal, Star, Tilt } from "../motion";
 
 const STEPS: { title: string; body: ReactNode; colour: string; card: { top: string; big: string; bottom: string } }[] = [
   {
@@ -70,15 +70,17 @@ export function HowItWorks() {
         })}
       </ul>
       <Reveal delay={0.15} className="relative min-h-[22rem]">
-        <div key={open} className="page-in absolute inset-0 flex flex-col justify-between overflow-hidden rounded-[2rem] p-8" style={{ background: s.colour, color: "#121414" }}>
-          <div className="label !text-[#121414]/70">{s.card.top}</div>
-          <div className="font-display text-[clamp(2.4rem,5vw,4.2rem)] leading-[1.02]">{s.card.big}</div>
-          <div className="flex items-end justify-between gap-4">
-            <span className="max-w-[16rem] text-base font-medium">{s.card.bottom}</span>
-            <span className="text-sm font-bold">0{open + 1} / 0{STEPS.length}</span>
+        <Tilt maxTilt={7} className="h-full rounded-[2rem]">
+          <div key={open} className="page-in absolute inset-0 flex flex-col justify-between overflow-hidden rounded-[2rem] p-8" style={{ background: s.colour, color: "#121414" }}>
+            <div className="label !text-[#121414]/70">{s.card.top}</div>
+            <div className="font-display text-[clamp(2.4rem,5vw,4.2rem)] leading-[1.02]">{s.card.big}</div>
+            <div className="flex items-end justify-between gap-4">
+              <span className="max-w-[16rem] text-base font-medium">{s.card.bottom}</span>
+              <span className="text-sm font-bold">0{open + 1} / 0{STEPS.length}</span>
+            </div>
+            <Star spin className="absolute -right-10 -top-10 h-40 w-40 !text-[#121414]/10" />
           </div>
-          <Star spin className="absolute -right-10 -top-10 h-40 w-40 !text-[#121414]/10" />
-        </div>
+        </Tilt>
       </Reveal>
     </div>
   );

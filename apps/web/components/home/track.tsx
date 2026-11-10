@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
-import { ArrowDot, SplitHeading, Star } from "../motion";
+import { ArrowDot, Magnetic, SplitHeading, Star, Tilt } from "../motion";
 import { Pill } from "../ui";
 
 const SCENARIOS: { id: string; name: string; what: string; bg: string }[] = [
@@ -83,9 +83,11 @@ export function ScenarioTrack() {
       <div className={pinned ? "sticky top-0 flex h-screen flex-col justify-center overflow-hidden" : "py-20"}>
         <div className="mx-auto mb-8 flex w-full max-w-6xl flex-wrap items-end justify-between gap-4 px-4">
           <SplitHeading text="Seven scenarios, *one* chain" className="max-w-2xl text-[clamp(2.2rem,5.6vw,4.6rem)] font-medium leading-[0.98] tracking-[-0.035em]" />
-          <Link href="/demo" className="btn-primary group !py-1.5 !pl-4 !pr-1.5">
-            Run all seven <ArrowDot />
-          </Link>
+          <Magnetic strength={0.3} innerStrength={0.2}>
+            <Link href="/demo" className="btn-primary group !py-1.5 !pl-4 !pr-1.5">
+              Run all seven <ArrowDot />
+            </Link>
+          </Magnetic>
         </div>
         <div className={pinned ? "" : "overflow-x-auto pb-4 [scrollbar-width:none]"}>
           <div ref={rail} className="flex w-max gap-5 px-4 will-change-transform sm:px-[max(1rem,calc((100vw_-_72rem)/2_+_1rem))]">
@@ -93,34 +95,38 @@ export function ScenarioTrack() {
               const st = stateOf(s.id);
               const dark = s.id === "07";
               return (
-                <article key={s.id} className="group flex h-[min(62vh,30rem)] w-[min(82vw,24rem)] shrink-0 snap-start flex-col justify-between rounded-[1.75rem] p-6 transition-transform duration-700 ease-expo hover:-translate-y-2" style={{ background: s.bg, color: dark ? "#F4EFE7" : "#121414" }}>
-                  <div className="flex items-start justify-between">
-                    <span className="font-display text-6xl leading-none">{s.id}</span>
-                    {st === "pass" ? <span className="rounded-full bg-[#121414] px-3 py-1 text-xs font-bold tracking-wider text-[#A6E091]">PASS</span> : st === "fail" ? <Pill tone="bad">FAIL</Pill> : st === "running" ? <span className="rounded-full bg-[#121414] px-3 py-1 text-xs font-bold text-white">running…</span> : null}
-                  </div>
-                  <div>
-                    <h3 className="text-3xl font-semibold leading-tight tracking-tight">{s.name}</h3>
-                    <p className="mt-3 text-[15px] leading-snug opacity-80">{s.what}</p>
-                  </div>
-                </article>
+                <Tilt key={s.id} maxTilt={6} className="shrink-0 snap-start rounded-[1.75rem]">
+                  <article className="group flex h-[min(62vh,30rem)] w-[min(82vw,24rem)] shrink-0 flex-col justify-between rounded-[1.75rem] p-6 transition-transform duration-700 ease-expo hover:-translate-y-2" style={{ background: s.bg, color: dark ? "#F4EFE7" : "#121414" }}>
+                    <div className="flex items-start justify-between">
+                      <span className="font-display text-6xl leading-none">{s.id}</span>
+                      {st === "pass" ? <span className="rounded-full bg-[#121414] px-3 py-1 text-xs font-bold tracking-wider text-[#A6E091]">PASS</span> : st === "fail" ? <Pill tone="bad">FAIL</Pill> : st === "running" ? <span className="rounded-full bg-[#121414] px-3 py-1 text-xs font-bold text-white">running…</span> : null}
+                    </div>
+                    <div>
+                      <h3 className="text-3xl font-semibold leading-tight tracking-tight">{s.name}</h3>
+                      <p className="mt-3 text-[15px] leading-snug opacity-80">{s.what}</p>
+                    </div>
+                  </article>
+                </Tilt>
               );
             })}
-            <Link href="/demo" className="group flex h-[min(62vh,30rem)] w-[min(82vw,24rem)] shrink-0 flex-col items-start justify-between rounded-[1.75rem] border border-line p-6 transition-colors duration-500 hover:border-accent">
-              <Star spin className="h-14 w-14" />
-              <div>
-                <div className="text-3xl font-semibold leading-tight tracking-tight">Run all seven on a fresh chain</div>
-                <p className="mt-3 text-[15px] text-dim">One button resets the chain and replays every scenario, live.</p>
-                <span className="mt-6 inline-flex items-center gap-2 font-semibold text-accent">
-                  Open the demo page <ArrowDot className="!bg-accent !text-[#121414]" />
-                </span>
-              </div>
-            </Link>
+            <Tilt maxTilt={6} className="shrink-0 rounded-[1.75rem]">
+              <Link href="/demo" className="group flex h-[min(62vh,30rem)] w-[min(82vw,24rem)] shrink-0 flex-col items-start justify-between rounded-[1.75rem] border border-line bg-panel/30 p-6 backdrop-blur-sm transition-colors duration-500 hover:border-accent">
+                <Star spin className="h-14 w-14" />
+                <div>
+                  <div className="text-3xl font-semibold leading-tight tracking-tight">Run all seven on a fresh chain</div>
+                  <p className="mt-3 text-[15px] text-dim">One button resets the chain and replays every scenario, live.</p>
+                  <span className="mt-6 inline-flex items-center gap-2 font-semibold text-accent">
+                    Open the demo page <ArrowDot className="!bg-accent !text-[#121414]" />
+                  </span>
+                </div>
+              </Link>
+            </Tilt>
           </div>
         </div>
         {pinned ? (
           <div className="mx-auto mt-8 w-full max-w-6xl px-4">
-            <div className="h-px w-full bg-line">
-              <div ref={bar} className="h-px origin-left bg-accent" style={{ transform: "scaleX(0)" }} />
+            <div className="h-1 w-full rounded-full bg-line/60 overflow-hidden relative">
+              <div ref={bar} className="h-full origin-left bg-accent transition-transform duration-75" style={{ transform: "scaleX(0)" }} />
             </div>
           </div>
         ) : null}

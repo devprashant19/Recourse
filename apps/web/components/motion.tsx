@@ -156,3 +156,232 @@ export function ArrowDot({ className = "" }: { className?: string }) {
     </span>
   );
 }
+
+/**
+ * Magnetic interaction: pulls element towards cursor within its bounds.
+ * Parallax depth: inner element moves with additional offset for a layered feel.
+ */
+export function Magnetic({
+  children,
+  strength = 0.32,
+  innerStrength = 0.22,
+  className = "",
+}: {
+  children: ReactNode;
+  strength?: number;
+  innerStrength?: number;
+  className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [active, setActive] = useState(false);
+
+  const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = (e.clientX - cx) * strength;
+    const dy = (e.clientY - cy) * strength;
+    setPos({ x: dx, y: dy });
+    setActive(true);
+  };
+
+  const onMouseLeave = () => {
+    setPos({ x: 0, y: 0 });
+    setActive(false);
+  };
+
+  return (
+    <div
+      ref={ref}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
+      className={`inline-block transition-transform ${active ? "duration-100 ease-out" : "duration-700 ease-expo"} ${className}`}
+      style={{
+        transform: `translate3d(${pos.x}px, ${pos.y}px, 0)`,
+      }}
+    >
+      <div
+        className={`transition-transform ${active ? "duration-100 ease-out" : "duration-700 ease-expo"}`}
+        style={{
+          transform: `translate3d(${pos.x * innerStrength}px, ${pos.y * innerStrength}px, 0)`,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 3D Perspective Tilt on cards with dynamic specular light glare.
+ */
+export function Tilt({
+  children,
+  className = "",
+  maxTilt = 7,
+  glare = true,
+  style,
+}: {
+  children: ReactNode;
+  className?: string;
+  maxTilt?: number;
+  glare?: boolean;
+  style?: CSSProperties;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [transform, setTransform] = useState("");
+  const [glarePos, setGlarePos] = useState({ x: 50, y: 50, opacity: 0 });
+
+  const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    const rotX = (0.5 - py) * maxTilt * 2;
+    const rotY = (px - 0.5) * maxTilt * 2;
+    setTransform(`perspective(900px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg) scale3d(1.02, 1.02, 1.02)`);
+    if (glare) {
+      setGlarePos({ x: px * 100, y: py * 100, opacity: 0.18 });
+    }
+  };
+
+  const onMouseLeave = () => {
+    setTransform("");
+    setGlarePos((p) => ({ ...p, opacity: 0 }));
+  };
+
+  return (
+    <div
+      ref={ref}
+      onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
+      className={`tilt-card relative overflow-hidden ${className}`}
+      style={{ ...style, transform }}
+    >
+      {children}
+      {glare && (
+        <div
+          className="pointer-events-none absolute inset-0 transition-opacity duration-500"
+          style={{
+            opacity: glarePos.opacity,
+            background: `radial-gradient(circle at ${glarePos.x}% ${glarePos.y}%, rgba(255,255,255,0.22) 0%, transparent 60%)`,
+          }}
+          aria-hidden="true"
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Atmospheric floating color glows + interactive mouse spotlight across the dark ground.
+ */
+export function AmbientGlow() {
+  const [spotlight, setSpotlight] = useState({ x: -1000, y: -1000 });
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const onMove = (e: MouseEvent) => {
+      setSpotlight({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    return () => window.removeEventListener("mousemove", onMove);
+  }, []);
+
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+      {/* Drifting warm accent orb */}
+      <div
+        className="ambient-glow-1 absolute -top-40 left-1/4 h-[32rem] w-[32rem] rounded-full blur-[140px]"
+        style={{ background: "radial-gradient(circle, rgba(252,98,42,0.14) 0%, transparent 70%)" }}
+      />
+      {/* Drifting mint solvency orb */}
+      <div
+        className="ambient-glow-2 absolute top-1/3 right-1/4 h-[36rem] w-[36rem] rounded-full blur-[160px]"
+        style={{ background: "radial-gradient(circle, rgba(166,224,145,0.08) 0%, transparent 70%)" }}
+      />
+      {/* Interactive mouse spotlight */}
+      <div
+        className="fixed inset-0 pointer-events-none transition-opacity duration-300"
+        style={{
+          background: `radial-gradient(650px circle at ${spotlight.x}px ${spotlight.y}px, rgba(252,98,42,0.05), transparent 45%)`,
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * High-end studio custom cursor: smooth lerp follower with hover expansion on interactive elements.
+ * Desktop only, respects reduced motion and touch devices.
+ */
+export function StudioCursor() {
+  const dotRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
+  useEffect(() => {
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    let targetX = -100;
+    let targetY = -100;
+    let currentX = -100;
+    let currentY = -100;
+    let raf = 0;
+
+    const onMove = (e: MouseEvent) => {
+      targetX = e.clientX;
+      targetY = e.clientY;
+      if (!visible) setVisible(true);
+
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest("a, button, [role='button'], .btn, .btn-primary, .card, input, select")) {
+        setHovered(true);
+      } else {
+        setHovered(false);
+      }
+    };
+
+    const onLeave = () => setVisible(false);
+
+    const loop = () => {
+      currentX += (targetX - currentX) * 0.22;
+      currentY += (targetY - currentY) * 0.22;
+
+      if (dotRef.current) {
+        dotRef.current.style.transform = `translate3d(${targetX}px, ${targetY}px, 0)`;
+      }
+      if (ringRef.current) {
+        ringRef.current.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
+      }
+      raf = requestAnimationFrame(loop);
+    };
+
+    window.addEventListener("mousemove", onMove, { passive: true });
+    document.addEventListener("mouseleave", onLeave);
+    raf = requestAnimationFrame(loop);
+
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseleave", onLeave);
+      cancelAnimationFrame(raf);
+    };
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <div className={hovered ? "cursor-hover" : ""}>
+      <div ref={dotRef} className="cursor-dot hidden md:block" aria-hidden="true" />
+      <div ref={ringRef} className="cursor-ring hidden md:block" aria-hidden="true" />
+    </div>
+  );
+}
