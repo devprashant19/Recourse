@@ -23,6 +23,14 @@ export interface TelegramConfig {
   batchSize: number;
 }
 
+export interface AnchorConfig {
+  mode: "manual" | "auto" | "disabled";
+  intervalMs: number;
+  adminToken?: string;
+  signerAccountId?: string;
+  signerKey?: string;
+}
+
 export interface IndexerConfig {
   mode: Mode;
   rpcUrl: string;
@@ -49,6 +57,8 @@ export interface IndexerConfig {
   runRequestFile: string;
   /** Telegram notification dispatcher configuration. */
   telegram: TelegramConfig;
+  /** Audit head on-chain anchoring configuration. */
+  anchor: AnchorConfig;
 }
 
 const RPC: Record<Mode, string> = {
@@ -141,6 +151,22 @@ export function loadIndexerConfig(env: NodeJS.ProcessEnv = process.env, argv: st
     batchSize: intEnv(env, "TELEGRAM_BATCH_SIZE", 20, 1),
   };
 
+  const rawAnchorMode = env.ANCHOR_MODE?.trim().toLowerCase();
+  const anchorMode: AnchorConfig["mode"] =
+    rawAnchorMode === "auto"
+      ? "auto"
+      : rawAnchorMode === "disabled"
+      ? "disabled"
+      : "manual";
+
+  const anchor: AnchorConfig = {
+    mode: anchorMode,
+    intervalMs: intEnv(env, "ANCHOR_INTERVAL_MS", 30000, 500),
+    adminToken: env.ANCHOR_ADMIN_TOKEN ?? env.WORKER_ADMIN_TOKEN,
+    signerAccountId: env.ANCHOR_SIGNER_ACCOUNT_ID,
+    signerKey: env.ANCHOR_SIGNER_KEY,
+  };
+
   return {
     mode,
     rpcUrl: env.RECOURSE_RPC_URL ?? RPC[mode],
@@ -160,5 +186,6 @@ export function loadIndexerConfig(env: NodeJS.ProcessEnv = process.env, argv: st
     runStatusFile: env.RUN_STATUS_FILE ?? RUN_STATUS_FILE,
     runRequestFile: env.RUN_REQUEST_FILE ?? RUN_REQUEST_FILE,
     telegram,
+    anchor,
   };
 }

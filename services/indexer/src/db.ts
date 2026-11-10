@@ -44,12 +44,19 @@ export interface ExplanationRecord {
   created_at: number;
 }
 
+export type AnchorStatus = "locally_computed" | "locally_anchored" | "submitted" | "finalized" | "failed";
+
 export interface OnchainAnchorRecord {
   id: number;
   seq: number;
   root_hash: string;
   tx_hash: string;
   anchored_at: number;
+  status: AnchorStatus;
+  network: string | null;
+  contract_id: string | null;
+  finalized_at: number | null;
+  error: string | null;
 }
 
 export interface TelegramChat {
@@ -153,7 +160,12 @@ CREATE TABLE IF NOT EXISTS onchain_anchors (
   seq INTEGER NOT NULL,
   root_hash TEXT NOT NULL,
   tx_hash TEXT NOT NULL,
-  anchored_at INTEGER NOT NULL
+  anchored_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'locally_anchored',
+  network TEXT,
+  contract_id TEXT,
+  finalized_at INTEGER,
+  error TEXT
 );
 
 -- Capability B: NEP-413 Authentication & Telegram Notifications
@@ -241,6 +253,24 @@ export class EventStore {
     this.db = new Database(path);
     this.db.pragma("journal_mode = WAL");
     this.db.exec(SCHEMA);
+
+    // Ensure columns exist if table was created with an earlier schema version
+    const anchorCols = (this.db.pragma("table_info(onchain_anchors)") as { name: string }[]).map((c) => c.name);
+    if (!anchorCols.includes("status")) {
+      this.db.exec("ALTER TABLE onchain_anchors ADD COLUMN status TEXT NOT NULL DEFAULT 'locally_anchored'");
+    }
+    if (!anchorCols.includes("network")) {
+      this.db.exec("ALTER TABLE onchain_anchors ADD COLUMN network TEXT");
+    }
+    if (!anchorCols.includes("contract_id")) {
+      this.db.exec("ALTER TABLE onchain_anchors ADD COLUMN contract_id TEXT");
+    }
+    if (!anchorCols.includes("finalized_at")) {
+      this.db.exec("ALTER TABLE onchain_anchors ADD COLUMN finalized_at INTEGER");
+    }
+    if (!anchorCols.includes("error")) {
+      this.db.exec("ALTER TABLE onchain_anchors ADD COLUMN error TEXT");
+    }
     this.insertStmt = this.db.prepare(
       `INSERT OR IGNORE INTO events (block_height, block_time, tx_hash, receipt_id, log_index, event, data, engagement_id, claim_id, round, agent, vault)
        VALUES (@block_height, @block_time, @tx_hash, @receipt_id, @log_index, @event, @data, @engagement_id, @claim_id, @round, @agent, @vault)`,
@@ -411,13 +441,74 @@ export class EventStore {
     return row ?? null;
   }
 
-  recordAnchor(seq: number, rootHash: string, txHash: string, anchoredAt: number): void {
-    this.db.prepare("INSERT INTO onchain_anchors (seq, root_hash, tx_hash, anchored_at) VALUES (?, ?, ?, ?)").run(seq, rootHash, txHash, anchoredAt);
+  recordAnchor(
+    seq: number,
+    rootHash: string,
+    txHash: string,
+    anchoredAt: number,
+    opts: {
+      status?: AnchorStatus;
+      network?: string | null;
+      contractId?: string | null;
+      finalizedAt?: number | null;
+      error?: string | null;
+    } = {},
+  ): number {
+    const status = opts.status ?? "locally_anchored";
+    const network = opts.network ?? null;
+    const contractId = opts.contractId ?? null;
+    const finalizedAt = opts.finalizedAt ?? (status === "finalized" ? anchoredAt : null);
+    const error = opts.error ?? null;
+    const res = this.db.prepare(
+      "INSERT INTO onchain_anchors (seq, root_hash, tx_hash, anchored_at, status, network, contract_id, finalized_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(seq, rootHash, txHash, anchoredAt, status, network, contractId, finalizedAt, error);
+    return Number(res.lastInsertRowid);
+  }
+
+  updateAnchorStatus(
+    id: number,
+    status: AnchorStatus,
+    opts: {
+      txHash?: string;
+      finalizedAt?: number | null;
+      error?: string | null;
+    } = {},
+  ): void {
+    const sets: string[] = ["status = ?"];
+    const args: unknown[] = [status];
+    if (opts.txHash !== undefined) {
+      sets.push("tx_hash = ?");
+      args.push(opts.txHash);
+    }
+    if (opts.finalizedAt !== undefined) {
+      sets.push("finalized_at = ?");
+      args.push(opts.finalizedAt);
+    }
+    if (opts.error !== undefined) {
+      sets.push("error = ?");
+      args.push(opts.error);
+    }
+    args.push(id);
+    this.db.prepare(`UPDATE onchain_anchors SET ${sets.join(", ")} WHERE id = ?`).run(...args);
+  }
+
+  getAnchorById(id: number): OnchainAnchorRecord | null {
+    const row = this.db.prepare("SELECT * FROM onchain_anchors WHERE id = ?").get(id) as OnchainAnchorRecord | undefined;
+    return row ?? null;
+  }
+
+  getAnchorBySeq(seq: number): OnchainAnchorRecord | null {
+    const row = this.db.prepare("SELECT * FROM onchain_anchors WHERE seq = ? ORDER BY id DESC LIMIT 1").get(seq) as OnchainAnchorRecord | undefined;
+    return row ?? null;
   }
 
   getLatestAnchor(): OnchainAnchorRecord | null {
-    const row = this.db.prepare("SELECT * FROM onchain_anchors ORDER BY seq DESC LIMIT 1").get() as OnchainAnchorRecord | undefined;
+    const row = this.db.prepare("SELECT * FROM onchain_anchors ORDER BY seq DESC, id DESC LIMIT 1").get() as OnchainAnchorRecord | undefined;
     return row ?? null;
+  }
+
+  listAnchors(limit = 50): OnchainAnchorRecord[] {
+    return this.db.prepare("SELECT * FROM onchain_anchors ORDER BY seq DESC, id DESC LIMIT ?").all(limit) as OnchainAnchorRecord[];
   }
 
   // ================= Capability B: NEP-413 Auth & Telegram =================

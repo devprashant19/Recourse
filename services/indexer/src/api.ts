@@ -49,6 +49,7 @@ import {
   type TelegramClient,
   type TelegramDispatcher,
 } from "./telegram.js";
+import { AuditAnchorService, type ContractAuditAnchor } from "./anchor.js";
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const MINUTE_NS = 60n * 1_000_000_000n;
@@ -61,6 +62,7 @@ export interface ApiDeps {
   headHeight: () => number | null;
   telegramClient?: TelegramClient;
   dispatcher?: TelegramDispatcher;
+  anchorService?: AuditAnchorService;
 }
 
 /** A tiny fixed-window limiter per IP for the demo endpoints. */
@@ -108,6 +110,24 @@ export function buildApi(d: ApiDeps): FastifyInstance {
   const docs = () => (catalog ??= loadCatalog(cfg.documentsDir));
   const notFound = (r: FastifyReply, what: string) => r.code(404).send({ error: `${what} not found` });
   const id = (s: string) => (/^\d{1,12}$/.test(s) ? Number(s) : null);
+
+  const anchorService =
+    d.anchorService ??
+    new AuditAnchorService({
+      store: d.store,
+      client: d.view,
+      contractId: cfg.contractId,
+      mode: cfg.mode,
+      signerAccount:
+        cfg.anchor?.signerAccountId && cfg.anchor?.signerKey
+          ? new Account(cfg.anchor.signerAccountId, d.provider, cfg.anchor.signerKey as KeyPairString)
+          : cfg.demo?.client
+          ? new Account(cfg.demo.client.accountId, d.provider, cfg.demo.client.privateKey as KeyPairString)
+          : undefined,
+      logger: (level, msg, f) => {
+        console.log(JSON.stringify({ t: new Date().toISOString(), service: "anchor", level, msg, ...f }));
+      },
+    });
 
   app.get("/", async () => ({
     ok: true,
@@ -176,21 +196,112 @@ export function buildApi(d: ApiDeps): FastifyInstance {
     };
   });
 
-  app.post<{ Body: { seq?: number; root_hash?: string; tx_hash?: string } }>("/api/ledger/anchor", async (req, reply) => {
+  app.get("/api/ledger/anchor/status", async () => {
+    const head = store.getAuditHead();
+    const localAnchor = store.getLatestAnchor();
+    let onchainAnchor: ContractAuditAnchor | null = null;
+    try {
+      onchainAnchor = await anchorService.queryContractAnchor();
+    } catch {
+      onchainAnchor = null;
+    }
+    const localVerification = head ? store.verifyAuditChain(1, head.seq) : { valid: true, recordsChecked: 0 };
+    const synchronized =
+      Boolean(
+        head &&
+          onchainAnchor &&
+          onchainAnchor.sequence === head.seq &&
+          onchainAnchor.rootHash.toLowerCase() === head.record_hash.toLowerCase(),
+      );
+
+    return {
+      network: cfg.mode,
+      contract_id: cfg.contractId,
+      latest_local_head: head ? { seq: head.seq, record_hash: head.record_hash } : null,
+      local_verified: localVerification.valid,
+      latest_local_anchor: localAnchor,
+      onchain_anchor: onchainAnchor,
+      synchronized,
+    };
+  });
+
+  app.post<{
+    Body: {
+      seq?: number;
+      root_hash?: string;
+      tx_hash?: string;
+      mode?: "simulated" | "onchain";
+    };
+  }>("/api/ledger/anchor", async (req, reply) => {
     const head = store.getAuditHead();
     if (!head) return reply.code(400).send({ error: "no audit records to anchor" });
+
+    const requestedMode = req.body?.mode ?? "simulated";
+
+    // On-chain submission requires authorization
+    if (requestedMode === "onchain") {
+      const authHeader = req.headers.authorization;
+      const adminToken = cfg.anchor?.adminToken ?? cfg.workerAdmin?.token;
+      const isAuthorized =
+        (adminToken && authHeader === `Bearer ${adminToken}`) ||
+        (cfg.mode === "sandbox" && cfg.demo?.client);
+
+      if (!isAuthorized) {
+        return reply.code(401).send({
+          error: "Unauthorized: admin token required for on-chain anchoring",
+        });
+      }
+
+      try {
+        const result = await anchorService.anchor({
+          targetSeq: req.body?.seq,
+          mode: "onchain",
+        });
+        return {
+          ok: true,
+          state: result.state,
+          anchored: {
+            id: result.id,
+            seq: result.sequence,
+            root_hash: result.rootHash,
+            tx_hash: result.txHash,
+            anchored_at: result.finalizedAt ?? Date.now(),
+            finalized: result.finalized,
+            reconciled: result.reconciled ?? false,
+            contract_anchor: result.contractAnchor ?? null,
+          },
+        };
+      } catch (err: unknown) {
+        return reply.code(400).send({
+          ok: false,
+          state: "failed",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // Local simulation mode (explicitly distinct from on-chain verification)
     const seq = req.body?.seq ?? head.seq;
     const rootHash = req.body?.root_hash ?? head.record_hash;
-    const txHash = req.body?.tx_hash ?? `tx-${Date.now().toString(16)}`;
+    const txHash = req.body?.tx_hash ?? `simulated-tx-${Date.now().toString(16)}`;
     const now = Date.now();
-    store.recordAnchor(seq, rootHash, txHash, now);
+    const anchorId = store.recordAnchor(seq, rootHash, txHash, now, {
+      status: "locally_anchored",
+      network: cfg.mode,
+      contractId: cfg.contractId,
+    });
     return {
       ok: true,
+      state: "locally_anchored",
+      simulated: true,
       anchored: {
+        id: anchorId,
         seq,
         root_hash: rootHash,
         tx_hash: txHash,
         anchored_at: now,
+        finalized: false,
+        status: "locally_anchored",
       },
     };
   });

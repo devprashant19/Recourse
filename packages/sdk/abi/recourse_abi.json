@@ -7,7 +7,7 @@
       "compiler": "rustc 1.95.0",
       "builder": "cargo-near cargo-near-build 0.11.5"
     },
-    "wasm_hash": "Hvig58WhEMTpSctWnAKqpTZQuG83JhjudSGegTm34MSr"
+    "wasm_hash": "4zsL9nm2UjxHouMZ3bwyAdi9CVv5htNoDZ6yBgCZ7Y5n"
   },
   "body": {
     "functions": [
@@ -56,6 +56,30 @@
               "type_schema": {
                 "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
                 "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "anchor_audit_head",
+        "doc": " Anchors the latest audit ledger sequence and hash on chain.\n Callable by authorized keepers or the contract owner.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "sequence",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "hash",
+              "type_schema": {
+                "$ref": "#/definitions/HexBytes32"
               }
             }
           ]
@@ -649,6 +673,34 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      {
+        "name": "get_audit_anchor",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": [
+              {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              },
+              {
+                "$ref": "#/definitions/HexBytes32"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "maxItems": 3,
+            "minItems": 3
           }
         }
       },
@@ -1495,6 +1547,35 @@
           "serialization_type": "json",
           "type_schema": {
             "$ref": "#/definitions/Bond"
+          }
+        }
+      },
+      {
+        "name": "prune_used_quotes",
+        "doc": " Prunes expired used quotes and deposit addresses older than 180 seconds.\n Callable by anyone. Returns the number of entries pruned.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "limit",
+              "type_schema": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint32",
+                "minimum": 0.0
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
           }
         }
       },

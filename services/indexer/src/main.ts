@@ -7,10 +7,11 @@
  * `.data/sandbox-*.json` (left by `pnpm demo -- --keep`), so it needs no env.
  */
 
-import { JsonRpcProvider } from "near-api-js";
+import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
 
 import { RecourseClient } from "@recourse/sdk";
 
+import { AuditAnchorService, AuditAnchorWorker } from "./anchor.js";
 import { buildApi } from "./api.js";
 import { loadIndexerConfig } from "./config.js";
 import { EventStore } from "./db.js";
@@ -35,6 +36,29 @@ async function main() {
     log: (msg, f) => log("info", msg, f),
   });
   let head: number | null = null;
+  const signerAccount =
+    cfg.anchor?.signerAccountId && cfg.anchor?.signerKey
+      ? new Account(cfg.anchor.signerAccountId, provider, cfg.anchor.signerKey as KeyPairString)
+      : cfg.demo?.client
+      ? new Account(cfg.demo.client.accountId, provider, cfg.demo.client.privateKey as KeyPairString)
+      : undefined;
+
+  const anchorService = new AuditAnchorService({
+    store,
+    client: view,
+    contractId: cfg.contractId,
+    mode: cfg.mode,
+    signerAccount,
+    logger: (level, msg, f) => log(level, msg, f),
+  });
+
+  let anchorWorker: AuditAnchorWorker | undefined;
+  if (cfg.anchor.mode === "auto") {
+    anchorWorker = new AuditAnchorWorker(anchorService, cfg.anchor.intervalMs, (level, msg, f) => log(level, msg, f));
+    anchorWorker.start();
+    log("info", "audit anchor worker started", { mode: cfg.anchor.mode, intervalMs: cfg.anchor.intervalMs });
+  }
+
   const telegramClient = createTelegramClient(cfg.telegram);
   let dispatcher: TelegramDispatcher | undefined;
   if (telegramClient) {
@@ -59,6 +83,7 @@ async function main() {
     headHeight: () => head,
     telegramClient: telegramClient ?? undefined,
     dispatcher,
+    anchorService,
   });
   await app.listen({ port: cfg.port, host: cfg.host });
   log("info", "indexer listening", { url: `http://${cfg.host}:${cfg.port}`, mode: cfg.mode, contract: cfg.contractId, watch: cfg.watchAccounts, demo: cfg.demo !== null });
@@ -66,6 +91,10 @@ async function main() {
   let stopped = false;
   const stop = async () => {
     stopped = true;
+    if (anchorWorker) {
+      await anchorWorker.stop();
+      log("info", "audit anchor worker stopped");
+    }
     if (dispatcher) {
       await dispatcher.stop();
       log("info", "telegram dispatcher stopped");

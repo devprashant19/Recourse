@@ -14,6 +14,7 @@ import type {
   AccountId,
   Agent,
   AgentScore,
+  AuditAnchor,
   Bond,
   Claim,
   ClaimId,
@@ -95,8 +96,10 @@ export const METHODS = {
   get_open_round: { kind: "view", args: ["agent"] },
   get_pending_limit: { kind: "view", args: ["vault"] },
   get_bid_capacity: { kind: "view", args: ["vault", "agent"] },
+  get_audit_anchor: { kind: "view", args: [] },
   // calls
   new: { kind: "call", args: ["config", "owner"] },
+  anchor_audit_head: { kind: "call", args: ["sequence", "hash"] },
   pause: { kind: "call", args: [] },
   unpause: { kind: "call", args: [] },
   add_arbiter: { kind: "call", args: ["account_id"] },
@@ -211,6 +214,7 @@ export class RecourseClient {
     this.view<[AccountId, Vault][]>("list_vaults", { from_index: from_index ?? null, limit: limit ?? null });
   isPaused = () => this.view<boolean>("is_paused");
   solvency = () => this.view<Solvency>("solvency");
+  getAuditAnchor = () => this.view<AuditAnchor | null>("get_audit_anchor");
 
   // ----- owner / keeper -------------------------------------------------
 
@@ -218,6 +222,8 @@ export class RecourseClient {
   unpause = () => this.call<void>("unpause");
   addArbiter = (account_id: AccountId) => this.call<void>("add_arbiter", { account_id });
   addKeeper = (account_id: AccountId) => this.call<void>("add_keeper", { account_id });
+  anchorAuditHead = (sequence: number, hash: Hash) =>
+    this.call<void>("anchor_audit_head", { sequence, hash });
   registerSigner = (address: EvmAddress, model_id: string, attestation_hash: Hash, kind: SignatureKind) =>
     this.call<Signer>("register_signer", { address, model_id, attestation_hash, kind });
 

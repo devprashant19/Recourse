@@ -16,6 +16,8 @@ export type U128 = string;
 export type U64 = string;
 /** 32-byte sha256 digest, lowercase hex. */
 export type Hash = string;
+/** On-chain audit anchor: [sequence, hash, anchored_at_nanos] */
+export type AuditAnchor = [number, Hash, U64];
 /** 20-byte EVM address, lowercase hex. */
 export type EvmAddress = string;
 /** 65-byte r || s || v signature, hex. */
