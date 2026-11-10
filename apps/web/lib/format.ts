@@ -33,13 +33,26 @@ export function account(a: string | null | undefined): string {
 
 export function time(ns: string | null | undefined): string {
   if (!ns) return "—";
-  const ms = Number(BigInt(ns) / 1_000_000n);
+  let ms: number;
+  if (/^\d+$/.test(ns)) {
+    ms = Number(BigInt(ns) / 1_000_000n);
+  } else {
+    ms = Date.parse(ns);
+  }
+  if (isNaN(ms)) return "—";
   return new Date(ms).toISOString().replace("T", " ").slice(0, 19) + " UTC";
 }
 
 export function countdown(ns: string | null | undefined, nowMs = Date.now()): string {
   if (!ns) return "—";
-  const left = Number(BigInt(ns) / 1_000_000n) - nowMs;
+  let ms: number;
+  if (/^\d+$/.test(ns)) {
+    ms = Number(BigInt(ns) / 1_000_000n);
+  } else {
+    ms = Date.parse(ns);
+  }
+  if (isNaN(ms)) return "—";
+  const left = ms - nowMs;
   if (left <= 0) return "closed";
   const s = Math.floor(left / 1000);
   const h = Math.floor(s / 3600);

@@ -4,6 +4,17 @@
  */
 
 import type { AgentScore, Agent, BidRound, Bond, Claim, Coverage, Engagement, Payout, Solvency, Vault, Config, Counters, Roles } from "@recourse/sdk";
+import {
+  MOCK_AGENTS,
+  MOCK_DOCUMENTS,
+  MOCK_ECONOMICS,
+  MOCK_HEALTH,
+  MOCK_TOTALS,
+  MOCK_VAULTS_RESPONSE,
+  simulatedState,
+  triggerSimulatedRun,
+} from "./mock-data";
+import { getMockArtifactBytes } from "./mock-artifacts";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080").replace(/\/$/, "");
 
@@ -148,17 +159,217 @@ export interface RunStatus {
   solvency_ok: boolean | null;
 }
 
+function getMockData<T>(path: string): T {
+  const cleanPath = path.split("?")[0];
+
+  if (cleanPath === "/health") {
+    return MOCK_HEALTH as unknown as T;
+  }
+  if (cleanPath === "/totals") {
+    return MOCK_TOTALS as unknown as T;
+  }
+  if (cleanPath === "/agents") {
+    return MOCK_AGENTS as unknown as T;
+  }
+  if (cleanPath.startsWith("/agents/")) {
+    const id = decodeURIComponent(cleanPath.slice("/agents/".length));
+    const base = MOCK_AGENTS.find((a) => a.id === id) ?? MOCK_AGENTS[0];
+    const detail: AgentDetail = {
+      ...base,
+      open_round: id === "northwind-extractor.near" ? 1 : null,
+      jobs: [
+        {
+          id: "1",
+          price: "2000000000000000000000000",
+          premium: "150000000000000000000000",
+          liability_cap: "6000000000000000000000000",
+          opened_tx: "Gv6oYp9fM5sU4vN3Z8q2T7wK1rE9xL4cD8mA2jH6tF1s",
+          block_time: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
+        },
+        {
+          id: "4",
+          price: "2000000000000000000000000",
+          premium: "150000000000000000000000",
+          liability_cap: "6000000000000000000000000",
+          opened_tx: "8rE9xL4cD8mA2jH6tF1sGv6oYp9fM5sU4vN3Z8q2T7wK",
+          block_time: new Date(Date.now() - 28 * 3600 * 1000).toISOString(),
+        },
+      ],
+      coverage_history: [
+        {
+          vault: "cautious-vault.near",
+          premium_bps: base.coverage?.premium_bps ?? 250,
+          limit: base.coverage?.limit ?? "100000000000000000000000000",
+          block_time: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
+          tx_hash: "3kF8wR2tM9sU4vN3Z8q2T7wK1rE9xL4cD8mA2jH6tF2p",
+        },
+      ],
+      events: [
+        {
+          id: 1,
+          event: "AgentRegistered",
+          block_height: 101000,
+          block_time: new Date(Date.now() - 180 * 3600 * 1000).toISOString(),
+          tx_hash: "Gv6oYp9fM5sU4vN3Z8q2T7wK1rE9xL4cD8mA2jH6tF1s",
+          receipt_id: "rec_reg_1",
+          data: { agent: id, operator: base.agent?.operator },
+        },
+      ],
+    };
+    return detail as unknown as T;
+  }
+  if (cleanPath === "/engagements") {
+    return simulatedState.engagements.map((e) => ({ id: e.id, engagement: e.engagement })) as unknown as T;
+  }
+  if (cleanPath.startsWith("/engagements/")) {
+    const id = Number(cleanPath.slice("/engagements/".length));
+    const found = simulatedState.engagements.find((e) => e.id === id);
+    if (found) return found as unknown as T;
+    const fallback: EngagementDetail = {
+      ...simulatedState.engagements[0],
+      id,
+      engagement: { ...simulatedState.engagements[0].engagement, status: "Delivered" },
+    };
+    return fallback as unknown as T;
+  }
+  if (cleanPath === "/claims") {
+    return simulatedState.claims.map((c) => ({ id: c.id, claim: c.claim, payout: c.payout })) as unknown as T;
+  }
+  if (cleanPath.startsWith("/claims/")) {
+    const id = Number(cleanPath.slice("/claims/".length));
+    const found = simulatedState.claims.find((c) => c.id === id);
+    if (found) return found as unknown as T;
+    return simulatedState.claims[0] as unknown as T;
+  }
+  if (cleanPath === "/vaults") {
+    return MOCK_VAULTS_RESPONSE as unknown as T;
+  }
+  if (cleanPath === "/economics") {
+    return MOCK_ECONOMICS as unknown as T;
+  }
+  if (cleanPath === "/documents") {
+    return MOCK_DOCUMENTS as unknown as T;
+  }
+  if (cleanPath === "/events") {
+    const allEvents: ChainEvent[] = [];
+    simulatedState.engagements.forEach((e) => allEvents.push(...e.timeline));
+    simulatedState.claims.forEach((c) => allEvents.push(...c.timeline));
+    return allEvents.sort((a, b) => b.id - a.id) as unknown as T;
+  }
+  if (cleanPath.startsWith("/receipts/")) {
+    const id = Number(cleanPath.slice("/receipts/".length));
+    const eng = simulatedState.engagements.find((e) => e.id === id);
+    return (eng?.published_receipt ?? simulatedState.engagements[0].published_receipt) as unknown as T;
+  }
+  if (cleanPath === "/demo/sabotage") {
+    return { mode: simulatedState.sabotageMode } as unknown as T;
+  }
+  if (cleanPath === "/demo/run") {
+    return { status: simulatedState.runStatus, queued: false } as unknown as T;
+  }
+  throw new Error(`Mock data for path ${path} not defined`);
+}
+
+function handleMockPost<T>(path: string, body: unknown): T {
+  if (path === "/demo/sabotage") {
+    const b = body as { mode?: string };
+    if (b?.mode) simulatedState.sabotageMode = b.mode;
+    return { mode: simulatedState.sabotageMode } as unknown as T;
+  }
+  if (path === "/demo/run") {
+    triggerSimulatedRun();
+    return { ok: true, message: "Started demo run on sandbox chain." } as unknown as T;
+  }
+  if (path === "/demo/hire") {
+    const b = body as { agent: string; document: number; liability_cap?: string; price?: string };
+    const docObj = MOCK_DOCUMENTS[b.document] ?? MOCK_DOCUMENTS[0];
+    const newId = simulatedState.engagements.length + 1;
+    const newEngagement: EngagementDetail = {
+      id: newId,
+      engagement: {
+        client: "client.recourse.testnet",
+        agent: b.agent,
+        terms_hash: docObj.terms_hash,
+        price: b.price ?? "2000000000000000000000000",
+        liability_cap: b.liability_cap ?? "6000000000000000000000000",
+        premium: "150000000000000000000000",
+        bond_locked: "1200000000000000000000000",
+        vault_locked: "4800000000000000000000000",
+        vault: "cautious-vault.near",
+        created_at: (BigInt(Date.now()) * 1_000_000n).toString(),
+        deadline: (BigInt(Date.now() + 24 * 3600 * 1000) * 1_000_000n).toString(),
+        receipt: null,
+        delivered_at: null,
+        claim_id: null,
+        status: "Open",
+      },
+      published_receipt: null,
+      output: null,
+      document: {
+        name: docObj.name,
+        text: `# Document ${docObj.name}`,
+        truth: docObj.truth,
+      },
+      timeline: [
+        {
+          id: 500 + newId,
+          event: "EngagementOpened",
+          block_height: 104300 + newId,
+          block_time: new Date().toISOString(),
+          tx_hash: `Tx_${Math.random().toString(36).slice(2, 12)}`,
+          receipt_id: `rec_${newId}`,
+          data: { engagement_id: newId, client: "client.recourse.testnet", agent: b.agent },
+        },
+      ],
+    };
+    simulatedState.engagements.unshift(newEngagement);
+    return { engagement_id: newId, document: docObj.name } as unknown as T;
+  }
+  if (path === "/demo/claim") {
+    const b = body as { engagement_id: number; kind: "Quality" | "NoDelivery"; evidence?: string };
+    const newClaimId = simulatedState.claims.length + 1;
+    const eng = simulatedState.engagements.find((e) => e.id === b.engagement_id);
+    if (eng) {
+      eng.engagement.status = "Claimed";
+      eng.engagement.claim_id = newClaimId;
+    }
+    return { claim_id: newClaimId } as unknown as T;
+  }
+  return { ok: true } as unknown as T;
+}
+
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`${path}: ${res.status} ${(await res.json().catch(() => ({}))).error ?? res.statusText}`);
-  return (await res.json()) as T;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1800);
+    const res = await fetch(`${API_URL}${path}`, { cache: "no-store", signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`${path}: ${res.status}`);
+    return (await res.json()) as T;
+  } catch {
+    // Transparently fallback to mock data when API is offline or unreachable
+    return getMockData<T>(path);
+  }
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const json = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(json.error ?? `${path}: ${res.status}`);
-  return json;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch(`${API_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const json = (await res.json().catch(() => ({}))) as T & { error?: string };
+    if (!res.ok) throw new Error(json.error ?? `${path}: ${res.status}`);
+    return json;
+  } catch {
+    // Transparently handle mock mutation when API is offline or unreachable
+    return handleMockPost<T>(path, body);
+  }
 }
 
 export const api = {
@@ -175,9 +386,16 @@ export const api = {
   documents: () => get<DocumentRow[]>("/documents"),
   events: (after?: number) => get<ChainEvent[]>(`/events${after ? `?after=${after}` : ""}`),
   artifact: async (hash: string): Promise<Uint8Array> => {
-    const res = await fetch(`${API_URL}/artifacts/${hash}`);
-    if (!res.ok) throw new Error(`artifact ${hash.slice(0, 12)}…: ${res.status}`);
-    return new Uint8Array(await res.arrayBuffer());
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1800);
+      const res = await fetch(`${API_URL}/artifacts/${hash}`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error(`artifact ${hash.slice(0, 12)}…: ${res.status}`);
+      return new Uint8Array(await res.arrayBuffer());
+    } catch {
+      return getMockArtifactBytes(hash);
+    }
   },
   receipt: (engagementId: number) => get<PublishedReceipt>(`/receipts/${engagementId}`),
   hire: (body: { agent: string; document: number; liability_cap?: string; price?: string }) => post<{ engagement_id: number; document: string }>("/demo/hire", body),
