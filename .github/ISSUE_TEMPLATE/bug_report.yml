@@ -70,7 +70,7 @@ body:
       description: Please provide your operating system and toolchain versions.
       value: |
         - OS: [e.g. Linux / macOS / Windows / WSL2]
-        - Node.js version: [e.g. 20.18.1]
+        - Node.js version: [e.g. 22.23.3]
         - pnpm version: [e.g. 9.12.3]
         - Rust version: [e.g. 1.95.0, if applicable]
     validations:

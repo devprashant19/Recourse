@@ -191,6 +191,16 @@ Before submitting your PR, ensure:
 3. You have not committed any private keys, `.env` files with secrets, or temporary build artifacts.
 4. The PR description clearly explains **what** changed, **why**, and **how** it was tested.
 
+### Issue & Pull Request Templates
+When opening an issue or pull request, GitHub will prompt you with our standardized templates:
+- **Bug Reports:** Detailed reproduction steps, environment details, and relevant logs.
+- **Feature Requests:** Proposed solutions, target components, and alternatives considered.
+- **Documentation Improvements:** Specific guide/file needing clarification or enhancement.
+- **Pull Requests:** A structured checklist linking related issues and confirming local test runs.
+
+### Automated PR Triage
+Recourse runs an automated, lightweight PR labeler (`.github/workflows/labeler.yml`). When you open or update a PR, it automatically inspects modified file paths and applies area labels (`contracts`, `frontend`, `backend`, `documentation`, `ci`, `dependencies`) to help maintainers review changes efficiently.
+
 ---
 
 ## 8. Automated Dependency Management

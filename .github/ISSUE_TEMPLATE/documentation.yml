@@ -1,0 +1,47 @@
+name: Documentation Improvement
+description: Suggest improvements, report inaccuracies, or request new documentation for Recourse
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve the Recourse documentation! Clear documentation makes the project better for all developers and contributors.
+
+  - type: textarea
+    id: page
+    attributes:
+      label: Documentation Page or File
+      description: Which file, guide, or section needs improvement?
+      placeholder: e.g. README.md, CONTRIBUTING.md, or docs/architecture.md
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Current Issue or Missing Information
+      description: What is unclear, incorrect, outdated, or missing?
+      placeholder: Describe the documentation issue...
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Improvement
+      description: How should the documentation be updated or reworded?
+      placeholder: Provide suggested text, code examples, or explanations...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues to ensure this documentation request has not already been opened.
+          required: true
+        - label: I am willing to submit a pull request with these documentation improvements.
+          required: false
+

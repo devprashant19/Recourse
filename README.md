@@ -148,6 +148,7 @@ Full list of what is *not* defended against: [`THREAT_MODEL.md`](THREAT_MODEL.md
 | [`SECURITY.md`](SECURITY.md) | Vulnerability disclosure policy, scope, and private advisory reporting |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Contributor Covenant code of conduct and community guidelines |
 | [`SUPPORT.md`](SUPPORT.md) | Getting help, reporting bugs, feature requests, and discussions |
+| [`CHANGELOG.md`](CHANGELOG.md) | Project release history, versioning policy, and release runbook |
 
 ## Repository layout
 

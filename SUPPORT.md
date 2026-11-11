@@ -22,7 +22,12 @@ If you have suggestions for protocol improvements, new SDK features, or develope
 - Open a new issue using the **[Feature Request Template](https://github.com/devprashant19/Recourse/issues/new?template=feature_request.yml)**.
 - Clearly describe the problem you want to solve and your proposed solution.
 
-### 4. Security Vulnerabilities
+### 4. Documentation Improvements
+If you spot an outdated guide, unclear instructions, or missing documentation:
+- Open a new issue using the **[Documentation Improvement Template](https://github.com/devprashant19/Recourse/issues/new?template=documentation.yml)**.
+- Describe what is unclear or missing and propose improvements.
+
+### 5. Security Vulnerabilities
 If you discover a security vulnerability in smart contracts, cryptographic verification logic, or services:
 - **Do NOT open a public issue.**
 - Submit a private report through [GitHub Security Advisories](https://github.com/devprashant19/Recourse/security/advisories/new).

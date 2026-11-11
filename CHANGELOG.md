@@ -1,0 +1,77 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [Unreleased]
+
+### Added
+- Core protocol implementation: trust-minimized, intent-based dispute resolution and financial accountability for AI agents on NEAR Protocol.
+- NEAR smart contracts (`contracts/recourse`, `contracts/test-token`) supporting collateral bonds, underwriter vaults, on-chain `ecrecover` receipt verification, slashing, Sputnik DAO appeals, and 1Click multichain intent payouts.
+- Cryptographic receipt verification engine (`packages/receipts`) supporting Intel TDX attestation reports and NEAR AI Cloud TEE signatures.
+- TypeScript SDK and package suite (`packages/sdk`, `packages/intents`, `packages/adapters`, `packages/jobs`, `packages/config`).
+- Distributed off-chain keeper and arbiter services (`services/keeper`, `services/arbiter`, `services/worker-agent`, `services/underwriters`, `services/indexer`).
+- Full-stack web user interface built with Next.js (`apps/web`).
+- End-to-end integration demo and compliance judge harness (`scripts/judge.ts`).
+- Standardized GitHub issue templates for bug reports, feature requests, and documentation improvements (`.github/ISSUE_TEMPLATE/`).
+- Standardized Pull Request template with testing checklist and security verifications (`.github/PULL_REQUEST_TEMPLATE.md`).
+- Automated path-based PR labeler workflow (`.github/workflows/labeler.yml` and `.github/labeler.yml`).
+- Repository governance guidelines, Code of Conduct, and Support documentation (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SUPPORT.md`).
+- Automated dependency monitoring and update grouping via GitHub Dependabot (`.github/dependabot.yml`).
+- Continuous integration workflows covering linting, typechecking, contract testing, service integration, judge verification, and secret scanning (`.github/workflows/ci.yml`).
+- Automated security analysis with GitHub CodeQL (`.github/workflows/codeql.yml`) and PR dependency review (`.github/workflows/dependency-review.yml`).
+- Responsible vulnerability disclosure policy and private reporting guide (`SECURITY.md`).
+
+### Changed
+- Node.js runtime baseline standardized to Node >= 22 (`22.23.3` in `.nvmrc`) for ESM cookie compatibility.
+- Rust compiler toolchain pinned to `1.95.0` with immutable action SHA pinning.
+- Standardized GitHub repository labels covering priorities, issue types, components, and triage states.
+
+### Fixed
+- Fixed ESM dynamic import incompatibility with `cookie@2.0.2` in backend service tests.
+- Hardened web routes against unseeded blockchain and RPC rate limits.
+
+---
+
+## Release Process & Versioning Policy
+
+### Semantic Versioning
+Recourse adheres to [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html):
+- **MAJOR** (`X.0.0`): Incompatible contract ABI changes, storage layout migrations, or non-backwards-compatible API updates.
+- **MINOR** (`0.X.0`): New capabilities, non-breaking contract additions, or new service endpoints added in a backwards-compatible manner.
+- **PATCH** (`0.0.X`): Backwards-compatible bug fixes, security remediations, and documentation/governance updates.
+
+### Monorepo Version Synchronization
+All workspace packages (`packages/*`, `services/*`, `apps/web`) and NEAR smart contracts (`contracts/recourse`, `contracts/test-token`) track a shared version baseline (`0.1.0` in the current pre-release phase). When cutting a release, version bumps are coordinated across the root `package.json`, workspace `package.json` manifests, and contract `Cargo.toml` files.
+
+### Release Procedure (Runbook)
+1. **Local Pre-flight Verification**:
+   ```bash
+   pnpm install --frozen-lockfile
+   pnpm check:all
+   npm run judge
+   ```
+2. **Update Documentation**:
+   - Move relevant items from `[Unreleased]` into a new release section: `## [X.Y.Z] - YYYY-MM-DD`.
+   - Update version numbers across root `package.json`, workspace packages, and `contracts/*/Cargo.toml`.
+3. **Commit & Tag**:
+   ```bash
+   git add CHANGELOG.md package.json packages/*/package.json services/*/package.json apps/web/package.json contracts/*/Cargo.toml
+   git commit -m "chore(release): vX.Y.Z"
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   ```
+4. **Push Release Tag**:
+   ```bash
+   git push origin main
+   git push origin vX.Y.Z
+   ```
+5. **Publish GitHub Release**:
+   - Draft a new GitHub Release corresponding to tag `vX.Y.Z`.
+   - Paste the changelog section for that version into the release notes.
+
+> [!NOTE]
+> Releases in Recourse are immutable Git tags and GitHub Releases. There is no automated mainnet contract deployment or npm package publishing triggered by release tags; deployments require explicit maintainer multi-party verification.

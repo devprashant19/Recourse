@@ -1,0 +1,42 @@
+# GitHub Actions Labeler Configuration (v5)
+# Automatically categorizes Pull Requests based on the paths of modified files.
+
+contracts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'contracts/**'
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'apps/web/**'
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'services/**'
+          - 'packages/**'
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - 'docs/**'
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'pnpm-lock.yaml'
+          - 'Cargo.toml'
+          - 'Cargo.lock'
+          - '**/package.json'
+          - '**/pnpm-lock.yaml'
+          - '**/Cargo.toml'
+          - '**/Cargo.lock'
+
