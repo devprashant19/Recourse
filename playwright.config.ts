@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 /**
  * The judge's click path, one test per demo scenario, against a running stack:
  *
+ *   pnpm test:e2e:install          # once per machine: the browser Playwright pins
  *   docker compose up              # or: pnpm hosted  +  pnpm web
  *   pnpm test:e2e
  *

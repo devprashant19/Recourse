@@ -1,4 +1,4 @@
-# A clean room for the judge: Node 20 + pnpm 9 + Rust 1.95 + cargo-near on
+# A clean room for the judge: Node 22 + pnpm 9 + Rust 1.95 + cargo-near on
 # Linux, with the repository copied in (not mounted), so `pnpm demo` and
 # `npm run judge` run exactly as they would on a fresh clone.
 #
@@ -20,9 +20,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
     RECOURSE_MODE=sandbox \
     CI=true
 
+# Node's major comes from .nvmrc, so the clean room can't drift from the pin the
+# judge's first check compares against.
+COPY .nvmrc /tmp/.nvmrc
+
 RUN apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends curl ca-certificates gnupg tar git build-essential pkg-config libssl-dev python3 xz-utils \
- && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && curl -fsSL "https://deb.nodesource.com/setup_$(sed -nE 's/^v?([0-9]+).*/\1/p' /tmp/.nvmrc).x" | bash - \
  && apt-get install -y -qq --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/* \
  && node --version \

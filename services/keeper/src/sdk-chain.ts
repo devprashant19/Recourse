@@ -1,9 +1,10 @@
 /** The keeper's chain slice over `@recourse/sdk`. */
 
-import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
+import { JsonRpcProvider } from "near-api-js";
 
 import {
   RecourseClient,
+  signerAccount,
   type Claim,
   type Config,
   type EvmAddress,
@@ -30,7 +31,7 @@ export class SdkKeeperChain implements KeeperChain {
     this.client = new RecourseClient(
       p.contractId,
       this.provider,
-      new Account(p.keeperAccountId, this.provider, p.keeperKey as KeyPairString),
+      signerAccount(p.keeperAccountId, this.provider, p.keeperKey),
     );
   }
 

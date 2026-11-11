@@ -11,9 +11,9 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { Account, KeyPair, actions, type KeyPairString } from "near-api-js";
+import { Account, KeyPair, actions } from "near-api-js";
 
-import { RecourseClient, type ReceiptInput } from "../../packages/sdk/src/index.js";
+import { RecourseClient, signerAccount, type ReceiptInput } from "../../packages/sdk/src/index.js";
 import { DATA_DIR, ONE_NEAR, ownerAccount, type SeededAccount } from "../../scripts/lib/near.js";
 import { cast, expectRevert as scenarioExpectRevert, signedReceipt, type Cast } from "../../scripts/lib/scenario.js";
 
@@ -59,7 +59,7 @@ export async function freshAccount(c: Cast, label: string, near: bigint): Promis
     receiverId: accountId,
     actions: [actions.createAccount(), actions.transfer(near * ONE_NEAR), actions.addFullAccessKey(kp.getPublicKey())],
   });
-  const account = new Account(accountId, c.p, kp.toString() as KeyPairString);
+  const account = signerAccount(accountId, c.p, kp.toString());
   return { accountId, privateKey: kp.toString(), account, client: new RecourseClient(c.contractId, c.p, account) };
 }
 

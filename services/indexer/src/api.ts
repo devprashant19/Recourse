@@ -29,13 +29,14 @@ import { join } from "node:path";
 
 import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
-import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
+import { JsonRpcProvider } from "near-api-js";
 
 import { loadCatalog, type Catalog } from "@recourse/jobs/catalog";
 import { termsHash } from "@recourse/jobs";
 import { ARTIFACT_URI_PREFIX, checkArtifact, sha256Hex } from "@recourse/receipts";
 import {
   RecourseClient,
+  signerAccount,
   type Agent,
   type AgentScore,
   type BidRound,
@@ -133,9 +134,9 @@ export function buildApi(d: ApiDeps): FastifyInstance {
       mode: cfg.mode,
       signerAccount:
         cfg.anchor?.signerAccountId && cfg.anchor?.signerKey
-          ? new Account(cfg.anchor.signerAccountId, d.provider, cfg.anchor.signerKey as KeyPairString)
+          ? signerAccount(cfg.anchor.signerAccountId, d.provider, cfg.anchor.signerKey)
           : cfg.demo?.client
-          ? new Account(cfg.demo.client.accountId, d.provider, cfg.demo.client.privateKey as KeyPairString)
+          ? signerAccount(cfg.demo.client.accountId, d.provider, cfg.demo.client.privateKey)
           : undefined,
       logger: (level, msg, f) => {
         console.log(JSON.stringify({ t: new Date().toISOString(), service: "anchor", level, msg, ...f }));
@@ -894,7 +895,7 @@ export function buildApi(d: ApiDeps): FastifyInstance {
   if (cfg.demo && cfg.mode !== "mainnet") {
     const demo = cfg.demo;
     const allow = limiter(10, 60_000);
-    const client = new RecourseClient(cfg.contractId, d.provider, new Account(demo.client.accountId, d.provider, demo.client.privateKey as KeyPairString));
+    const client = new RecourseClient(cfg.contractId, d.provider, signerAccount(demo.client.accountId, d.provider, demo.client.privateKey));
     const guard = (ip: string, reply: FastifyReply) => {
       if (allow(ip)) return true;
       void reply.code(429).send({ error: "slow down: at most 10 demo actions a minute" });

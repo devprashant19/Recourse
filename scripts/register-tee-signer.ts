@@ -11,11 +11,10 @@
  * the report itself is written to .data/<network>-attestation-<model>.json.
  */
 
-import { Account, type KeyPairString } from "near-api-js";
 
 import { DcapQuoteVerifier } from "../packages/receipts/src/dcap.js";
 import { fetchAttestation, LiveNearAiClient, verifyAttestation } from "../packages/receipts/src/index.js";
-import { RecourseClient } from "../packages/sdk/src/index.js";
+import { RecourseClient, signerAccount } from "../packages/sdk/src/index.js";
 import { arg, network, provider, save } from "./lib/near.js";
 
 async function main() {
@@ -38,7 +37,7 @@ async function main() {
   save(net, `attestation-${model.replace(/[^\w.-]/g, "_")}`, { nonce: fetched.nonce, report_hash: fetched.report_hash, report: new TextDecoder().decode(fetched.bytes), checks: v.checks });
 
   const p = provider(net);
-  const client = new RecourseClient(contractId, p, new Account(who, p, key as KeyPairString));
+  const client = new RecourseClient(contractId, p, signerAccount(who, p, key));
   for (const address of v.verified_signers) {
     const existing = await client.getSigner(address.slice(2));
     if (existing) {

@@ -13,8 +13,9 @@
  * Built in: Phase 2. Spec: phases/phase-02-receipts-worker-arbiter.md section 1.
  */
 
-import { Account, KeyPair, actions, type KeyPairString } from "near-api-js";
+import { KeyPair, actions } from "near-api-js";
 
+import { signerAccount } from "../packages/sdk/src/index.js";
 import { network, provider, save } from "./lib/near.js";
 import { FC_ALLOWANCE_YOCTO, SERVICE_METHODS, type Service } from "./lib/service-keys.js";
 
@@ -34,7 +35,7 @@ async function main() {
     }
     const kp = KeyPair.fromRandom("ed25519");
     const methods = SERVICE_METHODS[service];
-    await new Account(accountId, p, fullKey as KeyPairString).signAndSendTransaction({
+    await signerAccount(accountId, p, fullKey).signAndSendTransaction({
       receiverId: accountId,
       actions: [actions.addFunctionCallAccessKey(kp.getPublicKey(), contractId, [...methods], FC_ALLOWANCE_YOCTO)],
     });

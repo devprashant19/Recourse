@@ -7,9 +7,9 @@
  * `.data/sandbox-*.json` (left by `pnpm demo -- --keep`), so it needs no env.
  */
 
-import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
+import { JsonRpcProvider } from "near-api-js";
 
-import { RecourseClient } from "@recourse/sdk";
+import { RecourseClient, signerAccount as makeSigner } from "@recourse/sdk";
 
 import { AuditAnchorService, AuditAnchorWorker } from "./anchor.js";
 import { buildApi } from "./api.js";
@@ -38,9 +38,9 @@ async function main() {
   let head: number | null = null;
   const signerAccount =
     cfg.anchor?.signerAccountId && cfg.anchor?.signerKey
-      ? new Account(cfg.anchor.signerAccountId, provider, cfg.anchor.signerKey as KeyPairString)
+      ? makeSigner(cfg.anchor.signerAccountId, provider, cfg.anchor.signerKey)
       : cfg.demo?.client
-      ? new Account(cfg.demo.client.accountId, provider, cfg.demo.client.privateKey as KeyPairString)
+      ? makeSigner(cfg.demo.client.accountId, provider, cfg.demo.client.privateKey)
       : undefined;
 
   const anchorService = new AuditAnchorService({

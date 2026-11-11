@@ -30,10 +30,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Node.js runtime baseline standardized to Node >= 22 (`22.23.3` in `.nvmrc`) for ESM cookie compatibility.
 - Rust compiler toolchain pinned to `1.95.0` with immutable action SHA pinning.
 - Standardized GitHub repository labels covering priorities, issue types, components, and triage states.
+- Audit anchoring (`ANCHOR_*`) and Telegram notification (`TELEGRAM_*`) settings are documented in
+  `.env.example`, having been readable only from `services/indexer/src/config.ts` before.
+- `docs/hosting.md` and `ARCHITECTURE.md` give the testnet contract account as `recourse.<owner>`,
+  the default `pnpm deploy` uses, in place of an unresolved placeholder name.
 
 ### Fixed
 - Fixed ESM dynamic import incompatibility with `cookie@2.0.2` in backend service tests.
 - Hardened web routes against unseeded blockchain and RPC rate limits.
+- A slow `sandbox_fast_forward` no longer ends a run, and no longer leaves the chain unusable for
+  whatever runs next. `fastForward` asks again when a request runs out of time, and `skipPast` waits
+  for finality to catch up even when a jump gives up. Because a transaction is signed against the
+  last final block, an aborted jump used to leave the head so far ahead that every later transaction
+  came back `Expired`: one of them failed demo scenario 07 and, through the chain it left behind,
+  five of the sixteen adversarial threat tests — two of which never touch the clock themselves.
+- A transaction the chain refuses as `Expired` is now re-signed against a fresh final block
+  (`ResilientAccount` in `packages/sdk`), which every script and service that signs now goes
+  through. An expired transaction is rejected before execution, so it provably never ran and
+  re-signing it is safe; a timeout is still never retried, because that one may yet be applied.
+- `.env.example` named three underwriter keys (`UNDERWRITER_n_FC_KEY`) that nothing in the
+  repository reads, while `docker-compose.yml` and the underwriter service require
+  `UNDERWRITER_n_KEY` / `UNDERWRITER_KEY`. Following the documented setup left all three personas
+  crash-looping on a missing key under `docker compose --profile testnet up`.
+- `.env.example` listed `ONECLICK_BASE_URL` under 1Click, which only `pnpm spike:b` reads; the
+  keeper reads `ONECLICK_URL`.
+- The clean-room judge image installed Node 20 while the repository requires Node >= 22, so the
+  judge's own first check failed inside its own container. `Dockerfile.judge` now takes Node's
+  major version from `.nvmrc`.
+- `pnpm test:e2e` could not run from a fresh clone: the browser Playwright pins has to be downloaded
+  first, and no README, contributing guide, CI job or package script said so, so every test failed
+  on a missing executable. Added `pnpm test:e2e:install` and documented it where the command is
+  listed.
 
 ---
 

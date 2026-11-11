@@ -25,6 +25,7 @@
     "test:adversarial": "vitest run tests/adversarial --passWithNoTests",
     "test:services": "vitest run packages services --passWithNoTests",
     "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium",
     "dev": "docker compose up --build",
     "deploy": "tsx scripts/deploy.ts",
     "deploy:dao": "tsx scripts/deploy-dao.ts",

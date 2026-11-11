@@ -8,9 +8,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
-import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
+import { Account, JsonRpcProvider } from "near-api-js";
 
-import { RecourseClient, type MethodName, type ReceiptInput } from "../../packages/sdk/src/index.js";
+import { RecourseClient, signerAccount, type MethodName, type ReceiptInput } from "../../packages/sdk/src/index.js";
 import { TEE_MODEL, teeWallet } from "./tee.js";
 import { load, network, provider, type Deployment, type Network, type SeededAccounts, type SeededRole } from "./near.js";
 
@@ -50,7 +50,7 @@ export function cast(): Cast {
   const dep = load<Deployment>(net, "deployment");
   const accounts = load<SeededAccounts>(net, "accounts");
   const counter = { txs: 0 };
-  const account = (r: SeededRole) => new Account(accounts[r].accountId, p, accounts[r].privateKey as KeyPairString);
+  const account = (r: SeededRole) => signerAccount(accounts[r].accountId, p, accounts[r].privateKey);
   return {
     net,
     p,

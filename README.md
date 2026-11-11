@@ -177,6 +177,7 @@ pnpm hosted                     # the whole system live on a sandbox, API on :80
 pnpm web                        # the site on :3000 (NEXT_PUBLIC_API_URL, default :8080)
 docker compose up               # hosted + web in containers (what `pnpm dev` runs)
 pnpm export-receipts            # write the fixture receipts and their bytes to demo/fixtures/receipts/
+pnpm test:e2e:install           # once per machine: the pinned Playwright browser
 pnpm test:e2e                   # Playwright click-path, against a running stack
 ```
 
@@ -193,7 +194,7 @@ Live testnet and mainnet need credentials: [`docs/hosting.md`](docs/hosting.md) 
 | Receipts | Full four-step flow; checked on-chain with `ecrecover`. Scenarios 01, 02 and 04 replay **genuine NEAR AI Cloud recordings**: worker `Qwen/Qwen3.8-27B`, arbiter `z-ai/glm-5.3-flash`, both signed inside Intel TDX, every quote verified by dcap-qvl (`UpToDate`) at recording time, and their real signers allow-listed on-chain. Scenarios 05–07 and the adversarial suite sign synthetic receipts with a labelled dev key to test the contract's mechanics |
 | Genuine NEAR AI Cloud recordings | **Done** — `demo/fixtures/near-ai/fixtures.json`, recorded 8 Nov 2026; the five judge receipts in `demo/fixtures/receipts` verify standalone with `pnpm verify-receipt` |
 | Spike A (a real NEAR AI Cloud signature recovered by `env::ecrecover`) | **PASS** — TypeScript and Rust recover the same signer, which matches the address in the model's attestation report; the contract's `check_receipt` accepts the live receipt and rejects tampered copies (`contracts/recourse/src/tests/tee.rs`) |
-| Hosted demo | Keyless sandbox stack with hourly reset (`docker compose up`): seeds the seven scenarios, indexes every event, serves the site. **Playwright: 14/14** (seven scenarios × desktop and phone) against it. The live testnet deployment needs accounts and keys |
+| Hosted demo | Keyless sandbox stack with hourly reset (`docker compose up`): seeds the seven scenarios, indexes every event, serves the site. **Playwright: 16 passed, 2 skipped** against it — the seven scenario pages and the Demo page's own summary, each on desktop and phone, plus one opt-in test (`E2E_RUN_RESET=1`) that presses the reset button and waits out the whole replay. The live testnet deployment needs accounts and keys |
 | Mainnet run | **Not yet recorded** — a human confirms every transaction (`demo/mainnet-run/RUN.md`) |
 | `pnpm demo` timing | About 6–7 minutes, longer than the 3 the plan targets; scenario 07 skips three bid windows and seven claim windows on the sandbox |
 

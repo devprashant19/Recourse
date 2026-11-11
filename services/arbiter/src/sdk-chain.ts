@@ -1,8 +1,8 @@
 /** The arbiter's chain slice over `@recourse/sdk` (function-call key limited to resolve_claim). */
 
-import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
+import { JsonRpcProvider } from "near-api-js";
 
-import { RecourseClient, type ReceiptInput } from "@recourse/sdk";
+import { RecourseClient, signerAccount, type ReceiptInput } from "@recourse/sdk";
 
 import type { ArbiterChain } from "./chain.js";
 
@@ -12,7 +12,7 @@ export class SdkArbiterChain implements ArbiterChain {
 
   constructor(p: { rpcUrl: string; contractId: string; arbiterAccountId: string; arbiterKey: string }) {
     this.provider = new JsonRpcProvider({ url: p.rpcUrl });
-    this.client = new RecourseClient(p.contractId, this.provider, new Account(p.arbiterAccountId, this.provider, p.arbiterKey as KeyPairString));
+    this.client = new RecourseClient(p.contractId, this.provider, signerAccount(p.arbiterAccountId, this.provider, p.arbiterKey));
   }
   async claimCount() {
     return (await this.client.getCounters()).claim;

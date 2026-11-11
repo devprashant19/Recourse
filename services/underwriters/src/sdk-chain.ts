@@ -6,9 +6,9 @@
  * vault, and keep the key out of logs (see `log.ts`).
  */
 
-import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
+import { JsonRpcProvider } from "near-api-js";
 
-import { RecourseClient, type Hash } from "@recourse/sdk";
+import { RecourseClient, signerAccount, type Hash } from "@recourse/sdk";
 
 import type { UnderwriterChain } from "./chain.js";
 
@@ -18,7 +18,7 @@ export class SdkUnderwriterChain implements UnderwriterChain {
 
   constructor(p: { rpcUrl: string; contractId: string; accountId: string; key: string }) {
     this.provider = new JsonRpcProvider({ url: p.rpcUrl });
-    const account = new Account(p.accountId, this.provider, p.key as KeyPairString);
+    const account = signerAccount(p.accountId, this.provider, p.key);
     this.client = new RecourseClient(p.contractId, this.provider, account);
     this.me = p.accountId;
   }

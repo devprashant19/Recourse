@@ -14,13 +14,12 @@
  * real `submit_receipt` transaction. The outcome is written to .data/<network>-live-receipt.json.
  */
 
-import { Account, type KeyPairString } from "near-api-js";
 
 import { selectBackend } from "../packages/adapters/src/index.js";
 import { termsHash } from "../packages/jobs/src/index.js";
 import { loadCatalog } from "../packages/jobs/src/catalog.js";
 import { attestedCompletion, MemoryArtifactStore, verifyReceipt } from "../packages/receipts/src/index.js";
-import { RecourseClient, type ReceiptInput } from "../packages/sdk/src/index.js";
+import { RecourseClient, signerAccount, type ReceiptInput } from "../packages/sdk/src/index.js";
 import { extractionRequest } from "../services/worker-agent/src/index.js";
 import { sandboxModels } from "./lib/sandbox-models.js";
 import { chainNow, load, MINUTE_NS, network, provider, save, type Deployment, type SeededAccounts } from "./lib/near.js";
@@ -35,17 +34,17 @@ async function main() {
     const dep = load<Deployment>(net, "deployment");
     const acc = load<SeededAccounts>(net, "accounts");
     contractId = dep.contractId;
-    client = new RecourseClient(contractId, p, new Account(acc.client.accountId, p, acc.client.privateKey as KeyPairString));
+    client = new RecourseClient(contractId, p, signerAccount(acc.client.accountId, p, acc.client.privateKey));
     agentId = acc.agent.accountId;
-    agent = new RecourseClient(contractId, p, new Account(agentId, p, acc.agent.privateKey as KeyPairString));
+    agent = new RecourseClient(contractId, p, signerAccount(agentId, p, acc.agent.privateKey));
     model = sandboxModels().worker;
     console.log("SANDBOX RUN on fixtures — validates the code path; this is NOT a live NEAR AI Cloud verification\n");
   } else {
     const need = (k: string) => process.env[k] || (() => { throw new Error(`${k} is required`); })();
     contractId = need("RECOURSE_CONTRACT_ID");
-    client = new RecourseClient(contractId, p, new Account(need("CLIENT_ACCOUNT_ID"), p, need("CLIENT_KEY") as KeyPairString));
+    client = new RecourseClient(contractId, p, signerAccount(need("CLIENT_ACCOUNT_ID"), p, need("CLIENT_KEY")));
     agentId = need("AGENT_ACCOUNT_ID");
-    agent = new RecourseClient(contractId, p, new Account(agentId, p, need("AGENT_FC_KEY") as KeyPairString));
+    agent = new RecourseClient(contractId, p, signerAccount(agentId, p, need("AGENT_FC_KEY")));
     model = need("NEARAI_MODEL_WORKER");
     apiKey = need("NEARAI_API_KEY");
   }

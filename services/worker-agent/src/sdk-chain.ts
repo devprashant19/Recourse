@@ -3,9 +3,9 @@
  * function-call key (limited to accept_engagement and submit_receipt).
  */
 
-import { Account, JsonRpcProvider, type KeyPairString } from "near-api-js";
+import { JsonRpcProvider } from "near-api-js";
 
-import { RecourseClient, type ReceiptInput } from "@recourse/sdk";
+import { RecourseClient, signerAccount, type ReceiptInput } from "@recourse/sdk";
 
 import type { WorkerChain } from "./chain.js";
 
@@ -15,7 +15,7 @@ export class SdkWorkerChain implements WorkerChain {
 
   constructor(p: { rpcUrl: string; contractId: string; agentAccountId: string; agentKey: string }) {
     this.provider = new JsonRpcProvider({ url: p.rpcUrl });
-    const account = new Account(p.agentAccountId, this.provider, p.agentKey as KeyPairString);
+    const account = signerAccount(p.agentAccountId, this.provider, p.agentKey);
     this.client = new RecourseClient(p.contractId, this.provider, account);
   }
 

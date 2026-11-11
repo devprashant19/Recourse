@@ -56,7 +56,7 @@ remove arbiters, keepers and TEE signers. It cannot move funds; there is no meth
 
 | Component | Sandbox (`pnpm demo`) | Testnet (hosted demo) | Mainnet (recorded run) |
 |---|---|---|---|
-| `recourse` contract | Local near-sandbox | `recourse-v1.testnet` *(name to confirm)* | `recourse-demo.near` |
+| `recourse` contract | Local near-sandbox | `recourse.<owner>.testnet` (`pnpm deploy`'s default; `--contract-id` overrides) | `recourse-demo.near` |
 | NEAR AI Cloud | Recorded real responses + signatures (fixtures) | Live, API key on the server | Live |
 | 1Click | Recorded real quotes and statuses | Live quotes with `dry: true` | Live, about $2 per payout |
 | Council DAO | Sputnik contract deployed into sandbox | `recourse-council.sputnikv2.testnet` | Not used (appeal shown on testnet) |
