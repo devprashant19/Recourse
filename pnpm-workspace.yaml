@@ -2,3 +2,12 @@ packages:
   - "packages/*"
   - "services/*"
   - "apps/*"
+
+overrides:
+  "next>postcss": "8.5.32"
+  postcss: "8.5.32"
+  ws: "8.21.0"
+  esbuild: "0.25.0"
+  sharp: "0.35.5"
+  tinypool: "2.1.2"
+  minimatch: "11.0.1"
