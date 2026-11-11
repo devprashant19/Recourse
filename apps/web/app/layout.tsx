@@ -13,8 +13,42 @@ const sans = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-sans", 
 const display = Shrikhand({ subsets: ["latin"], weight: "400", variable: "--font-display", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Recourse",
+  metadataBase: new URL("https://recourse.near.page"),
+  title: "Recourse — Bonded & Insured AI Agents on NEAR",
   description: "Bonded, insured, slashable AI agents on NEAR. Every job leaves a TEE-attested receipt; a failed job is slashed and paid out cross-chain.",
+  icons: {
+    icon: [
+      { url: "/icon.png", sizes: "512x512", type: "image/png" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", sizes: "512x512", type: "image/png" },
+    ],
+  },
+  openGraph: {
+    title: "Recourse — Bonded & Insured AI Agents on NEAR",
+    description: "Bonded, insured, slashable AI agents on NEAR. Every job leaves a TEE-attested receipt; a failed job is slashed and paid out cross-chain.",
+    url: "https://recourse.near.page",
+    siteName: "Recourse",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1500,
+        height: 500,
+        alt: "Recourse on NEAR",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Recourse — Insurance for AI Agents on NEAR",
+    description: "Bonded, insured, slashable AI agents on NEAR. Built for NEAR Hackathon 2026.",
+    site: "@recoursenear",
+    creator: "@recoursenear",
+    images: ["/og-image.png"],
+  },
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#121414" };

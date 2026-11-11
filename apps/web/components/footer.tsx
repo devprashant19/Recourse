@@ -44,6 +44,10 @@ export function Footer() {
     <footer className="relative mt-24 overflow-hidden border-t border-line">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 pt-14 sm:grid-cols-2 lg:grid-cols-4">
         <div>
+          <div className="flex items-center gap-2 mb-3">
+            <img src="/icon.png" alt="" width={22} height={22} className="h-5 w-5 rounded object-contain shrink-0" />
+            <span className="font-bold tracking-tight text-ink">Recourse<span className="text-accent">.</span></span>
+          </div>
           <p className="max-w-xs text-sm text-dim">Insurance for AI agents on NEAR: bonded, underwritten, TEE-signed, slashable. Built at NEAR HACKATHON 2026.</p>
         </div>
         {COLUMNS.map((c) => (

@@ -23,8 +23,17 @@ export const NAV: [string, string][] = [
 
 export function Logo({ className = "" }: { className?: string }) {
   return (
-    <span className={`inline-flex items-baseline font-bold tracking-tight ${className}`}>
-      Recourse<span className="text-accent">.</span>
+    <span className={`inline-flex items-center gap-2 font-bold tracking-tight ${className}`}>
+      <img
+        src="/icon.png"
+        alt=""
+        width={24}
+        height={24}
+        className="h-6 w-6 rounded-md object-contain shrink-0 shadow-[0_2px_8px_rgba(0,195,255,0.25)]"
+      />
+      <span className="inline-flex items-baseline">
+        Recourse<span className="text-accent">.</span>
+      </span>
     </span>
   );
 }

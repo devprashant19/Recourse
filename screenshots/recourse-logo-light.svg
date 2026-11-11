@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 160" width="600" height="160">
+  <rect width="100%" height="100%" fill="#FAF8F5"/>
+  <g transform="translate(40, 35)">
+    <svg width="90" height="90" viewBox="0 0 100 100">
+      <polygon points="50.00,0.00 58.80,17.16 75.00,6.70 74.04,25.96 93.30,25.00 82.84,41.20 100.00,50.00 82.84,58.80 93.30,75.00 74.04,74.04 75.00,93.30 58.80,82.84 50.00,100.00 41.20,82.84 25.00,93.30 25.96,74.04 6.70,75.00 17.16,58.80 0.00,50.00 17.16,41.20 6.70,25.00 25.96,25.96 25.00,6.70 41.20,17.16" fill="#FC622A" />
+    </svg>
+    <text x="110" y="68" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Bricolage Grotesque', sans-serif" font-size="64" font-weight="800" fill="#121414" letter-spacing="-0.03em">Recourse<tspan fill="#FC622A">.</tspan></text>
+  </g>
+</svg>

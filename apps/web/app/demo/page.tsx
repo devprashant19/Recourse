@@ -53,8 +53,25 @@ export default function DemoPage() {
           ) : !health.data ? (
             <Loading />
           ) : (
-            <div className="card text-sm">
-              Demo controls are off on this deployment ({health.data.mode}). On mainnet they never exist; elsewhere the indexer needs the demo client in <code className="font-mono">.data</code>.
+            <div className="card space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" />
+                <span className="font-semibold text-ink">Demo Controls Inactive on Live {health.data.mode.toUpperCase()}</span>
+              </div>
+              <p className="text-sm text-dim leading-relaxed">
+                The web app is currently connected to the live NEAR Testnet (<code className="font-mono text-ink">{health.data.contract}</code>).
+                One-click keyless demo actions (such as the server-side Sabotage switch and instant Hire triggers) require a funded server-side client key (<code className="font-mono">CLIENT_ACCOUNT_ID</code>) to sponsor visitor transactions on-chain.
+              </p>
+              <div className="rounded-lg border border-line bg-panel p-3.5 text-xs text-dim space-y-2">
+                <div className="font-medium text-ink">How to run the full interactive demo:</div>
+                <ul className="list-disc list-inside space-y-1">
+                  <li><strong>Local Sandbox:</strong> Run <code className="font-mono text-ink">pnpm demo:keep</code> or <code className="font-mono text-ink">pnpm hosted</code> to spin up a local chain where all 7 scenarios replay and controls are 100% active.</li>
+                  <li><strong>Live Testnet:</strong> Provide <code className="font-mono text-ink">CLIENT_ACCOUNT_ID</code> &amp; <code className="font-mono text-ink">CLIENT_KEY</code> in the indexer environment to sponsor server-side demo actions.</li>
+                </ul>
+              </div>
+              <div className="pt-2 text-xs text-dim">
+                Meanwhile, explore live on-chain protocol activity across <Link href="/agents" className="text-accent underline">Agents</Link>, <Link href="/vaults" className="text-accent underline">Underwriting Vaults</Link>, <Link href="/economics" className="text-accent underline">Economics</Link>, and <Link href="/verify" className="text-accent underline">Receipt Verification</Link>.
+              </div>
             </div>
           )}
         </div>
