@@ -19,11 +19,22 @@ Recourse is actively developed on the `main` branch. Security fixes and patches 
 
 **Please do not report security vulnerabilities through public GitHub issues, pull requests, or public discussions.**
 
-If you discover a potential security issue in Recourse, please submit a report privately using **GitHub Private Vulnerability Reporting**:
+### 1. Preferred Channel: GitHub Security Advisories
+When enabled by repository administrators or upon public repository launch, the preferred channel for disclosing vulnerabilities is GitHub Private Vulnerability Reporting:
 
 > **[Report a Security Vulnerability via GitHub Advisories](https://github.com/devprashant19/Recourse/security/advisories/new)**
 
-This feature allows you to disclose details directly to the repository maintainers in a confidential environment.
+This feature provides a private, encrypted environment for collaborating directly with maintainers on verification and patch development.
+
+### 2. Fallback Reporting Channel
+Because this repository is currently in pre-release development, the native GitHub Security Advisory submission form may not be accessible to external accounts without repository invitation.
+
+If the Advisory form is inaccessible or returns an authorization error:
+- **Do NOT open a public issue or pull request.**
+- Please reach out privately to the repository maintainers via their GitHub profiles:
+  - Dev Prashant ([@devprashant19](https://github.com/devprashant19))
+  - Puneet Yadav ([@puneetnith28](https://github.com/puneetnith28))
+- Request a private communication channel (such as a secure one-to-one channel or temporary private fork invitation) before sharing any technical details, proof-of-concept scripts, or reproduction steps.
 
 ---
 
@@ -65,9 +76,29 @@ To help us investigate and remediate the issue quickly, please include:
 
 ---
 
+## Accidental Credential Exposure
+
+If you accidentally commit or expose a private key, NEAR account credentials, API secret, or service token:
+
+1. **Rotate and Revoke Immediately:** Treat the exposed secret as compromised. Immediately revoke or rotate the credential at the provider or NEAR account level.
+2. **Do Not Rely on `git rm`:** Simply deleting the key in a subsequent commit leaves the secret in the Git history.
+3. **Notify Maintainers:** Report the incident privately via [GitHub Security Advisories](https://github.com/devprashant19/Recourse/security/advisories/new) so maintainers can rewrite or scrub repository history if necessary.
+
+---
+
+## Responsible Disclosure Expectations
+
+To protect users and the integrity of the protocol:
+
+- **Private Reporting Only:** Do not discuss or disclose vulnerability details publicly, in GitHub issues, or in pull requests before maintainers have investigated and patched the issue.
+- **No Exploitation on Live Networks:** Do not attempt attacks or exploits against live NEAR testnet or mainnet accounts. Always demonstrate proof-of-concept exploits against local sandbox environments (`RECOURSE_MODE=sandbox`).
+- **Constructive Communication:** Give maintainers reasonable time to analyze the finding, prepare a fix, and coordinate release.
+
+---
+
 ## Response Process
 
-1. **Acknowledgment:** Maintainers will review and acknowledge received security advisories within 48 hours.
+1. **Acknowledgment:** Maintainers will review and acknowledge received security advisories promptly.
 2. **Triage & Validation:** Maintainers will validate the reported issue and determine its severity and blast radius.
 3. **Coordination & Patching:** A fix will be developed privately in a temporary private fork.
 4. **Disclosure:** Once the patch is merged and deployed, a public security advisory will be published crediting the reporter (unless anonymity is requested).

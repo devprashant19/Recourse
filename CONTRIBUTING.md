@@ -227,3 +227,17 @@ Automated checks run on all pull requests and pushes to `main` via [GitHub Actio
 - **Advisory Feedback & Maintainer Discretion:** CI checks provide transparent feedback and help catch unintended regressions. They are not configured as hard blocking gates or mandatory status checks. Repository maintainers retain full discretion to review and merge pull requests.
 - **Reporting CI Issues:** If you observe an unexpected CI failure on an advisory check, feel free to comment on your pull request or open an issue using the Bug Report template.
 
+---
+
+## 10. Security Automation & Responsible Disclosure
+
+Recourse employs automated security workflows to assist maintainers in maintaining repository security:
+
+- **Security Checks:**
+  - **Secret Detection:** Gitleaks scans commit history in CI to prevent accidental secret leakage.
+  - **Static Analysis (CodeQL):** Automated CodeQL scans analyze TypeScript, JavaScript, and Rust for common security vulnerabilities weekly and on pull requests.
+  - **Dependency Review:** Evaluates newly added or updated dependencies against known advisory databases on pull requests.
+- **Advisory Status:** All automated security checks are purely advisory to guide review. They are not configured as hard merge gates.
+- **Handling Dependency Vulnerabilities:** When a vulnerability is flagged in a dependency, maintainers triage and update to a secure compatible release via Dependabot. Contributors encountering dependency warnings should report them via an issue.
+- **Reporting Vulnerabilities:** Never report security vulnerabilities or exposed credentials through public GitHub issues or pull requests. Please report privately via [GitHub Security Advisories](https://github.com/devprashant19/Recourse/security/advisories/new) as detailed in [SECURITY.md](SECURITY.md).
+
