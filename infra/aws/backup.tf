@@ -26,7 +26,8 @@ resource "aws_iam_role_policy_attachment" "dlm" {
 }
 
 resource "aws_dlm_lifecycle_policy" "daily" {
-  description        = "${var.name}: daily snapshot of the SQLite store"
+  # DLM descriptions accept only [0-9A-Za-z _-] — no colons, no punctuation.
+  description        = "${var.name} daily snapshot of the SQLite store"
   execution_role_arn = aws_iam_role.dlm.arn
   state              = "ENABLED"
 

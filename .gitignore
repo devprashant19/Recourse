@@ -63,3 +63,7 @@ infra/aws/.terraform/
 crash.log
 *.tfvars
 !*.tfvars.example
+
+# video-story-demo spec and render output (never committed unless asked)
+video/
+infra/aws/tfplan
