@@ -54,3 +54,12 @@ PHASE-0-STATUS.md
 
 docs/audits/complete-project-audit
 
+
+# Terraform (infra/aws) — provider cache and state are local; the lock file is committed
+infra/aws/.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+crash.log
+*.tfvars
+!*.tfvars.example

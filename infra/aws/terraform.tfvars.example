@@ -1,0 +1,31 @@
+# Copy to terraform.tfvars and edit. Only repo_url is required.
+
+# The instance clones this. Must be reachable without credentials.
+repo_url = "https://github.com/devprashant19/Recourse.git"
+repo_ref = "main"
+
+# Leave empty to serve plain HTTP on the Elastic IP (no TLS).
+# Set it, then point an A record at the IP that `terraform apply` prints.
+domain = ""
+
+region = "us-east-1"
+
+# x86_64 only - Graviton cannot run the NEAR sandbox binary and is rejected.
+# Avoid burstable (t3/t3a): the hourly reseed is a sustained CPU burst.
+instance_type = "m7i-flex.xlarge"
+
+disk_gb = 80
+
+# Hourly, matching the hosted demo's documented behaviour.
+reset_minutes = 60
+
+snapshot_retention = 7
+
+# SSH is closed by default; use `aws ssm start-session` instead.
+# Set to your own address only if you really want port 22 open.
+# ssh_cidr = "203.0.113.4/32"
+# key_name = "my-keypair"
+
+tags = {
+  Owner = "recourse-demo"
+}
