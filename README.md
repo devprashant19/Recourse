@@ -16,6 +16,27 @@ and the client is paid **in the token and on the chain they chose**, through NEA
 
 ---
 
+## Live
+
+| What | Where |
+|---|---|
+| **Hosted demo** — the dashboard, the claim timeline, the seven scenarios and the reset button. No wallet, no sign-in, nothing to install | https://recourse-near.duckdns.org |
+| **Indexer API** — every event the contract emitted, read straight off the chain | `/api/health` · [`/api/demo/run`](https://recourse-near.duckdns.org/api/demo/run) · [`/api/totals`](https://recourse-near.duckdns.org/api/totals) · `/api/audit.csv` |
+| **Direct address**, if DNS is being slow | https://recourse.100.29.122.218.sslip.io |
+| **Contract** | `recourse.test.near`, inside the hosted sandbox |
+
+What you are looking at is the **keyless sandbox**: a fresh NEAR sandbox that deploys the contract from
+genesis, seeds all seven scenarios and **resets every hour**. So the chain is minutes old, the figures
+are live rather than a screenshot, and `/api/demo/run` tells you which cycle you caught and whether
+every scenario passed in it. The reset button on the Demo page replays the whole thing from genesis in
+about six minutes, for everyone watching.
+
+There is **no testnet or mainnet deployment** — both need funded accounts and keys, and the contract
+account above exists only inside the sandbox. Hosted on a single x86_64 EC2 instance; the Terraform
+that built it is in [`infra/aws/`](infra/aws/).
+
+---
+
 ## Do / See
 
 | Do | See |
@@ -194,7 +215,7 @@ Live testnet and mainnet need credentials: [`docs/hosting.md`](docs/hosting.md) 
 | Receipts | Full four-step flow; checked on-chain with `ecrecover`. Scenarios 01, 02 and 04 replay **genuine NEAR AI Cloud recordings**: worker `Qwen/Qwen3.8-27B`, arbiter `z-ai/glm-5.3-flash`, both signed inside Intel TDX, every quote verified by dcap-qvl (`UpToDate`) at recording time, and their real signers allow-listed on-chain. Scenarios 05–07 and the adversarial suite sign synthetic receipts with a labelled dev key to test the contract's mechanics |
 | Genuine NEAR AI Cloud recordings | **Done** — `demo/fixtures/near-ai/fixtures.json`, recorded 8 Nov 2026; the five judge receipts in `demo/fixtures/receipts` verify standalone with `pnpm verify-receipt` |
 | Spike A (a real NEAR AI Cloud signature recovered by `env::ecrecover`) | **PASS** — TypeScript and Rust recover the same signer, which matches the address in the model's attestation report; the contract's `check_receipt` accepts the live receipt and rejects tampered copies (`contracts/recourse/src/tests/tee.rs`) |
-| Hosted demo | Keyless sandbox stack with hourly reset (`docker compose up`): seeds the seven scenarios, indexes every event, serves the site. **Playwright: 16 passed, 2 skipped** against it — the seven scenario pages and the Demo page's own summary, each on desktop and phone, plus one opt-in test (`E2E_RUN_RESET=1`) that presses the reset button and waits out the whole replay. The live testnet deployment needs accounts and keys |
+| Hosted demo | **Deployed and public** at [recourse-near.duckdns.org](https://recourse-near.duckdns.org) — keyless sandbox stack with hourly reset (`docker compose up`): seeds the seven scenarios, indexes every event, serves the site. Verified on the deployed instance: **7/7, `solvency_ok: true`**. **Playwright: 16 passed, 2 skipped** against it — the seven scenario pages and the Demo page's own summary, each on desktop and phone, plus one opt-in test (`E2E_RUN_RESET=1`) that presses the reset button and waits out the whole replay. Reproducible with [`infra/aws/`](infra/aws/). The live testnet deployment needs accounts and keys |
 | Mainnet run | **Not yet recorded** — a human confirms every transaction (`demo/mainnet-run/RUN.md`) |
 | `pnpm demo` timing | About 6–7 minutes, longer than the 3 the plan targets; scenario 07 skips three bid windows and seven claim windows on the sandbox |
 
