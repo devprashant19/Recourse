@@ -1,0 +1,44 @@
+{
+  "base": "https://recourse-near.duckdns.org",
+  "width": 1440,
+  "height": 900,
+  "scale": 1,
+  "dir": "docs/screenshots",
+  "shots": [
+    {
+      "name": "home",
+      "path": "/",
+      "wait": 2500
+    },
+    {
+      "name": "demo",
+      "path": "/demo",
+      "wait": 2500
+    },
+    {
+      "name": "claim-quality",
+      "path": "/claims/0",
+      "wait": 2500
+    },
+    {
+      "name": "agents",
+      "path": "/agents",
+      "wait": 2500
+    },
+    {
+      "name": "vaults",
+      "path": "/vaults",
+      "wait": 2500
+    },
+    {
+      "name": "economics",
+      "path": "/economics",
+      "wait": 2500
+    },
+    {
+      "name": "job-receipt",
+      "path": "/jobs/1",
+      "wait": 3000
+    }
+  ]
+}
