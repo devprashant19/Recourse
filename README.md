@@ -362,6 +362,9 @@ Live testnet and mainnet need credentials: [`docs/hosting.md`](docs/hosting.md) 
 | [`RULES.md`](RULES.md) | The protocol in plain English, with a worked example |
 | [`THREAT_MODEL.md`](THREAT_MODEL.md) | 16 attacks, each with the test that proves the defence |
 | [`DECISION.md`](DECISION.md) | Every significant decision: what we chose, why, and what we rejected |
+| [`TESTING.md`](TESTING.md) | From a fresh clone to convinced: every suite, what the judge checks, and the counts |
+| [`AGENTS.md`](AGENTS.md) | The rules that are easy to break, and where everything lives |
+| [`docs/api.md`](docs/api.md) | Every indexer route: the chain, the audit ledger, the demo controls |
 | [`phases/`](phases/) | The build plan, phase by phase, with exit criteria |
 | [`HACKATHON_DISCLOSURE.md`](HACKATHON_DISCLOSURE.md) | Baseline, libraries, AI-generated code |
 | [`docs/services.md`](docs/services.md) | Running the worker and arbiter: modes, keys, testnet steps, operations |

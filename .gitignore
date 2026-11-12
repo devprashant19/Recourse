@@ -70,3 +70,6 @@ infra/aws/tfplan
 
 # LifeLine planning note committed here by mistake; kept on disk, not in the repo
 NEXT_THING.md
+
+# design-reference working notes; kept on disk, not in the repo
+motion/
