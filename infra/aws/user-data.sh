@@ -42,13 +42,18 @@ git pull --ff-only || true
 # machine. Caddy serves the indexer under /api on the same origin, which also
 # means there is no CORS configuration to get wrong.
 DOMAIN="${domain}"
+
+# Always learn the public IP, even when a domain is set: Caddy keeps serving the
+# bare address alongside the domain, so the stack stays reachable while DNS
+# propagates and there is somewhere to verify from if the record is wrong.
+TOKEN=$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+IP=$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" \
+  "http://169.254.169.254/latest/meta-data/public-ipv4")
+
 if [ -n "$DOMAIN" ]; then
   PUBLIC_BASE="https://$DOMAIN"
 else
-  TOKEN=$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" \
-    -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
-  IP=$(curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" \
-    "http://169.254.169.254/latest/meta-data/public-ipv4")
   PUBLIC_BASE="http://$IP"
 fi
 
@@ -75,14 +80,9 @@ install -d -o caddy -g caddy /var/lib/caddy /etc/caddy
 
 # handle_path strips /api before proxying, so the indexer keeps serving
 # /health, /claims and /vaults at its own root.
-if [ -n "$DOMAIN" ]; then
-  SITE="$DOMAIN"
-else
-  SITE=":80"
-  echo "WARNING: no domain set - serving plain HTTP, no TLS"
-fi
-cat > /etc/caddy/Caddyfile <<CADDYFILE
-$SITE {
+{
+  cat > /etc/caddy/Caddyfile <<'CADDYHEAD'
+(app) {
 	encode zstd gzip
 
 	handle_path /api/* {
@@ -91,7 +91,32 @@ $SITE {
 
 	reverse_proxy 127.0.0.1:3000
 }
-CADDYFILE
+CADDYHEAD
+
+  # A catch-all on port 80, matching ANY Host. This is deliberate: it keeps the
+  # stack reachable by raw IP, by the free ec2-*.compute.amazonaws.com name, and
+  # from a CDN such as CloudFront — all of which arrive with a Host header that
+  # a named site would not match. Binding to the IP literal instead would serve
+  # only the IP and 404 the rest.
+  cat >> /etc/caddy/Caddyfile <<'CADDYIP'
+
+:80 {
+	import app
+}
+CADDYIP
+
+  if [ -n "$DOMAIN" ]; then
+    # A named site gets automatic HTTPS and its own HTTP-to-HTTPS redirect.
+    cat >> /etc/caddy/Caddyfile <<CADDYDOMAIN
+
+$DOMAIN {
+	import app
+}
+CADDYDOMAIN
+  else
+    echo "WARNING: no domain set - serving plain HTTP on the public address, no TLS"
+  fi
+}
 
 cat > /etc/systemd/system/caddy.service <<'CADDYUNIT'
 [Unit]
