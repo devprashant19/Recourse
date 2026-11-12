@@ -39,11 +39,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed ESM dynamic import incompatibility with `cookie@2.0.2` in backend service tests.
 - Hardened web routes against unseeded blockchain and RPC rate limits.
 - A slow `sandbox_fast_forward` no longer ends a run, and no longer leaves the chain unusable for
-  whatever runs next. `fastForward` asks again when a request runs out of time, and `skipPast` waits
-  for finality to catch up even when a jump gives up. Because a transaction is signed against the
-  last final block, an aborted jump used to leave the head so far ahead that every later transaction
-  came back `Expired`: one of them failed demo scenario 07 and, through the chain it left behind,
-  five of the sixteen adversarial threat tests — two of which never touch the clock themselves.
+  whatever runs next. `skipPast` waits for finality to catch up even when a jump gives up. Because a
+  transaction is signed against the last final block, an aborted jump used to leave the head so far
+  ahead that every later transaction came back `Expired`: one of them failed demo scenario 07 and,
+  through the chain it left behind, five of the sixteen adversarial threat tests — two of which
+  never touch the clock themselves.
+- A jump that runs out of time is now recovered from rather than retried blind. The sandbox answers
+  jumps on the same thread that produces blocks, so on a host also running the indexer, keeper,
+  underwriters and the site, a jump that takes a second in a clean room can take minutes — and
+  re-sending the same delta would jump twice if the first one did land late. `skipPast` now reads
+  the head instead, asks only for the distance still left, and halves the jump it is willing to
+  request each time one times out; the per-request ceiling is `RECOURSE_FF_TIMEOUT_MS` (default
+  120s, was a fixed 60s). Under the hosted stack's own load this is what failed demo scenario 03,
+  which gave up after four identical 60s attempts while the jump was merely slow.
 - A transaction the chain refuses as `Expired` is now re-signed against a fresh final block
   (`ResilientAccount` in `packages/sdk`), which every script and service that signs now goes
   through. An expired transaction is rejected before execution, so it provably never ran and

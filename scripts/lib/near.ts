@@ -116,16 +116,38 @@ export async function chainNow(p: JsonRpcProvider): Promise<bigint> {
 }
 
 /**
+ * True when a failure is the transport giving up, not the node answering.
+ *
+ * The distinction is the whole point: a request that runs out of time means a
+ * slow sandbox, which is worth recovering from, while a JSON-RPC error is an
+ * answer and is passed straight on.
+ */
+export function isSlowTransport(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  const message = e.message;
+  return e.name === "TimeoutError" || e.name === "AbortError" || /timeout|aborted|fetch failed|network|socket hang up/i.test(message);
+}
+
+/**
+ * How long one `sandbox_fast_forward` request may take before the transport
+ * gives up. The sandbox shares a thread between jumps and block production, so
+ * the ceiling that matters is how loaded the host is, not how far we jump: on a
+ * machine also running the indexer, keeper, underwriters and the site, a jump
+ * that takes a second in a clean room can take minutes. Tunable so a loaded
+ * host can be given more room without a code change.
+ */
+const FF_TIMEOUT_MS = Number(process.env.RECOURSE_FF_TIMEOUT_MS ?? 120_000);
+
+/**
  * Sandbox only: skips `blocks` blocks (time moves with them).
  *
  * The node answers this request on the same thread that produces blocks, so
  * while it is working through a jump it can leave the next request waiting.
- * A request that runs out of time is therefore a slow sandbox, not a broken
- * one, and asking again is safe: the caller re-reads the head between tries
- * and only ever asks for the distance that is still left. A JSON-RPC error,
- * on the other hand, is an answer — that one is passed straight on.
+ * Retrying here re-sends the same delta, which is only safe when the caller
+ * knows the jump did not land — so `skipPast` passes `attempts: 1` and does
+ * its own, better-informed recovery from the head.
  */
-export async function fastForward(net: Network, blocks: number, attempts = 4): Promise<void> {
+export async function fastForward(net: Network, blocks: number, attempts = 4, timeoutMs = FF_TIMEOUT_MS): Promise<void> {
   if (net !== "sandbox") throw new Error("fast_forward exists only on the sandbox");
   for (let attempt = 1; ; attempt++) {
     try {
@@ -133,15 +155,13 @@ export async function fastForward(net: Network, blocks: number, attempts = 4): P
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: "ff", method: "sandbox_fast_forward", params: { delta_height: blocks } }),
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       const body = (await res.json()) as { error?: unknown };
       if (body.error) throw new Error(`sandbox_fast_forward failed: ${JSON.stringify(body.error)}`);
       return;
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      const slow = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError" || /timeout|aborted|fetch failed|network/i.test(message));
-      if (!slow || attempt >= attempts) throw e;
+      if (!isSlowTransport(e) || attempt >= attempts) throw e;
       await new Promise((r) => setTimeout(r, attempt * 1000));
     }
   }
@@ -174,14 +194,34 @@ export async function skipPast(net: Network, p: JsonRpcProvider, targetNs: bigin
   let failed: unknown;
   try {
     let nsPerBlock = 0n;
+    // The largest jump we are currently willing to ask for. It shrinks when a
+    // request runs out of time, because the node answers jumps on the same
+    // thread that produces blocks: a smaller jump is work it can finish.
+    let cap = stepBlocks;
+    let misses = 0;
     for (let guard = 0; guard < 500; guard++) {
       const before = await p.viewBlock({ finality: "optimistic" });
       const now = BigInt(before.header.timestamp_nanosec);
       if (now > targetNs) break;
       const left = targetNs - now;
-      const step = nsPerBlock > 0n ? Number(BigInt(stepBlocks) < left / nsPerBlock + 1n ? BigInt(stepBlocks) : left / nsPerBlock + 1n) : Math.min(stepBlocks, 5);
-      await fastForward(net, Math.max(1, step));
-      const landed = await waitForHeight(p, before.header.height + Math.max(1, step));
+      const step = Math.max(1, nsPerBlock > 0n ? Number(BigInt(cap) < left / nsPerBlock + 1n ? BigInt(cap) : left / nsPerBlock + 1n) : Math.min(cap, 5));
+      try {
+        // One try per iteration: the recovery below is better informed than a
+        // blind re-POST, which would jump twice if the first one did land.
+        await fastForward(net, step, 1);
+      } catch (e) {
+        if (!isSlowTransport(e)) throw e;
+        // Running out of time is not the same as not happening. The jump may
+        // still be in flight, so read the head rather than asking again: the
+        // next iteration re-reads the clock and asks only for what is left,
+        // whether this one landed late or not at all.
+        if (++misses > 8) throw e;
+        await waitForHeight(p, before.header.height + 1);
+        cap = Math.max(1, Math.floor(cap / 2));
+        continue;
+      }
+      misses = 0;
+      const landed = await waitForHeight(p, before.header.height + step);
       if (landed.time > now && landed.height > before.header.height) nsPerBlock = (landed.time - now) / BigInt(landed.height - before.header.height);
     }
   } catch (e) {
