@@ -40,5 +40,6 @@
       "path": "/jobs/1",
       "wait": 3000
     }
-  ]
+  ],
+  "note": "shots.mjs writes PNG. home.png is then saved as home.jpg (quality 86) and the PNG deleted: the hero's grain texture makes the PNG about 870 KB, the JPEG about 110 KB."
 }

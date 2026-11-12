@@ -224,11 +224,11 @@ docker compose -f docker-compose.judge.yml run --rm judge    # npm run judge
 ## Screenshots
 
 From the live demo. `docs/screenshots/shots.json` lists every one, and the readme-suite `shots.mjs`
-script regenerates them from the running site, so they cannot drift from what it renders.
+script regenerates them from the running site, so they cannot drift from what it renders. The home page is then saved as JPEG, because its grain texture makes a PNG eight times larger.
 
 | | |
 | --- | --- |
-| ![The home page: "You can't sue an AI. Now you don't have to.", with a card showing 0.6 NEAR slashed from a bond](docs/screenshots/home.png) | ![Claim 0: claimed 2 NEAR, awarded 0.6 NEAR, paid entirely from the agent's own bond, with the arbiter's findings field by field](docs/screenshots/claim-quality.png) |
+| ![The home page: "You can't sue an AI. Now you don't have to.", with a card for a claim on a wrong total, and the buttons to watch an agent get slashed or run all seven scenarios](docs/screenshots/home.jpg) | ![Claim 0: claimed 2 NEAR, awarded 0.6 NEAR, paid entirely from the agent's own bond, with the arbiter's findings field by field](docs/screenshots/claim-quality.png) |
 | **The home page.** The pitch, and the way into a real slash. | **A claim, upheld.** Who paid, and the arbiter's findings field by field: the document, what the agent said, the verdict. |
 | ![Engagement 1: slashed, with its price, premium, the bond and vault amounts locked, and a TEE receipt from Qwen/Qwen3.8-27B ready to verify in the browser](docs/screenshots/job-receipt.png) | ![Three underwriter vaults and a settled sealed-bid round, with each bid's commitment hash, revealed premium and rationale](docs/screenshots/vaults.png) |
 | **A job and its receipt.** Signed inside a TEE, checked on-chain, and re-checked in your browser with one click. | **The underwriting market.** Sealed bids, the winner, and why the cautious underwriter declined. |
