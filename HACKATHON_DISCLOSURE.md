@@ -65,5 +65,6 @@ over the full history, and is one of the checks in `npm run judge`.
 
 ## Funds used
 
-About **$5 of USDC** on mainnet in total, across the test payout and the one recorded run. Everything
-else runs on testnet or in a local sandbox.
+None on mainnet so far: the recorded mainnet run has not happened yet. When it does, it is budgeted at
+about **$5 of USDC** in total, across a test payout and the one recorded run. Everything else runs in a
+local sandbox or on testnet.
