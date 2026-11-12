@@ -9,7 +9,7 @@ asked.
 codebase, and no earlier version of the contract. The first commit in this repository is the first line
 of the project.
 
-The implementation plan was written on 7 Nov 2026, at the start of the hackathon window, and is
+The implementation plan was written on 7 Nov 2026, during the hackathon window (1–14 Nov 2026), and is
 reproduced in [`phases/`](phases/).
 
 ## AI-generated code

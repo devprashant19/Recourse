@@ -45,7 +45,7 @@ The hard debugging happened in [Phase 3](phase-03-money-out.md). Today is the cl
 
 ## 4. Submission checklist
 
-From `HACKATHON.md` and `SUBMITTING.md`:
+From `HACKATHON.md` and `SUBMITTING.md`: <!-- the hackathon's own files, downloaded from its site, not part of this repo --> <!-- check-docs: ignore -->
 
 - [ ] Repository **public**, `LICENSE` present, stays public through judging.
 - [ ] README has the Do/See table, trust assumptions, known limits, mainnet evidence and the list of

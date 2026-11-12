@@ -76,5 +76,5 @@ Stated plainly, because a judge will ask:
   is no recourse — the name is aspirational, not a promise of infinite appeals.
 - **1Click failing to deliver after a successful deposit.** `REFUNDED` and `FAILED` re-open the payout
   and the funds return to the contract, but the client waits.
-- **An agent that simply never registers.** Recourse makes bonded agents accountable; it does not stop
+- **An agent that never registers.** Recourse makes bonded agents accountable; it does not stop
   anyone from hiring an unbonded one.

@@ -81,7 +81,7 @@ To help us investigate and remediate the issue quickly, please include:
 If you accidentally commit or expose a private key, NEAR account credentials, API secret, or service token:
 
 1. **Rotate and Revoke Immediately:** Treat the exposed secret as compromised. Immediately revoke or rotate the credential at the provider or NEAR account level.
-2. **Do Not Rely on `git rm`:** Simply deleting the key in a subsequent commit leaves the secret in the Git history.
+2. **Do Not Rely on `git rm`:** Deleting the key in a subsequent commit leaves the secret in the Git history.
 3. **Notify Maintainers:** Report the incident privately via [GitHub Security Advisories](https://github.com/devprashant19/Recourse/security/advisories/new) so maintainers can rewrite or scrub repository history if necessary.
 
 ---

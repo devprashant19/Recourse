@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript SDK and package suite (`packages/sdk`, `packages/intents`, `packages/adapters`, `packages/jobs`, `packages/config`).
 - Distributed off-chain keeper and arbiter services (`services/keeper`, `services/arbiter`, `services/worker-agent`, `services/underwriters`, `services/indexer`).
 - Full-stack web user interface built with Next.js (`apps/web`).
-- End-to-end integration demo and compliance judge harness (`scripts/judge.ts`).
+- End-to-end integration demo and compliance judge script (`scripts/judge.ts`).
 - Standardized GitHub issue templates for bug reports, feature requests, and documentation improvements (`.github/ISSUE_TEMPLATE/`).
 - Standardized Pull Request template with testing checklist and security verifications (`.github/PULL_REQUEST_TEMPLATE.md`).
 - Automated path-based PR labeler workflow (`.github/workflows/labeler.yml` and `.github/labeler.yml`).
@@ -87,7 +87,7 @@ All workspace packages (`packages/*`, `services/*`, `apps/web`) and NEAR smart c
 1. **Local Pre-flight Verification**:
    ```bash
    pnpm install --frozen-lockfile
-   pnpm check:all
+   pnpm typecheck && pnpm lint
    npm run judge
    ```
 2. **Update Documentation**:

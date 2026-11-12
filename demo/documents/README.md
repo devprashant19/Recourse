@@ -5,11 +5,11 @@ it. Every company, person, address and number is invented.
 
 | File | Layout | Notes |
 |---|---|---|
-| `01-northwind-invoice.md` | Markdown tables | Has a PO number |
-| `02-quillfeather-invoice.md` | Dotted plain text, long-form dates | **No PO** — a hallucinated PO is unambiguously wrong |
-| `03-tidewater-invoice.md` | Statement with bullet usage lines | 0% tax (reverse charge) |
-| `04-amberline-invoice.md` | Fixed-width freight invoice | Thousands separators; "Net 45" terms |
-| `05-lumen-invoice.md` | Prose letter | **No PO**; figures embedded in sentences |
+| [`01-northwind-invoice.md`](01-northwind-invoice.md) | Markdown tables | Has a PO number |
+| [`02-quillfeather-invoice.md`](02-quillfeather-invoice.md) | Dotted plain text, long-form dates | **No PO** — a hallucinated PO is unambiguously wrong |
+| [`03-tidewater-invoice.md`](03-tidewater-invoice.md) | Statement with bullet usage lines | 0% tax (reverse charge) |
+| [`04-amberline-invoice.md`](04-amberline-invoice.md) | Fixed-width freight invoice | Thousands separators; "Net 45" terms |
+| [`05-lumen-invoice.md`](05-lumen-invoice.md) | Prose letter | **No PO**; figures embedded in sentences |
 
 - `schema.json` — the JSON Schema the agent must fill (`additionalProperties: false`; amounts are
   two-decimal strings, dates ISO-8601, `po_number` is `null` when the document has none).

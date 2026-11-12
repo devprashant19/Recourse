@@ -140,7 +140,7 @@ Users or auditors can independently verify that an off-chain event record is cry
 
 1. Request proof for sequence $k$:
    ```bash
-   curl https://indexer.recourse.protocol/api/ledger/proof?seq=k
+   curl "http://localhost:8080/api/ledger/proof?seq=k"   # your indexer's address; anchoring is off on the hosted sandbox
    ```
 2. Verify local chain integrity from $1$ to $k$ using SHA-256 and RFC-8785 canonical serialization.
 3. Query the NEAR smart contract view directly via NEAR RPC:

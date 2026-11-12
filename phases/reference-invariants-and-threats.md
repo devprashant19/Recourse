@@ -150,8 +150,8 @@ the README without adding it here is a failing build.
 
 ## 9. Sources (checked Nov 7, 2026)
 
-- NEAR HACKATHON site and `HACKATHON.md`: dates, rules, judging, submission API.
-- `nearai/near-hackathon-prompt-examples`: setup prompt, track prompts, `SUBMITTING.md`.
+- NEAR HACKATHON site and `HACKATHON.md`: dates, rules, judging, submission API. <!-- the hackathon's own file, not part of this repo --> <!-- check-docs: ignore -->
+- `nearai/near-hackathon-prompt-examples`: setup prompt, track prompts, `SUBMITTING.md`. <!-- a file in another repository --> <!-- check-docs: ignore -->
 - 1Click, "making a request": base URL, quote fields, statuses, no testnet.
 - NEAR AI Cloud, "response signatures": signed text format, EIP-191 recovery, signer binding.
 - NEAR AI Cloud, "gateway attestation": report endpoint, nonce format, TDX quote checks with `dcap-qvl`.

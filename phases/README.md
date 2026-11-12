@@ -26,6 +26,7 @@ chain (9). 1Click refunds return to the contract.
 | Phase | File | Dates (UTC) | Theme | Hard gate |
 |---|---|---|---|---|
 | 0 | [phase-00-setup-and-spikes.md](phase-00-setup-and-spikes.md) | Sat 7 Nov, evening | Repo, toolchains, accounts, 3 spikes | Spike A recovers the TEE signer in **both** Rust and TS |
+|   | [phase-00-status-snapshot.md](phase-00-status-snapshot.md) | — | Phase 0 checklist as it stood in early November, kept for the record | — |
 | 1 | [phase-01-contract-core.md](phase-01-contract-core.md) | Sun 8 – Mon 9 Nov | The Rust contract: bonds, vaults, engagements, claims, slashing, pricing | Unit + invariant tests green; scenarios 01 & 03 on sandbox |
 | 2 | [phase-02-receipts-worker-arbiter.md](phase-02-receipts-worker-arbiter.md) | Tue 10 Nov | TEE receipts, worker agent, arbiter, fixtures | A live receipt accepted on testnet; a tampered one rejected |
 | 3 | [phase-03-money-out.md](phase-03-money-out.md) | Wed 11 Nov | USDC (NEP-141), 1Click payouts, Sputnik appeals, first mainnet slash | One real payout reaches Base with `SUCCESS` on-chain |

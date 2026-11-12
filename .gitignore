@@ -67,3 +67,6 @@ crash.log
 # video-story-demo spec and render output (never committed unless asked)
 video/
 infra/aws/tfplan
+
+# LifeLine planning note committed here by mistake; kept on disk, not in the repo
+NEXT_THING.md

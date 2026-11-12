@@ -20,7 +20,7 @@ careful bookkeeping.
 - [ ] `claims.rs` (`file_claim`, `resolve_objective`, `resolve_claim`, `finalize`), `slashing.rs`,
       `payouts.rs` in **Direct mode** only.
 - [ ] `pricing.rs` with `quote_job`, `max_liability`, required bond share, premium floor.
-- [ ] Unit tests for every module (about 60) and the `proptest` invariant harness.
+- [ ] Unit tests for every module (about 60) and the `proptest` invariant tests.
 - [ ] `scripts/deploy.ts` and `scripts/seed.ts` for sandbox; `packages/sdk` typed client.
 
 Deferred out of this phase on purpose: USDC/`ft.rs` and the Intents payout path (Phase 3),
@@ -208,7 +208,7 @@ a hole in the UI later.
 7. **Fair shares:** rounding on vault deposits and redemptions never favours the LP.
 8. **Forward only:** engagement and claim statuses never move backwards.
 
-Harness: `proptest` in `tests/invariants/` — 8 invariants x 256 random runs x 50 steps.
+Invariant tests: `proptest` in `tests/invariants/` — 8 invariants x 256 random runs x 50 steps.
 
 ## 11. Contract unit tests for this phase (~60, `cargo test` + `VMContextBuilder`)
 

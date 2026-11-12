@@ -90,7 +90,7 @@ Recourse/
    ```
    *Note: Running `pnpm demo` runs entirely on an ephemeral local NEAR sandbox and requires no API keys or `.env` configuration.*
 
-4. **Verify your setup with the Judge harness:**
+4. **Verify your setup with the judge script:**
    ```bash
    npm run judge
    ```
