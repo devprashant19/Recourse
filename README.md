@@ -16,8 +16,9 @@ The arbiter that rules on bad work is bonded too: a Sputnik DAO council can over
   [`/api/totals`](https://recourse-near.duckdns.org/api/totals) · `/api/health` · `/api/audit.csv`
 - Same site by IP, if DNS is being slow: https://recourse.100.29.122.218.sslip.io
 - Demo post on X: https://x.com/recoursenear/status/2121243155148447765 (from [@recoursenear](https://x.com/recoursenear))
-- Contract: `recourse.test.near`, inside the hosted sandbox. There is no testnet or mainnet deployment
-  yet: see [Status](#status)
+- Contract on NEAR testnet: [`recourse.recourse-near.testnet`](https://testnet.nearblocks.io/address/recourse.recourse-near.testnet), with its appeal council
+  [`council.recourse-near.testnet`](https://testnet.nearblocks.io/address/council.recourse-near.testnet). The hosted demo runs the same wasm in a sandbox
+  as `recourse.test.near`. No mainnet deployment yet: see [Status](#status)
 
 ![The live Demo page: 7/7 PASS, solvency OK, one row per scenario with what happened on chain](docs/screenshots/demo.png)
 
@@ -60,9 +61,14 @@ underwriter agents, the payout keeper, the indexer, the web app and the judge sc
 is public and passes **7/7 with `solvency_ok: true`**, replaying genuine NEAR AI Cloud recordings
 (TEE-signed, Intel-verified) for the worker and arbiter.
 
-Not done yet: the **live testnet deployment** and the **recorded mainnet run** (one real job, one real
-slash, about $2 of USDC arriving on Base). Both need funded accounts and a person confirming each
-transaction. Until then, everything runs on a NEAR sandbox. The full list is in
+On NEAR testnet since 13 Nov 2026: the contract at [`recourse.recourse-near.testnet`](https://testnet.nearblocks.io/address/recourse.recourse-near.testnet), deployed and
+initialised in one transaction ([`GybcF8V6…`](https://testnet.nearblocks.io/txns/GybcF8V6Lg3HNYCdH5CDSmnFWbhMCHFVPBB5JXF4gCD9)) from the pinned wasm (its on-chain code
+hash matches `recourse.wasm.sha256`), with no access keys, `solvency().ok` true, and its Sputnik DAO
+council at [`council.recourse-near.testnet`](https://testnet.nearblocks.io/address/council.recourse-near.testnet) ([`2DyUWoBR…`](https://testnet.nearblocks.io/txns/2DyUWoBRQxMnU9E5GNSTm3bQXRH7CcMhFykfqTxwSHF9)). No jobs have run
+on testnet yet; the seven scenarios run in the hosted sandbox.
+
+Not done yet: the **recorded mainnet run** (one real job, one real slash, about $2 of USDC arriving on
+Base). It needs a funded mainnet account and a person confirming each transaction. The full list is in
 [What is real today](#what-is-real-today).
 
 ## The problem
@@ -192,7 +198,7 @@ the bytes come from, never whether they are verified.
 
 | Piece | What Recourse uses it for | ID |
 | --- | --- | --- |
-| Smart contract (Rust, near-sdk 5.29) | Bonds, the underwriting pool, engagements, receipts, claims, slashing, appeals and payouts. The only thing that holds money | `recourse.test.near` in the hosted sandbox; testnet and mainnet not deployed yet |
+| Smart contract (Rust, near-sdk 5.29) | Bonds, the underwriting pool, engagements, receipts, claims, slashing, appeals and payouts. The only thing that holds money | [`recourse.recourse-near.testnet`](https://testnet.nearblocks.io/address/recourse.recourse-near.testnet) on testnet; `recourse.test.near` in the hosted sandbox; mainnet not deployed yet |
 | `env::ecrecover` | Recovers the TEE signer of every receipt and verdict on-chain, over the EIP-191 digest | `contracts/recourse/src/tee.rs` |
 | NEAR AI Cloud | TEE-hosted inference for the worker and the arbiter, with Intel TDX attestation checked with a fresh nonce | API base `cloud-api.near.ai/v1`; worker `Qwen/Qwen3.8-27B`, arbiter `z-ai/glm-5.3-flash` |
 | NEAR Intents, through the 1Click API | Payouts to the client's chosen chain and token. The contract is the refund address | `https://1click.chaindefuser.com` |
@@ -279,9 +285,10 @@ each, is in [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
 These are the ones we know about.
 
-- **There is no testnet or mainnet deployment yet.** Both need funded accounts and keys. The live demo
-  is a NEAR sandbox inside one container, redeployed from genesis every hour, so its contract account
-  and history are minutes old by design.
+- **The testnet contract has no traffic yet, and there is no mainnet deployment.** The testnet contract
+  is deployed and initialised but has not been seeded or run a job. The live demo is a NEAR sandbox
+  inside one container, redeployed from genesis every hour, so its contract account and history are
+  minutes old by design.
 - **New hires from the hosted demo's UI are not signed in a TEE.** The seeded history replays genuine
   NEAR AI Cloud recordings, but a job you start from the browser uses a deterministic dev model signed
   by an allow-listed sandbox key, and its receipt says `dev-fixture`. See [`docs/hosting.md`](docs/hosting.md).
@@ -311,7 +318,7 @@ These are the ones we know about.
 | Genuine NEAR AI Cloud recordings | **Done**: `demo/fixtures/near-ai/fixtures.json`, recorded 8 Nov 2026; the five judge receipts in `demo/fixtures/receipts` verify standalone with `pnpm verify-receipt` |
 | Spike A (a real NEAR AI Cloud signature recovered by `env::ecrecover`) | **PASS**: TypeScript and Rust recover the same signer, which matches the address in the model's attestation report; the contract's `check_receipt` accepts the live receipt and rejects tampered copies (`contracts/recourse/src/tests/tee.rs`) |
 | Hosted demo | **Deployed and public** at [recourse-near.duckdns.org](https://recourse-near.duckdns.org): the keyless sandbox stack with an hourly reset, on one x86_64 EC2 instance behind Caddy with automatic HTTPS and daily EBS snapshots. Reproducible with the Terraform in [`infra/aws/`](infra/aws/). Results are in [Measured](#measured) |
-| Testnet deployment | **Not yet**: needs accounts and keys ([`docs/hosting.md`](docs/hosting.md)) |
+| Testnet deployment | **Deployed** 13 Nov 2026: [`recourse.recourse-near.testnet`](https://testnet.nearblocks.io/address/recourse.recourse-near.testnet) with council [`council.recourse-near.testnet`](https://testnet.nearblocks.io/address/council.recourse-near.testnet); code hash matches the pinned wasm, no access keys, solvent. Not seeded and no jobs run yet ([`docs/hosting.md`](docs/hosting.md)) |
 | Mainnet run | **Not yet recorded**: a person confirms every transaction ([`demo/mainnet-run/RUN.md`](demo/mainnet-run/RUN.md)) |
 
 ### Mainnet evidence

@@ -54,12 +54,12 @@ remove arbiters, keepers and TEE signers. It cannot move funds; there is no meth
 
 ## What runs where
 
-| Component | Sandbox (`pnpm demo`) | Testnet (hosted demo) | Mainnet (recorded run) |
+| Component | Sandbox (`pnpm demo` and the hosted demo) | Testnet | Mainnet (recorded run) |
 |---|---|---|---|
-| `recourse` contract | Local near-sandbox | `recourse.<owner>.testnet` (`pnpm deploy`'s default; `--contract-id` overrides) | `recourse-demo.near` |
+| `recourse` contract | Local near-sandbox | `recourse.recourse-near.testnet` (deployed 13 Nov 2026; `pnpm deploy`'s default is `recourse.<owner>.testnet`) | `recourse-demo.near` |
 | NEAR AI Cloud | Recorded real responses + signatures (fixtures) | Live, API key on the server | Live |
 | 1Click | Recorded real quotes and statuses | Live quotes with `dry: true` | Live, about $2 per payout |
-| Council DAO | Sputnik contract deployed into sandbox | `recourse-council.sputnikv2.testnet` | Not used (appeal shown on testnet) |
+| Council DAO | Sputnik contract deployed into sandbox | `council.recourse-near.testnet` | Not used (appeal shown on testnet) |
 | Bond asset | Native NEAR | Native NEAR | USDC (NEP-141), so the payout is a USDC-to-USDC route |
 
 Fixtures are captured from real calls on day 3 and day 4 and committed, so the sandbox replays genuine
