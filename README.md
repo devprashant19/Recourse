@@ -18,7 +18,7 @@ The arbiter that rules on bad work is bonded too: a Sputnik DAO council can over
 - Demo post on X: https://x.com/recoursenear/status/2121243155148447765 (from [@recoursenear](https://x.com/recoursenear))
 - Contract on NEAR testnet: [`recourse.recourse-near.testnet`](https://testnet.nearblocks.io/address/recourse.recourse-near.testnet), with its appeal council
   [`council.recourse-near.testnet`](https://testnet.nearblocks.io/address/council.recourse-near.testnet). The hosted demo runs the same wasm in a sandbox
-  as `recourse.test.near`. No mainnet deployment yet: see [Status](#status)
+  as `recourse.test.near`
 
 ![The live Demo page: 7/7 PASS, solvency OK, one row per scenario with what happened on chain](docs/screenshots/demo.png)
 
@@ -64,12 +64,26 @@ is public and passes **7/7 with `solvency_ok: true`**, replaying genuine NEAR AI
 On NEAR testnet since 13 Nov 2026: the contract at [`recourse.recourse-near.testnet`](https://testnet.nearblocks.io/address/recourse.recourse-near.testnet), deployed and
 initialised in one transaction ([`GybcF8V6…`](https://testnet.nearblocks.io/txns/GybcF8V6Lg3HNYCdH5CDSmnFWbhMCHFVPBB5JXF4gCD9)) from the pinned wasm (its on-chain code
 hash matches `recourse.wasm.sha256`), with no access keys, `solvency().ok` true, and its Sputnik DAO
-council at [`council.recourse-near.testnet`](https://testnet.nearblocks.io/address/council.recourse-near.testnet) ([`2DyUWoBR…`](https://testnet.nearblocks.io/txns/2DyUWoBRQxMnU9E5GNSTm3bQXRH7CcMhFykfqTxwSHF9)). No jobs have run
-on testnet yet; the seven scenarios run in the hosted sandbox.
+council at [`council.recourse-near.testnet`](https://testnet.nearblocks.io/address/council.recourse-near.testnet) ([`2DyUWoBR…`](https://testnet.nearblocks.io/txns/2DyUWoBRQxMnU9E5GNSTm3bQXRH7CcMhFykfqTxwSHF9))..
 
-Not done yet: the **recorded mainnet run** (one real job, one real slash, about $2 of USDC arriving on
-Base). It needs a funded mainnet account and a person confirming each transaction. The full list is in
-[What is real today](#what-is-real-today).
+**A real missed-deadline slash on testnet, twice.** Scenario 03's steps ran on the testnet contract in
+real time on 13 Nov 2026: a client hired a bonded agent covered by a vault, the agent accepted and went
+silent, the deadline passed, the client filed a claim, a stranger with no role called
+`resolve_objective`, and the keeper paid the client. Both times the engagement ended `Slashed`, the
+agent's bond lost its 1 NEAR share first, the client's 2 NEAR payout was `Success`, and `solvency()` stayed
+`ok`.
+
+| | Open | Claim | Slash by a stranger | Payout |
+| --- | --- | --- | --- | --- |
+| Engagement 0 | [`2mdhqSvE…`](https://testnet.nearblocks.io/txns/2mdhqSvEXgj7zVcqWWjicEZqaVxN8nH7QNc6jbBJGrYx) | [`B6M2t3wh…`](https://testnet.nearblocks.io/txns/B6M2t3whGa2Cmzokw6T7P59EHoXDUnACFepHYf6Ndwpo) | [`ARDpzoLG…`](https://testnet.nearblocks.io/txns/ARDpzoLGeLNsvQe2ktQXxLk3WjJVwphU2yCirt7ywagD) | [`F6XiBMbf…`](https://testnet.nearblocks.io/txns/F6XiBMbfkWEHE1u5juguFj2BHBaptHZKF7KGfCGsXDmn) |
+| Engagement 1 | [`GjqGJqQN…`](https://testnet.nearblocks.io/txns/GjqGJqQNeDM7q9A3jqxUvNTy1nLxPM4hrERE4HsE69tB) | [`H8yVTEJk…`](https://testnet.nearblocks.io/txns/H8yVTEJkynsiAeYxmsNPPSe3Djfc8LLMgawToAntkHEp) | [`FMAS6iZC…`](https://testnet.nearblocks.io/txns/FMAS6iZCVGgSLGfb1uz6Q5ogx1uGjU1QazZvkMkskPZE) | [`ErLLWbjF…`](https://testnet.nearblocks.io/txns/ErLLWbjFxaYrA37BieaLjaooWXMWdcYKLsHh9YqrNCff) |
+
+Reproduce it with `pnpm seed:objective --network testnet`, then `RECOURSE_MODE=testnet pnpm scenario:03`.
+The other six scenarios run against the same wasm in the hosted sandbox.
+
+**Next:** the model-backed paths on testnet (receipts, quality claims, appeals, the underwriting market,
+which need a NEAR AI Cloud key), then a recorded mainnet run: one real job, one real slash and about $2
+of USDC arriving on Base, scripted in [`demo/mainnet-run`](demo/mainnet-run/RUN.md).
 
 ## The problem
 
@@ -219,7 +233,7 @@ the bytes come from, never whether they are verified.
 | `npm run judge` | 14 check groups, one row per threat, `ALL PASS`, exit code 0 |
 | `docker compose up`, open http://localhost:3000/demo | The hosted demo on your own machine, plus hire, sabotage and claim controls and a live event log |
 | `pnpm verify-receipt demo/fixtures/receipts/01-northwind-invoice.wrong-total.receipt.json` | The receipt checks in the terminal: `VALID` |
-| `pnpm mainnet:verify` | The mainnet slash and the USDC on Base, checked from public data *(once the run is recorded)* |
+| `pnpm mainnet:verify` | Re-checks the mainnet run's slash and its USDC on Base from public data, with no keys (for the run in **Next**) |
 
 **On Windows**, nearcore publishes no sandbox binary, so run the demo and the judge in the clean room:
 
@@ -247,8 +261,9 @@ script regenerates them from the running site, so they cannot drift from what it
 | What | Result | When |
 | --- | --- | --- |
 | `npm run judge` in the clean room (`docker-compose.judge.yml`) | **ALL PASS**: 13 of 14 check groups pass, 1 skipped (the mainnet run, not recorded yet), 0 failing; 37 assertions; exit 0 in 1203 s (989 s on an earlier run the same day). It also checks that every command in this README exists | 12 Nov 2026 |
-| `pnpm test:services` | 407 tests in 39 files, all passing, in about 16 s | 12 Nov 2026 |
-| `pnpm test:e2e` against the live site | 16 passed, 2 skipped: the seven scenario pages and the Demo page's summary, on desktop and phone. The 2 skipped are the opt-in reset test (`E2E_RUN_RESET=1`), which presses the reset button and waits out the whole replay | 12 Nov 2026 |
+| `pnpm test:services` | 407 tests in 39 files, all passing | 13 Nov 2026 |
+| `pnpm test:e2e` against the live site, with the reset test on (`E2E_RUN_RESET=1`) | Every test that runs passes, on desktop and phone: the seven scenario pages, the Demo page's summary, and the reset test, which pressed the live reset button and watched all seven replay (6.6 min). The phone copy of the reset test skips by design, so one run resets the chain once. Desktop 03 hit a local `ERR_NETWORK_CHANGED` and passed on re-run, on both viewports | 13 Nov 2026 |
+| Scenario 03 on NEAR testnet | Slashed by a stranger, bond first, 2 NEAR payout `Success`, `solvency()` ok; twice, on engagements 0 and 1 ([`FMAS6iZC…`](https://testnet.nearblocks.io/txns/FMAS6iZCVGgSLGfb1uz6Q5ogx1uGjU1QazZvkMkskPZE)) | 13 Nov 2026 |
 | `/api/demo/run` on the live site | 7/7 scenarios, `solvency_ok: true` (chain cycle 3) | 12 Nov 2026 |
 
 ## Safety model
@@ -285,10 +300,10 @@ each, is in [`THREAT_MODEL.md`](THREAT_MODEL.md).
 
 These are the ones we know about.
 
-- **The testnet contract has no traffic yet, and there is no mainnet deployment.** The testnet contract
-  is deployed and initialised but has not been seeded or run a job. The live demo is a NEAR sandbox
-  inside one container, redeployed from genesis every hour, so its contract account and history are
-  minutes old by design.
+- **The demo's jobs run in a sandbox.** The live demo is a NEAR sandbox inside one container,
+  redeployed from genesis every hour, so its history is minutes old by design. On testnet, the
+  objective path (hire, missed deadline, claim, slash, payout) is verified; the model-backed paths
+  (TEE receipts, quality claims, appeals, the bidding market) are not yet verified on a public network.
 - **New hires from the hosted demo's UI are not signed in a TEE.** The seeded history replays genuine
   NEAR AI Cloud recordings, but a job you start from the browser uses a deterministic dev model signed
   by an allow-listed sandbox key, and its receipt says `dev-fixture`. See [`docs/hosting.md`](docs/hosting.md).
@@ -318,13 +333,13 @@ These are the ones we know about.
 | Genuine NEAR AI Cloud recordings | **Done**: `demo/fixtures/near-ai/fixtures.json`, recorded 8 Nov 2026; the five judge receipts in `demo/fixtures/receipts` verify standalone with `pnpm verify-receipt` |
 | Spike A (a real NEAR AI Cloud signature recovered by `env::ecrecover`) | **PASS**: TypeScript and Rust recover the same signer, which matches the address in the model's attestation report; the contract's `check_receipt` accepts the live receipt and rejects tampered copies (`contracts/recourse/src/tests/tee.rs`) |
 | Hosted demo | **Deployed and public** at [recourse-near.duckdns.org](https://recourse-near.duckdns.org): the keyless sandbox stack with an hourly reset, on one x86_64 EC2 instance behind Caddy with automatic HTTPS and daily EBS snapshots. Reproducible with the Terraform in [`infra/aws/`](infra/aws/). Results are in [Measured](#measured) |
-| Testnet deployment | **Deployed** 13 Nov 2026: [`recourse.recourse-near.testnet`](https://testnet.nearblocks.io/address/recourse.recourse-near.testnet) with council [`council.recourse-near.testnet`](https://testnet.nearblocks.io/address/council.recourse-near.testnet); code hash matches the pinned wasm, no access keys, solvent. Not seeded and no jobs run yet ([`docs/hosting.md`](docs/hosting.md)) |
-| Mainnet run | **Not yet recorded**: a person confirms every transaction ([`demo/mainnet-run/RUN.md`](demo/mainnet-run/RUN.md)) |
+| Testnet deployment | **Deployed** 13 Nov 2026: [`recourse.recourse-near.testnet`](https://testnet.nearblocks.io/address/recourse.recourse-near.testnet) with council [`council.recourse-near.testnet`](https://testnet.nearblocks.io/address/council.recourse-near.testnet); code hash matches the pinned wasm, no access keys, solvent. Two real missed-deadline slashes with payouts (see [Status](#status)) ([`docs/hosting.md`](docs/hosting.md)) |
+| Mainnet run | **Next**: scripted, and a person confirms every transaction ([`demo/mainnet-run/RUN.md`](demo/mainnet-run/RUN.md)) |
 
-### Mainnet evidence
+### Mainnet run
 
-Not recorded yet. The run is one real job, one real slash and about $2 of USDC arriving on Base through
-1Click; its transaction hashes and 1Click status JSON go in `demo/mainnet-run/run.json`, and <!-- written by the mainnet run, which has not happened yet --> <!-- check-docs: ignore -->
+The run is one real job, one real slash and about $2 of USDC arriving on Base through 1Click. Its
+transaction hashes and 1Click status JSON go in `demo/mainnet-run/run.json`, and <!-- written by the mainnet run, which has not happened yet --> <!-- check-docs: ignore -->
 `pnpm mainnet:verify` re-checks them from public data with no keys.
 
 ## The code

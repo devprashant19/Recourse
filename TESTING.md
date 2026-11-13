@@ -9,7 +9,7 @@ covers. Every count below is from runs on 12 Nov 2026.
 | --- | --- | --- | --- |
 | A browser | Open https://recourse-near.duckdns.org/demo | Seconds | The seven scenarios, each with what happened on chain and PASS or FAIL, and `7/7 PASS solvency OK` |
 | Docker | `docker compose -f docker-compose.judge.yml run --rm judge` | About 16–20 minutes | 14 check groups in one table, `ALL PASS`, exit code 0 |
-| Node 22 and pnpm | `pnpm i && pnpm test:services` | About 16 seconds | 407 tests in 39 files |
+| Node 22 and pnpm | `pnpm i && pnpm test:services` | About 20 seconds | 407 tests in 39 files |
 | Node 22, pnpm, macOS or Linux | `pnpm i && pnpm demo` | About 6–7 minutes | A fresh NEAR sandbox, the seven scenarios, and a table ending `7/7 PASS, solvency: OK` |
 
 The demo and the judge need no `.env` and no keys: the NEAR AI Cloud and 1Click calls replay recorded,
@@ -62,9 +62,25 @@ pnpm test:e2e:install           # once per machine
 E2E_BASE_URL=https://recourse-near.duckdns.org E2E_API_URL=https://recourse-near.duckdns.org/api pnpm test:e2e
 ```
 
-On 12 Nov 2026: 16 passed and 2 skipped. The two skipped are the reset test, which presses the reset
-button and waits out the whole replay. It runs only with `E2E_RUN_RESET=1`, because a reset affects
-everyone watching the live site.
+On 13 Nov 2026, with `E2E_RUN_RESET=1`, every test that ran passed on desktop and phone, including
+the reset test: it pressed the live reset button and watched all seven scenarios replay (6.6 min). The
+phone copy of the reset test skips by design, so one run resets the chain once. Desktop 03 hit a local
+`ERR_NETWORK_CHANGED` and passed on re-run on both viewports. Without `E2E_RUN_RESET=1` the reset test
+skips, because a reset affects everyone watching the live site.
+
+## On NEAR testnet
+
+The objective path runs on the public testnet contract in real time, with no model and no keys beyond
+the owner's:
+
+```bash
+pnpm seed:objective --network testnet     # an agent with the minimum bond, a vault, a client, a keeper, a stranger
+RECOURSE_MODE=testnet pnpm scenario:03    # hire, go silent, wait out the deadline, claim, slash, pay
+```
+
+On 13 Nov 2026 this ran twice against `recourse.recourse-near.testnet`: both engagements ended
+`Slashed`, the bond paid first, the 2 NEAR payouts were `Success` and `solvency()` stayed `ok`. The
+transactions are in the README's Status section.
 
 ## Checking a receipt by hand
 

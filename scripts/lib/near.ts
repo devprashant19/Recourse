@@ -178,14 +178,28 @@ async function waitForHeight(p: JsonRpcProvider, height: number): Promise<{ heig
 }
 
 /**
- * Sandbox only: fast-forwards until chain time is past `targetNs`.
+ * Moves past `targetNs` in chain time.
  *
- * near-api-js signs transactions against the *final* block's hash, and the
- * sandbox only accepts hashes from the last 100 blocks. Right after a jump the
- * final block can lag the new head by more than that, so skip in small steps
- * and wait for finality to catch up before returning.
+ * On a public network time cannot be skipped, so this waits for the final
+ * block's timestamp to pass the target (the contract compares against block
+ * time, so the wall clock is not enough).
+ *
+ * On the sandbox it fast-forwards. near-api-js signs transactions against the
+ * *final* block's hash, and the sandbox only accepts hashes from the last 100
+ * blocks. Right after a jump the final block can lag the new head by more than
+ * that, so skip in small steps and wait for finality to catch up before returning.
  */
 export async function skipPast(net: Network, p: JsonRpcProvider, targetNs: bigint, stepBlocks = 50): Promise<void> {
+  if (net !== "sandbox") {
+    const deadline = Date.now() + Number((targetNs - (await chainNow(p))) / 1_000_000n) + 10 * 60_000;
+    for (;;) {
+      // A public RPC drops the odd request over ten minutes; one miss is not a reason to stop waiting.
+      const head = await p.viewBlock({ finality: "final" }).catch(() => undefined);
+      if (head && BigInt(head.header.timestamp_nanosec) > targetNs) return;
+      if (Date.now() > deadline) throw new Error(`chain time did not pass ${targetNs} in time`);
+      await new Promise((r) => setTimeout(r, 5_000));
+    }
+  }
   // `sandbox_fast_forward` returns before the jump is applied. Re-reading the
   // time straight away used to see the old head and ask again, so under load
   // several jumps stacked up and overshot by minutes (scenario 07 then found

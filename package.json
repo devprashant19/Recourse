@@ -30,6 +30,7 @@
     "deploy": "tsx scripts/deploy.ts",
     "deploy:dao": "tsx scripts/deploy-dao.ts",
     "seed": "tsx scripts/seed.ts",
+    "seed:objective": "tsx scripts/seed-objective.ts",
     "setup-service-keys": "tsx scripts/setup-service-keys.ts",
     "register-tee-signer": "tsx scripts/register-tee-signer.ts",
     "testnet:verify-receipt": "tsx scripts/verify-live-receipt.ts",

@@ -45,7 +45,8 @@ a minute per IP) and act through a server-side demo client, so visitors never ne
    ```bash
    pnpm run deploy:dao --network testnet --council-members you.testnet
    pnpm run deploy --network testnet --council-id council.<owner>.testnet
-   pnpm run seed --network testnet
+   pnpm run seed --network testnet             # the full cast, about 257 NEAR
+   pnpm seed:objective --network testnet       # or a small one, about 13 NEAR, for scenario 03
    pnpm setup-service-keys --network testnet
    pnpm register-tee-signer --network testnet --model "$NEARAI_MODEL_WORKER"
    pnpm register-tee-signer --network testnet --model "$NEARAI_MODEL_ARBITER"
