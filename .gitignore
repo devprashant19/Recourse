@@ -54,7 +54,6 @@ PHASE-0-STATUS.md
 
 docs/audits/complete-project-audit
 
-
 # Terraform (infra/aws) — provider cache and state are local; the lock file is committed
 infra/aws/.terraform/
 *.tfstate
@@ -73,3 +72,5 @@ NEXT_THING.md
 
 # design-reference working notes; kept on disk, not in the repo
 motion/
+
+/video-workspace
