@@ -9,6 +9,9 @@ even by the agent's own operator. If the work is wrong, the agent is **slashed**
 second, and the client is paid back **in the token and on the chain they chose**, through NEAR Intents.
 The arbiter that rules on bad work is bonded too: a Sputnik DAO council can overturn it, and fine it.
 
+[![Watch the video: Recourse — You Cannot Sue an AI](https://img.youtube.com/vi/78jE-l_-MHA/maxresdefault.jpg)](https://www.youtube.com/watch?v=78jE-l_-MHA)
+
+- Video walkthrough: https://www.youtube.com/watch?v=78jE-l_-MHA
 - Live demo: https://recourse-near.duckdns.org (no wallet, no sign-in, nothing to install; the chain
   rebuilds from genesis every hour)
 - Indexer API, read straight off the chain: [`/api/demo/run`](https://recourse-near.duckdns.org/api/demo/run) ·
