@@ -11,3 +11,5 @@ overrides:
   sharp: "0.35.5"
   tinypool: "2.1.2"
   minimatch: "11.0.1"
+  vite: "6.4.4"
+  "@vitest/mocker": "4.1.12"
