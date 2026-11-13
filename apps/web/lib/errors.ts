@@ -158,3 +158,14 @@ export function isTransientApiError(error: unknown): boolean {
   const raw = error instanceof Error ? error.message : String(error);
   return /fetch failed|failed to fetch|network|econnrefused/i.test(raw);
 }
+
+/**
+ * The message an action (hire, claim, sabotage, reset) shows when it fails. A write is never
+ * faked, so a restart still fails the action, but it says what is happening rather than "502".
+ */
+export function actionErrorMessage(error: unknown): string {
+  if (isTransientApiError(error)) {
+    return "The demo chain is restarting (after a reset or its hourly rebuild), so this did not go through. Try again in about a minute.";
+  }
+  return error instanceof Error ? error.message : String(error);
+}

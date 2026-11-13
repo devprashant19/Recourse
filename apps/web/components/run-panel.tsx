@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Pill } from "@/components/ui";
 import { api, type RunScenario, type RunStatus } from "@/lib/api";
+import { actionErrorMessage } from "@/lib/errors";
 import { amount } from "@/lib/format";
 
 const SOURCE: Record<string, string> = {
@@ -61,7 +62,7 @@ export function RunPanel() {
       setRequestedFrom(st?.cycle ?? 0);
       setMsg(r.message);
     },
-    onError: (e) => setMsg((e as Error).message),
+    onError: (e) => setMsg(actionErrorMessage(e)),
   });
 
   const restarting = requestedFrom !== null && (run.isError || !st || st.cycle === requestedFrom);

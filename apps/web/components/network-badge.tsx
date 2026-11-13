@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
+import { isTransientApiError } from "@/lib/errors";
 import { useDataMode } from "@/lib/mode";
 import { Pill } from "./ui";
 
@@ -26,6 +27,14 @@ export function NetworkBadge() {
         >
           Live data →
         </button>
+      </div>
+    );
+  }
+
+  if (q.isError && isTransientApiError(q.error)) {
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        <Pill tone="warn">reconnecting…</Pill>
       </div>
     );
   }

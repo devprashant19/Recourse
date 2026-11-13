@@ -597,6 +597,17 @@ export const api = {
     if (isDemoMode()) {
       return getMockArtifactBytes(hash);
     }
+    // These bytes are addressed by their SHA-256, so a copy fetched once is the same bytes for good
+    // (and the browser re-hashes them when it verifies). Keeping it means "Verify receipt" still
+    // works while the chain restarts.
+    const cached = recall(`/artifacts/${hash}`);
+    if (cached && typeof cached.body === "string") {
+      try {
+        return Uint8Array.from(atob(cached.body), (c) => c.charCodeAt(0));
+      } catch {
+        // a damaged copy: fetch it again below
+      }
+    }
 
     const timeoutMs = opts?.timeoutMs ?? 10000;
     const controller = new AbortController();
@@ -620,7 +631,11 @@ export const api = {
           path: `/artifacts/${hash}`,
         });
       }
-      return new Uint8Array(await res.arrayBuffer());
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      let bin = "";
+      for (const b of bytes) bin += String.fromCharCode(b);
+      remember(`/artifacts/${hash}`, btoa(bin));
+      return bytes;
     } catch (err: unknown) {
       clearTimeout(timer);
 

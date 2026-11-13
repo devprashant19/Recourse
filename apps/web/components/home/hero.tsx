@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 import { api } from "@/lib/api";
+import { isTransientApiError } from "@/lib/errors";
 import { amount } from "@/lib/format";
 import { useDataMode } from "@/lib/mode";
 import { AmbientGlow, ArrowDot, Magnetic, Star } from "../motion";
@@ -109,7 +110,7 @@ function Ticker() {
     ["Solvency", isDemo ? "SIMULATED" : t ? (t.solvency.ok ? "OK" : "BROKEN") : "—"],
     ["Bonded", t ? amount(t.solvency.bonds, 2) : "—"],
     ["Claims paid", t ? String(t.claims_paid) : "—"],
-    ["Network", isDemo ? "DEMO (SYNTHETIC)" : h ? h.mode : health.isError ? "offline" : "—"],
+    ["Network", isDemo ? "DEMO (SYNTHETIC)" : h ? h.mode : health.isError ? (isTransientApiError(health.error) ? "reconnecting" : "offline") : "—"],
   ];
   return (
     <div className="absolute inset-x-0 bottom-0 px-4 pb-5 sm:px-8">

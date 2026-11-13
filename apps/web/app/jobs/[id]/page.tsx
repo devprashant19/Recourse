@@ -10,6 +10,7 @@ import { Timeline } from "@/components/timeline";
 import { Account, ErrorBox, Hash, KV, Loading, Money, Pill, Section, statusTone } from "@/components/ui";
 import { VerifyPanel } from "@/components/verify-panel";
 import { api } from "@/lib/api";
+import { actionErrorMessage } from "@/lib/errors";
 import { time } from "@/lib/format";
 
 const STEPS = ["Proposed", "Open", "Delivered", "Completed"] as const;
@@ -42,7 +43,7 @@ export default function JobPage({ params }: { params: Promise<{ id: string }> })
   const claim = useMutation({
     mutationFn: (kind: "Quality" | "NoDelivery") => api.claimDemo({ engagement_id: Number(id), kind }),
     onSuccess: (r) => setMsg(`Claim #${r.claim_id} filed.`),
-    onError: (e) => setMsg((e as Error).message),
+    onError: (e) => setMsg(actionErrorMessage(e)),
   });
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => q.refetch()} isRetrying={q.isFetching} />;
   if (!q.data) return <Loading what={`Loading engagement ${id}`} />;

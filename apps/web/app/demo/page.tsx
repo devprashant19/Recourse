@@ -8,6 +8,7 @@ import { RunPanel } from "@/components/run-panel";
 import { describe } from "@/components/timeline";
 import { Account, ErrorBox, Loading, Pill, Section, statusTone, Tx } from "@/components/ui";
 import { api } from "@/lib/api";
+import { actionErrorMessage } from "@/lib/errors";
 
 const MODES = ["none", "wrong_total", "hallucinate", "late", "silent"] as const;
 
@@ -28,12 +29,12 @@ export default function DemoPage() {
       setMsg(`Hired: engagement #${r.engagement_id} for ${r.document}. The worker picks it up within seconds.`);
       void qc.invalidateQueries();
     },
-    onError: (e) => setMsg((e as Error).message),
+    onError: (e) => setMsg(actionErrorMessage(e)),
   });
   const sabotage = useMutation({
     mutationFn: (mode: string) => api.sabotage(mode),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["sabotage"] }),
-    onError: (e) => setMsg((e as Error).message),
+    onError: (e) => setMsg(actionErrorMessage(e)),
   });
 
   const header = (

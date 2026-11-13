@@ -6,6 +6,7 @@ import { use, useMemo, useState } from "react";
 
 import { Account, ErrorBox, KV, Loading, Money } from "@/components/ui";
 import { api } from "@/lib/api";
+import { actionErrorMessage } from "@/lib/errors";
 import { bps, DECIMALS } from "@/lib/format";
 
 const UNIT = 10n ** BigInt(DECIMALS);
@@ -32,7 +33,7 @@ export default function HirePage({ params }: { params: Promise<{ agentId: string
   const hire = useMutation({
     mutationFn: () => api.hire({ agent: agentId, document: doc, price: priceRaw.toString(), liability_cap: cap.toString() }),
     onSuccess: (r) => setDone(r.engagement_id),
-    onError: (e) => setErr((e as Error).message),
+    onError: (e) => setErr(actionErrorMessage(e)),
   });
 
   if (agent.isError) return <ErrorBox error={agent.error} onRetry={() => agent.refetch()} isRetrying={agent.isFetching} />;

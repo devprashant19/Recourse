@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, clearLastGood, get, getStaleness } from "../lib/api";
-import { ApiError, getHumanErrorMessage, isTransientApiError } from "../lib/errors";
+import { ApiError, actionErrorMessage, getHumanErrorMessage, isTransientApiError } from "../lib/errors";
 import { getDataMode, parseDataMode, resetDataMode, setDataMode } from "../lib/mode";
 
 describe("Frontend API Reliability & Explicit Demo Mode", () => {
@@ -210,6 +210,22 @@ describe("Frontend API Reliability & Explicit Demo Mode", () => {
       setDataMode("live");
       globalThis.fetch = vi.fn().mockResolvedValue(gateway);
       await expect(api.health()).rejects.toMatchObject({ status: 502 });
+    });
+
+    it("keeps receipt bytes, which are content-addressed, so verifying works during a restart", async () => {
+      setDataMode("live");
+      const bytes = new Uint8Array([0, 1, 2, 250, 255]);
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => bytes.buffer })
+        .mockResolvedValue({ ok: false, status: 502, json: async () => null });
+      expect(Array.from(await api.artifact("ab".repeat(32)))).toEqual(Array.from(bytes));
+      expect(Array.from(await api.artifact("ab".repeat(32)))).toEqual(Array.from(bytes));
+      await expect(api.artifact("cd".repeat(32))).rejects.toMatchObject({ status: 502 });
+    });
+
+    it("tells an action plainly that the chain is restarting, and passes real errors through", () => {
+      expect(actionErrorMessage(new ApiError("gateway", { status: 502, path: "/demo/hire" }))).toContain("restarting");
+      expect(actionErrorMessage(new ApiError("agent is not registered", { status: 400, path: "/demo/hire" }))).toBe("agent is not registered");
     });
 
     it("still throws real errors (500, 404) even with a remembered response", async () => {
