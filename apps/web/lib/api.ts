@@ -16,9 +16,90 @@ import {
 } from "./mock-data";
 import { getMockArtifactBytes } from "./mock-artifacts";
 import { isDemoMode, getDataMode } from "./mode";
-import { ApiError } from "./errors";
+import { ApiError, isTransientApiError } from "./errors";
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8085").replace(/\/$/, "");
+
+// ----- last known good ------------------------------------------------------
+//
+// The hosted demo's chain restarts after a reset and on its hourly rebuild, and the API answers
+// 502 for about a minute while it does. So that a visitor never lands on an error in that minute,
+// every successful GET is remembered (in memory, and in localStorage so a reload keeps it), and a
+// GET that fails with a restart-time error returns the last real response for that path instead.
+// This is real data from the chain, only older; it is never synthetic. While any is being shown,
+// `useStaleness` reports since when, and the site says so in a banner. Real errors (500, 404, 400)
+// still throw.
+
+const LKG_PREFIX = "recourse_lkg:";
+const LKG_MAX_CHARS = 250_000;
+const lastGood = new Map<string, { at: number; body: unknown }>();
+
+export interface Staleness {
+  /** When the last real data now on screen was received (ms since epoch). */
+  dataAt: number;
+}
+let staleness: Staleness | null = null;
+const staleListeners = new Set<() => void>();
+
+function setStaleness(next: Staleness | null) {
+  if (next === null && staleness === null) return;
+  if (next && staleness && next.dataAt >= staleness.dataAt) return; // keep the oldest time on screen
+  staleness = next;
+  staleListeners.forEach((l) => l());
+}
+
+export function getStaleness(): Staleness | null {
+  return staleness;
+}
+
+export function subscribeStaleness(listener: () => void): () => void {
+  staleListeners.add(listener);
+  return () => staleListeners.delete(listener);
+}
+
+/** Forgets every remembered response (tests, and nothing else, need this). */
+export function clearLastGood(): void {
+  lastGood.clear();
+  staleness = null;
+  try {
+    if (typeof window !== "undefined") {
+      for (let i = window.localStorage.length - 1; i >= 0; i--) {
+        const k = window.localStorage.key(i);
+        if (k?.startsWith(LKG_PREFIX)) window.localStorage.removeItem(k);
+      }
+    }
+  } catch {
+    // storage unavailable: memory is already clear
+  }
+}
+
+function remember(path: string, body: unknown) {
+  const entry = { at: Date.now(), body };
+  lastGood.set(path, entry);
+  try {
+    if (typeof window === "undefined") return;
+    const s = JSON.stringify(entry);
+    if (s.length <= LKG_MAX_CHARS) window.localStorage.setItem(LKG_PREFIX + path, s);
+  } catch {
+    // storage full or blocked: memory still has it
+  }
+}
+
+function recall(path: string): { at: number; body: unknown } | undefined {
+  const hit = lastGood.get(path);
+  if (hit) return hit;
+  try {
+    if (typeof window === "undefined") return undefined;
+    const s = window.localStorage.getItem(LKG_PREFIX + path);
+    if (!s) return undefined;
+    const entry = JSON.parse(s) as { at: number; body: unknown };
+    if (typeof entry?.at !== "number") return undefined;
+    lastGood.set(path, entry);
+    return entry;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface ChainEvent {
   id: number;
@@ -355,7 +436,25 @@ export async function get<T>(path: string, options?: RequestOptions): Promise<T>
   if (isDemoMode()) {
     return getMockData<T>(path);
   }
+  try {
+    const body = await getLive<T>(path, options);
+    remember(path, body);
+    setStaleness(null);
+    return body;
+  } catch (err) {
+    // A restarting chain, not a real failure: show the last real data for this path, if any.
+    if (isTransientApiError(err) || (err instanceof ApiError && err.code === "TIMEOUT")) {
+      const hit = recall(path);
+      if (hit) {
+        setStaleness({ dataAt: hit.at });
+        return hit.body as T;
+      }
+    }
+    throw err;
+  }
+}
 
+async function getLive<T>(path: string, options?: RequestOptions): Promise<T> {
   const timeoutMs = options?.timeoutMs ?? 8000;
   const controller = new AbortController();
   let timedOut = false;

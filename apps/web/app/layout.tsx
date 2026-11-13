@@ -8,6 +8,7 @@ import { Footer } from "@/components/footer";
 import { Nav } from "@/components/nav";
 import { Shell } from "@/components/shell";
 import { DemoBanner } from "@/components/demo-banner";
+import { StaleBanner } from "@/components/stale-banner";
 
 const sans = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 const display = Shrikhand({ subsets: ["latin"], weight: "400", variable: "--font-display", display: "swap" });
@@ -63,6 +64,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="min-h-screen font-sans antialiased">
         <Providers>
           <DemoBanner />
+          <StaleBanner />
           <Nav />
           <Shell>{children}</Shell>
           <Footer />

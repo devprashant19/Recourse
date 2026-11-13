@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, get } from "../lib/api";
+import { api, clearLastGood, get, getStaleness } from "../lib/api";
 import { ApiError, getHumanErrorMessage, isTransientApiError } from "../lib/errors";
 import { getDataMode, parseDataMode, resetDataMode, setDataMode } from "../lib/mode";
 
@@ -8,6 +8,7 @@ describe("Frontend API Reliability & Explicit Demo Mode", () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    clearLastGood();
     resetDataMode();
     delete process.env.NEXT_PUBLIC_RECOURSE_DATA_MODE;
   });
@@ -173,6 +174,53 @@ describe("Frontend API Reliability & Explicit Demo Mode", () => {
       await expect(
         api.hire({ agent: "test.near", document: 1 })
       ).rejects.toThrow(ApiError);
+    });
+  });
+
+  describe("Last known good: a restarting chain never shows an error", () => {
+    const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+    const gateway = { ok: false, status: 502, json: async () => null };
+
+    it("returns the last real response, marked stale, when the gateway answers 502", async () => {
+      setDataMode("live");
+      const live = { ok: true, mode: "sandbox", contract: "recourse.test.near", head: 42, events: 7, demo: true };
+      globalThis.fetch = vi.fn().mockResolvedValueOnce(ok(live)).mockResolvedValueOnce(gateway);
+      expect(await api.health()).toEqual(live);
+      expect(getStaleness()).toBeNull();
+      expect(await api.health()).toEqual(live);
+      expect(getStaleness()).not.toBeNull();
+    });
+
+    it("serves it after a dropped connection too, and clears the stale mark once the API answers", async () => {
+      setDataMode("live");
+      const first = { ok: true, mode: "sandbox", contract: "recourse.test.near", head: 1, events: 1, demo: true };
+      const later = { ...first, head: 2 };
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce(ok(first))
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce(ok(later));
+      await api.health();
+      expect(await api.health()).toEqual(first);
+      expect(getStaleness()).not.toBeNull();
+      expect(await api.health()).toEqual(later);
+      expect(getStaleness()).toBeNull();
+    });
+
+    it("still throws when nothing real was received before (never invents data)", async () => {
+      setDataMode("live");
+      globalThis.fetch = vi.fn().mockResolvedValue(gateway);
+      await expect(api.health()).rejects.toMatchObject({ status: 502 });
+    });
+
+    it("still throws real errors (500, 404) even with a remembered response", async () => {
+      setDataMode("live");
+      globalThis.fetch = vi.fn()
+        .mockResolvedValueOnce(ok({ any: "thing" }))
+        .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: "boom" }) })
+        .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ error: "gone" }) });
+      await get("/totals");
+      await expect(get("/totals")).rejects.toMatchObject({ status: 500 });
+      await expect(get("/totals")).rejects.toMatchObject({ status: 404 });
     });
   });
 
