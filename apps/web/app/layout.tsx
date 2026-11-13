@@ -14,7 +14,7 @@ const sans = Bricolage_Grotesque({ subsets: ["latin"], variable: "--font-sans", 
 const display = Shrikhand({ subsets: ["latin"], weight: "400", variable: "--font-display", display: "swap" });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://recourse.near.page"),
+  metadataBase: new URL("https://recourse-near.duckdns.org"),
   title: "Recourse — Bonded & Insured AI Agents on NEAR",
   description: "Bonded, insured, slashable AI agents on NEAR. Every job leaves a TEE-attested receipt; a failed job is slashed and paid out cross-chain.",
   icons: {
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Recourse — Bonded & Insured AI Agents on NEAR",
     description: "Bonded, insured, slashable AI agents on NEAR. Every job leaves a TEE-attested receipt; a failed job is slashed and paid out cross-chain.",
-    url: "https://recourse.near.page",
+    url: "https://recourse-near.duckdns.org",
     siteName: "Recourse",
     images: [
       {

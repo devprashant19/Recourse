@@ -162,7 +162,7 @@ export default function Home() {
             </Magnetic>
           </Reveal>
           <div className="relative mt-12 flex flex-wrap gap-x-6 gap-y-2 text-xs font-bold uppercase tracking-[0.14em] text-dim">
-            {["7/7 scenarios", "16/16 attacks refused", "395 contract tests", "Genuine NEAR AI TEE receipts"].map((s, i) => (
+            {["7/7 scenarios", "16/16 attacks refused", "399 contract tests", "Genuine NEAR AI TEE receipts"].map((s, i) => (
               <Reveal as="span" key={s} delay={0.35 + i * 0.07} className="flex items-center gap-2" style={{} as CSSProperties}>
                 <span className="h-1.5 w-1.5 rounded-full bg-accent" />
                 {s}
