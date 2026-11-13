@@ -144,3 +144,17 @@ export function getHumanErrorMessage(error: unknown): HumanErrorDetails {
   };
 }
 
+
+/**
+ * True for the errors the hosted demo produces while its chain restarts (a reset, or the hourly
+ * rebuild): the gateway answers 502/503/504, or the connection drops. They clear on their own
+ * within about a minute, so the UI shows "reconnecting" and keeps polling rather than an error.
+ */
+export function isTransientApiError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    if (error.status === 502 || error.status === 503 || error.status === 504) return true;
+    return error.code === "NETWORK_ERROR" || error.code === "UNAVAILABLE";
+  }
+  const raw = error instanceof Error ? error.message : String(error);
+  return /fetch failed|failed to fetch|network|econnrefused/i.test(raw);
+}

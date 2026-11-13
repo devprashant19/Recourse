@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, get } from "../lib/api";
-import { ApiError, getHumanErrorMessage } from "../lib/errors";
+import { ApiError, getHumanErrorMessage, isTransientApiError } from "../lib/errors";
 import { getDataMode, parseDataMode, resetDataMode, setDataMode } from "../lib/mode";
 
 describe("Frontend API Reliability & Explicit Demo Mode", () => {
@@ -234,6 +234,17 @@ describe("Frontend API Reliability & Explicit Demo Mode", () => {
       const human = getHumanErrorMessage(err);
       expect(human.title).toBe("Server Error");
       expect(human.message).toContain("temporarily unavailable");
+    });
+
+    it("treats a restarting chain's gateway errors as transient, and real errors as not", () => {
+      for (const status of [502, 503, 504]) {
+        expect(isTransientApiError(new ApiError("gateway", { status, path: "/health" }))).toBe(true);
+      }
+      expect(isTransientApiError(new ApiError("refused", { code: "NETWORK_ERROR", path: "/health" }))).toBe(true);
+      expect(isTransientApiError(new TypeError("Failed to fetch"))).toBe(true);
+      expect(isTransientApiError(new ApiError("Internal error", { status: 500, path: "/claims" }))).toBe(false);
+      expect(isTransientApiError(new ApiError("missing", { status: 404, path: "/claims/9" }))).toBe(false);
+      expect(isTransientApiError(new ApiError("bad", { status: 400, path: "/demo/hire" }))).toBe(false);
     });
 
     it("preserves technical detail without exposing secrets", () => {

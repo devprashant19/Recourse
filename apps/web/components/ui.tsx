@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
 import { amount, EXPLORER_ACCOUNT, EXPLORER_TX, short, account as accountName } from "@/lib/format";
-import { getHumanErrorMessage } from "@/lib/errors";
+import { API_URL } from "@/lib/api";
+import { getHumanErrorMessage, isTransientApiError } from "@/lib/errors";
 import { useDataMode } from "@/lib/mode";
 
 /** Monospace hash with a copy button (design rule: every hash is copyable). */
@@ -102,10 +103,46 @@ export interface ErrorBoxProps {
   className?: string;
 }
 
+/** The developer hint about starting the backend only makes sense when the site talks to a local API. */
+const LOCAL_API = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(API_URL);
+
 export function ErrorBox({ error, onRetry, isRetrying = false, title: customTitle, className = "" }: ErrorBoxProps) {
   const details = getHumanErrorMessage(error);
   const title = customTitle ?? details.title;
   const { isDemo, setMode } = useDataMode();
+
+  // While the hosted chain restarts (a reset, or the hourly rebuild) the gateway answers 502 for
+  // about a minute. That is expected, and the queries keep polling, so say so instead of alarming.
+  if (isTransientApiError(error)) {
+    return (
+      <div role="status" aria-live="polite" className={`card text-sm ${className}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="font-semibold text-ink flex items-center gap-2">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-ink border-t-transparent" />
+              Reconnecting…
+            </div>
+            <div className="mt-1 text-dim leading-relaxed">
+              The demo chain is restarting, after a reset or its hourly rebuild. It is usually back within about a
+              minute, and this page reconnects on its own.
+            </div>
+          </div>
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={() => void onRetry()}
+              disabled={isRetrying}
+              className="shrink-0 rounded-full border border-line bg-panel px-3.5 py-1 text-xs font-medium hover:border-ink hover:text-ink disabled:opacity-50 transition-all inline-flex items-center gap-1.5"
+              aria-label="Retry request"
+            >
+              <span className="text-[13px]">↻</span>
+              {isRetrying ? "Checking…" : "Check now"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -164,9 +201,13 @@ export function ErrorBox({ error, onRetry, isRetrying = false, title: customTitl
       ) : null}
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line/30 pt-3 text-xs text-dim">
-        <span>
-          Backend offline? Start it with <code className="font-mono text-ink">INDEXER_PORT=8085 pnpm hosted</code> or <code className="font-mono text-ink">pnpm demo -- --keep</code>.
-        </span>
+        {LOCAL_API ? (
+          <span>
+            Backend offline? Start it with <code className="font-mono text-ink">INDEXER_PORT=8085 pnpm hosted</code> or <code className="font-mono text-ink">pnpm demo -- --keep</code>.
+          </span>
+        ) : (
+          <span />
+        )}
         {!isDemo ? (
           <button
             type="button"
