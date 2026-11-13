@@ -10,7 +10,7 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
-    "@fastify/cors": "10.0.2",
+    "@fastify/cors": "11.4.1",
     "@recourse/jobs": "workspace:^",
     "@recourse/receipts": "workspace:^",
     "@recourse/sdk": "workspace:^",
