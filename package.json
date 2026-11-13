@@ -67,7 +67,7 @@
     "tsx": "4.19.2",
     "typescript": "5.7.2",
     "typescript-eslint": "8.18.1",
-    "vite": "6.4.4",
+    "vite": "6.4.5",
     "vitest": "4.1.12"
   },
   "pnpm": {
@@ -79,7 +79,7 @@
       "sharp": "0.35.5",
       "tinypool": "2.1.2",
       "minimatch": "11.0.1",
-      "vite": "6.4.4",
+      "vite": "6.4.5",
       "@vitest/mocker": "4.1.12"
     }
   }
