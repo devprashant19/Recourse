@@ -9,15 +9,13 @@ even by the agent's own operator. If the work is wrong, the agent is **slashed**
 second, and the client is paid back **in the token and on the chain they chose**, through NEAR Intents.
 The arbiter that rules on bad work is bonded too: a Sputnik DAO council can overturn it, and fine it.
 
-[![Watch the video: Recourse — You Cannot Sue an AI](https://img.youtube.com/vi/78jE-l_-MHA/maxresdefault.jpg)](https://www.youtube.com/watch?v=78jE-l_-MHA)
-
 - Video walkthrough: https://www.youtube.com/watch?v=78jE-l_-MHA
 - Live demo: https://recourse-near.duckdns.org (no wallet, no sign-in, nothing to install; the chain
   rebuilds from genesis every hour)
 - Indexer API, read straight off the chain: [`/api/demo/run`](https://recourse-near.duckdns.org/api/demo/run) ·
   [`/api/totals`](https://recourse-near.duckdns.org/api/totals) · `/api/health` · `/api/audit.csv`
 - Same site by IP, if DNS is being slow: https://recourse.100.29.122.218.sslip.io
-- Demo posts on X: [@recoursenear](https://x.com/recoursenear)
+- Demo post on X: https://x.com/recoursenear/status/2121243155148447765 (from [@recoursenear](https://x.com/recoursenear))
 - Contract: `recourse.test.near`, inside the hosted sandbox. There is no testnet or mainnet deployment
   yet: see [Status](#status)
 
@@ -37,7 +35,7 @@ Built for **NEAR HACKATHON**, 1–14 Nov 2026, in two tracks:
 | --- | --- |
 | A public repository | This one. The first commit is 8 Nov 2026, and nothing existed before the hackathon: [`HACKATHON_DISCLOSURE.md`](HACKATHON_DISCLOSURE.md) |
 | Something that works | The [live demo](https://recourse-near.duckdns.org) and `pnpm demo`, both 7/7 PASS: see [Measured](#measured) |
-| A demo on X tagged @NEARProtocol and #NEARHackathon | The [demo video](https://www.youtube.com/watch?v=78jE-l_-MHA), posted from [@recoursenear](https://x.com/recoursenear) |
+| A demo on X tagged @NEARProtocol and #NEARHackathon | [The demo post](https://x.com/recoursenear/status/2121243155148447765) from [@recoursenear](https://x.com/recoursenear), and the [demo video](https://www.youtube.com/watch?v=78jE-l_-MHA) |
 | How NEAR fits | [What's built on NEAR](#whats-built-on-near) |
 
 **What we built**, in the words the submission form asks for:
