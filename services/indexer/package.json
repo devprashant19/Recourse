@@ -16,7 +16,7 @@
     "@recourse/sdk": "workspace:^",
     "better-sqlite3": "11.8.1",
     "fastify": "5.12.8",
-    "near-api-js": "7.4.0"
+    "near-api-js": "7.5.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.12"
