@@ -15,6 +15,6 @@
     "@recourse/receipts": "workspace:^",
     "@recourse/sdk": "workspace:^",
     "ajv": "8.20.0",
-    "near-api-js": "7.4.0"
+    "near-api-js": "7.5.3"
   }
 }
